@@ -464,14 +464,14 @@ export const FirebaseDataProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // 🔄 Sincronizar com Firebase (LIMPAR TUDO - incluindo Firebase)
+  // 🔄 Sincronizar com Firebase (apenas limpar localStorage, manter dados do Firebase)
   const syncWithFirebase = async (): Promise<void> => {
     if (!firebaseUser) return;
 
     try {
-      console.log('🔄 LIMPEZA COMPLETA - Removendo TODOS os dados antigos...');
+      console.log('🔄 Sincronizando com Firebase para usuário:', firebaseUser.uid);
       
-      // SEMPRE limpar localStorage
+      // Limpar apenas localStorage para evitar conflitos
       localStorage.removeItem('flexi-products');
       localStorage.removeItem('flexi-moviments');
       localStorage.removeItem('flexi-notifications');
@@ -481,34 +481,9 @@ export const FirebaseDataProvider = ({ children }: { children: ReactNode }) => {
       setMovements([]);
       setNotifications([]);
       
-      // DELETAR TODOS os produtos do Firebase para este usuário
-      const productsSnapshot = await getDocs(
-        query(collection(db, FIREBASE_CONFIG.COLLECTIONS.PRODUCTS), where('userId', '==', firebaseUser.uid))
-      );
-      
-      console.log('🗑️ Deletando', productsSnapshot.size, 'produtos antigos do Firebase...');
-      
-      // Deletar cada produto
-      for (const doc of productsSnapshot.docs) {
-        await deleteDoc(doc.ref);
-        console.log('🗑️ Produto deletado:', doc.data().name);
-      }
-      
-      // DELETAR TODAS as movimentações do Firebase para este usuário
-      const movementsSnapshot = await getDocs(
-        query(collection(db, FIREBASE_CONFIG.COLLECTIONS.MOVEMENTS), where('userId', '==', firebaseUser.uid))
-      );
-      
-      console.log('🗑️ Deletando', movementsSnapshot.size, 'movimentações antigas do Firebase...');
-      
-      // Deletar cada movimentação
-      for (const doc of movementsSnapshot.docs) {
-        await deleteDoc(doc.ref);
-      }
-      
-      console.log('✅ LIMPEZA COMPLETA realizada - estoque zerado!');
+      console.log('✅ Sincronização concluída - dados do Firebase preservados');
     } catch (error) {
-      console.error('❌ Erro na limpeza:', error);
+      console.error('❌ Erro na sincronização:', error);
     }
   };
 
