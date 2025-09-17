@@ -7,14 +7,14 @@ import Saidas from "./pages/Saidas";
 import Movimentacoes from "./pages/Movimentacoes";
 import Relatorios from "./pages/Relatorios";
 import Configuracoes from "./pages/Configuracoes";
-import Login from "./pages/Login";
+import LoginSimple from "./pages/Login-Simple";
 import NotFound from "./pages/NotFound";
 
 const App = () => (
   <BrowserRouter>
     <Routes>
       {/* Rota de Login */}
-      <Route path="/login" element={<Login />} />
+      <Route path="/login" element={<LoginSimple />} />
       
       {/* Rotas principais com layout */}
       <Route path="/*" element={
