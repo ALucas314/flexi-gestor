@@ -464,15 +464,14 @@ export const FirebaseDataProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // 🔄 Sincronizar com Firebase (SEMPRE limpar dados antigos)
+  // 🔄 Sincronizar com Firebase (LIMPAR TUDO - incluindo Firebase)
   const syncWithFirebase = async (): Promise<void> => {
     if (!firebaseUser) return;
 
     try {
-      console.log('🔄 Verificando dados do Firebase para o usuário:', firebaseUser.uid);
+      console.log('🔄 LIMPEZA COMPLETA - Removendo TODOS os dados antigos...');
       
-      // SEMPRE limpar localStorage para evitar dados antigos
-      console.log('🧹 Limpando dados antigos do localStorage...');
+      // SEMPRE limpar localStorage
       localStorage.removeItem('flexi-products');
       localStorage.removeItem('flexi-moviments');
       localStorage.removeItem('flexi-notifications');
@@ -482,21 +481,34 @@ export const FirebaseDataProvider = ({ children }: { children: ReactNode }) => {
       setMovements([]);
       setNotifications([]);
       
-      // Verificar se já existem dados no Firestore
+      // DELETAR TODOS os produtos do Firebase para este usuário
       const productsSnapshot = await getDocs(
         query(collection(db, FIREBASE_CONFIG.COLLECTIONS.PRODUCTS), where('userId', '==', firebaseUser.uid))
       );
       
-      if (productsSnapshot.empty) {
-        console.log('📦 Usuário novo - iniciando com estoque zerado');
-        console.log('✅ Nova conta criada sem produtos iniciais');
-      } else {
-        console.log('✅ Dados já existem no Firebase para este usuário');
+      console.log('🗑️ Deletando', productsSnapshot.size, 'produtos antigos do Firebase...');
+      
+      // Deletar cada produto
+      for (const doc of productsSnapshot.docs) {
+        await deleteDoc(doc.ref);
+        console.log('🗑️ Produto deletado:', doc.data().name);
       }
       
-      console.log('🧹 Dados antigos removidos com sucesso');
+      // DELETAR TODAS as movimentações do Firebase para este usuário
+      const movementsSnapshot = await getDocs(
+        query(collection(db, FIREBASE_CONFIG.COLLECTIONS.MOVEMENTS), where('userId', '==', firebaseUser.uid))
+      );
+      
+      console.log('🗑️ Deletando', movementsSnapshot.size, 'movimentações antigas do Firebase...');
+      
+      // Deletar cada movimentação
+      for (const doc of movementsSnapshot.docs) {
+        await deleteDoc(doc.ref);
+      }
+      
+      console.log('✅ LIMPEZA COMPLETA realizada - estoque zerado!');
     } catch (error) {
-      console.error('❌ Erro na sincronização:', error);
+      console.error('❌ Erro na limpeza:', error);
     }
   };
 
