@@ -464,12 +464,23 @@ export const FirebaseDataProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // 🔄 Sincronizar com Firebase (NÃO migrar dados do localStorage para novos usuários)
+  // 🔄 Sincronizar com Firebase (SEMPRE limpar dados antigos)
   const syncWithFirebase = async (): Promise<void> => {
     if (!firebaseUser) return;
 
     try {
       console.log('🔄 Verificando dados do Firebase para o usuário:', firebaseUser.uid);
+      
+      // SEMPRE limpar localStorage para evitar dados antigos
+      console.log('🧹 Limpando dados antigos do localStorage...');
+      localStorage.removeItem('flexi-products');
+      localStorage.removeItem('flexi-moviments');
+      localStorage.removeItem('flexi-notifications');
+      
+      // Limpar dados do contexto local
+      setProducts([]);
+      setMovements([]);
+      setNotifications([]);
       
       // Verificar se já existem dados no Firestore
       const productsSnapshot = await getDocs(
@@ -479,16 +490,11 @@ export const FirebaseDataProvider = ({ children }: { children: ReactNode }) => {
       if (productsSnapshot.empty) {
         console.log('📦 Usuário novo - iniciando com estoque zerado');
         console.log('✅ Nova conta criada sem produtos iniciais');
-        
-        // Limpar localStorage para evitar migração de dados antigos
-        localStorage.removeItem('flexi-products');
-        localStorage.removeItem('flexi-moviments');
-        localStorage.removeItem('flexi-notifications');
-        
-        console.log('🧹 localStorage limpo para nova conta');
       } else {
         console.log('✅ Dados já existem no Firebase para este usuário');
       }
+      
+      console.log('🧹 Dados antigos removidos com sucesso');
     } catch (error) {
       console.error('❌ Erro na sincronização:', error);
     }
