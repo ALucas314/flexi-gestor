@@ -464,12 +464,12 @@ export const FirebaseDataProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // 🔄 Sincronizar com Firebase (migrar dados do localStorage se necessário)
+  // 🔄 Sincronizar com Firebase (NÃO migrar dados do localStorage para novos usuários)
   const syncWithFirebase = async (): Promise<void> => {
     if (!firebaseUser) return;
 
     try {
-      console.log('🔄 Verificando se precisa migrar dados do localStorage...');
+      console.log('🔄 Verificando dados do Firebase para o usuário:', firebaseUser.uid);
       
       // Verificar se já existem dados no Firestore
       const productsSnapshot = await getDocs(
@@ -477,29 +477,17 @@ export const FirebaseDataProvider = ({ children }: { children: ReactNode }) => {
       );
       
       if (productsSnapshot.empty) {
-        console.log('📦 Migrando produtos do localStorage para Firestore...');
+        console.log('📦 Usuário novo - iniciando com estoque zerado');
+        console.log('✅ Nova conta criada sem produtos iniciais');
         
-        // Migrar produtos do localStorage
-        const localProducts = localStorage.getItem('flexi-products');
-        if (localProducts) {
-          const parsedProducts = JSON.parse(localProducts);
-          for (const product of parsedProducts) {
-            await addProduct(product);
-          }
-        }
+        // Limpar localStorage para evitar migração de dados antigos
+        localStorage.removeItem('flexi-products');
+        localStorage.removeItem('flexi-moviments');
+        localStorage.removeItem('flexi-notifications');
         
-        // Migrar movimentações do localStorage
-        const localMovements = localStorage.getItem('flexi-moviments');
-        if (localMovements) {
-          const parsedMovements = JSON.parse(localMovements);
-          for (const movement of parsedMovements) {
-            await addMovement(movement);
-          }
-        }
-        
-        console.log('✅ Migração concluída com sucesso!');
+        console.log('🧹 localStorage limpo para nova conta');
       } else {
-        console.log('✅ Dados já estão sincronizados com Firebase');
+        console.log('✅ Dados já existem no Firebase para este usuário');
       }
     } catch (error) {
       console.error('❌ Erro na sincronização:', error);
