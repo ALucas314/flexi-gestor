@@ -126,17 +126,20 @@ export const Sidebar = ({ className, variant = 'overlay', onNavigate }: SidebarP
             </div>
           </div>
           
-          {/* Botão de Pin - Só aparece em desktop */}
+          {/* Botão de Pin - Aparece em desktop (tanto no overlay quanto fixado) */}
           {!isMobile && !isTablet && (
             <Button
               variant="ghost"
               size="sm"
               onClick={() => {
                 togglePin();
-                if (onNavigate) onNavigate(); // Fechar o sheet quando pinar
+                // Só fechar o sheet se estiver no modo overlay
+                if (variant === 'overlay' && onNavigate) {
+                  onNavigate();
+                }
               }}
               className="h-9 w-9 p-0 hover:bg-indigo-200/50 transition-colors"
-              title={isPinned ? "Desafixar menu" : "Fixar menu"}
+              title={isPinned ? "Desafixar menu (voltar ao modo overlay)" : "Fixar menu (manter sempre visível)"}
             >
               {isPinned ? (
                 <PinOff className="h-4 w-4 text-indigo-700" />
