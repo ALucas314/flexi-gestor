@@ -101,6 +101,14 @@ const Saidas = () => {
     return selectedBatches.reduce((sum, batch) => sum + (batch.quantity || 0), 0);
   };
 
+  // Verificar se algum lote excede a quantidade disponível
+  const hasExceedingBatches = () => {
+    return selectedBatches.some(selectedBatch => {
+      const batch = availableBatches.find(b => b.id === selectedBatch.batchId);
+      return selectedBatch.quantity > (batch?.quantity || 0);
+    });
+  };
+
   // Função para abrir receita
   const openReceipt = (exit: StockExit) => {
     setSelectedExit(exit);
@@ -501,16 +509,45 @@ Obrigado pela preferência!
                                           </SelectContent>
                                         </Select>
                                       </div>
-                                      <div>
+                                      <div className="flex-1">
                                         <Label className="text-xs text-gray-600">Quantidade</Label>
-                                        <Input
-                                          type="number"
-                                          min="1"
-                                          placeholder="0"
-                                          value={selectedBatch.quantity || ''}
-                                          onChange={(e) => updateSelectedBatch(index, selectedBatch.batchId, parseInt(e.target.value) || 0)}
-                                          className="h-9"
-                                        />
+                                        {(() => {
+                                          const batch = availableBatches.find(b => b.id === selectedBatch.batchId);
+                                          const available = batch?.quantity || 0;
+                                          const exceeds = selectedBatch.quantity > available;
+                                          const warning = available > 0 && selectedBatch.quantity > available * 0.8 && !exceeds;
+                                          
+                                          return (
+                                            <div className="space-y-1">
+                                              <Input
+                                                type="number"
+                                                min="1"
+                                                max={available}
+                                                placeholder="0"
+                                                value={selectedBatch.quantity || ''}
+                                                onChange={(e) => updateSelectedBatch(index, selectedBatch.batchId, Math.max(0, parseInt(e.target.value) || 0))}
+                                                className={`h-9 ${exceeds ? 'border-red-500 focus:ring-red-500' : warning ? 'border-yellow-500 focus:ring-yellow-500' : ''}`}
+                                              />
+                                              {selectedBatch.batchId && (
+                                                <div className="flex items-center gap-1 text-xs">
+                                                  {exceeds ? (
+                                                    <span className="text-red-600 font-medium flex items-center gap-1">
+                                                      ❌ Excede! Disponível: {available} un.
+                                                    </span>
+                                                  ) : warning ? (
+                                                    <span className="text-yellow-600 font-medium flex items-center gap-1">
+                                                      ⚠️ Disponível: {available} un.
+                                                    </span>
+                                                  ) : (
+                                                    <span className="text-green-600 font-medium flex items-center gap-1">
+                                                      ✅ Disponível: {available} un.
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              )}
+                                            </div>
+                                          );
+                                        })()}
                                       </div>
                                     </div>
                                     <Button
@@ -607,7 +644,13 @@ Obrigado pela preferência!
                         <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)} className="w-full sm:w-auto h-9 text-sm">
                           Cancelar
                         </Button>
-                        <Button type="submit" className="w-full sm:w-auto h-9 text-sm">Registrar Saída</Button>
+                        <Button 
+                          type="submit" 
+                          className="w-full sm:w-auto h-9 text-sm"
+                          disabled={hasExceedingBatches()}
+                        >
+                          {hasExceedingBatches() ? '⚠️ Quantidade Excedida' : 'Registrar Saída'}
+                        </Button>
                       </DialogFooter>
                     </form>
                   </Form>
