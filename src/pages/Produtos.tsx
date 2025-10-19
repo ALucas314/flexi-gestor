@@ -223,12 +223,23 @@ const Produtos = () => {
         description: `${data.name} foi adicionado com sucesso ao catálogo.`,
         variant: "default",
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Erro ao adicionar produto:', error);
+      
+      // Mensagem de erro específica
+      let errorTitle = "❌ Erro ao Adicionar Produto";
+      let errorMessage = "Não foi possível adicionar o produto. Tente novamente.";
+      
+      if (error.message?.includes('SKU')) {
+        errorTitle = "⚠️ SKU Duplicado!";
+        errorMessage = `Não é possível inserir devido já existir um item com o código SKU "${data.sku}". Por favor, escolha outro código único.`;
+      }
+      
       toast({
-        title: "❌ Erro ao Adicionar Produto",
-        description: "Não foi possível adicionar o produto. Tente novamente.",
+        title: errorTitle,
+        description: errorMessage,
         variant: "destructive",
+        duration: 6000,
       });
     }
   };
