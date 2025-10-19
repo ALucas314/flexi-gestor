@@ -1,0 +1,21 @@
+{
+  "name": "Flexi Gestor - Sistema de Gestão",
+  "short_name": "Flexi Gestor",
+  "description": "Sistema completo de gestão empresarial para controle de estoque, vendas e finanças",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#4F46E5",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "finance", "productivity"],
+  "lang": "pt-BR"
+}
+
