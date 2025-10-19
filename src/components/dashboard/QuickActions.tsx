@@ -46,11 +46,11 @@ const defaultActions = [
   },
   {
     id: "new-sale",
-    title: "Registrar Saída",
-    description: "Saídas de estoque com receita",
-    icon: "ShoppingCart",
-    color: "from-green-500 to-green-600",
-    hoverColor: "from-green-600 to-green-700",
+    title: "Saída Estoque",
+    description: "Registrar saídas com receita",
+    icon: "TrendingDown",
+    color: "from-red-500 to-red-600",
+    hoverColor: "from-red-600 to-red-700",
     path: "/saidas",
     order: 2
   },
