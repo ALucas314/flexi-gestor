@@ -338,7 +338,10 @@ Obrigado pela preferência!
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">📤 Saídas de Estoque</h1>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent flex items-center gap-2">
+            <TrendingDown className="w-8 h-8 text-blue-600" />
+            Saídas de Estoque
+          </h1>
           <p className="text-muted-foreground">Registre vendas e saídas do sistema</p>
         </div>
               <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
