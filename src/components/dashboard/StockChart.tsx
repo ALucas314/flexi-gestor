@@ -8,7 +8,7 @@ interface StockChartProps {
     id: string;
     name: string;
     stock: number;
-    unitPrice: number;
+    price: number;
   }>;
 }
 
@@ -21,7 +21,7 @@ export function StockChart({ products }: StockChartProps) {
     .map(product => ({
       name: product.name.length > 12 ? product.name.substring(0, 12) + '...' : product.name,
       estoque: product.stock,
-      valor: product.stock * product.unitPrice
+      valor: product.stock * product.price
     }));
 
   const chartContent = topStockProducts.length > 0 ? (

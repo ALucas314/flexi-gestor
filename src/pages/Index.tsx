@@ -216,7 +216,7 @@ const Index = () => {
             id: p.id,
             name: p.name,
             stock: p.stock,
-            unitPrice: p.price
+            price: p.price
           }))} />
         </>
       ) : (
