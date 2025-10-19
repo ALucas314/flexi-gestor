@@ -43,6 +43,7 @@ export const Header = () => {
     console.log('✅ Header: useAuth carregado', { user: user?.username || 'N/A' });
     
     const navigate = useNavigate();
+    const { togglePin } = useSidebar();
 
     // Hook para responsividade
     const { isMobile, isTablet, screenWidth } = useResponsive();
@@ -71,7 +72,15 @@ export const Header = () => {
                 <Menu className={`${isMobile ? 'h-6 w-6' : 'h-5 w-5'} text-indigo-600`} />
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className={`${isMobile ? 'w-full max-w-sm' : 'w-80'} p-0`}>
+            <SheetContent 
+              side="left" 
+              className={`${isMobile ? 'w-full max-w-sm' : 'w-80'} p-0`}
+              showPin={!isMobile && !isTablet}
+              onPinClick={() => {
+                togglePin();
+                setIsSheetOpen(false);
+              }}
+            >
               <Sidebar onNavigate={() => setIsSheetOpen(false)} />
             </SheetContent>
           </Sheet>
