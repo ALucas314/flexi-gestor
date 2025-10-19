@@ -1,0 +1,10 @@
+# 📧 COPIE ESTE CONTEÚDO PARA UM ARQUIVO CHAMADO .env
+
+# Crie um arquivo chamado .env (sem extensão) na raiz do projeto
+# E cole exatamente este conteúdo:
+
+EMAIL_USER=antoniorobertoguevara@gmail.com
+EMAIL_PASSWORD=zsya gpqt pupe zoqt
+FRONTEND_URL=http://localhost:8081
+JWT_SECRET=flexi-gestor-secret-key-2024
+
