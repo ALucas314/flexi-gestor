@@ -279,7 +279,7 @@ const Relatorios = () => {
         <div>
           <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent flex items-center gap-2">
             <BarChart3 className="w-8 h-8 text-blue-600" />
-            Business Intelligence
+            Relatórios
           </h1>
           <p className="text-gray-600">Análises e insights do seu negócio</p>
         </div>
