@@ -225,9 +225,9 @@ const PDV = () => {
   }
 
   return (
-    <div className="container mx-auto p-4 sm:p-6 max-w-7xl">
+    <main className="flex-1 p-2 sm:p-6 space-y-3 sm:space-y-6">
       {/* Cabeçalho */}
-      <div className="mb-6">
+      <div>
         <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent flex items-center gap-2">
           <ShoppingCart className="w-8 h-8 text-blue-600" />
           Ponto de Venda (PDV)
@@ -496,7 +496,7 @@ const PDV = () => {
           )}
         </DialogContent>
       </Dialog>
-    </div>
+    </main>
   );
 };
 
