@@ -23,7 +23,7 @@ export const LayoutWithSidebar = ({ children }: LayoutWithSidebarProps) => {
       {/* Sidebar Fixa (só aparece no desktop quando pinada) */}
       {showFixedSidebar && (
         <aside className="fixed left-0 top-0 h-screen z-40 w-80 overflow-y-auto">
-          <Sidebar />
+          <Sidebar variant="fixed" />
         </aside>
       )}
       
