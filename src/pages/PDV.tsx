@@ -197,8 +197,8 @@ const PDV = () => {
     <div className="container mx-auto p-4 sm:p-6 max-w-7xl">
       {/* Cabeçalho */}
       <div className="mb-6">
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 flex items-center gap-2">
-          <ShoppingCart className="h-8 w-8 text-indigo-600" />
+        <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent flex items-center gap-2">
+          <ShoppingCart className="w-8 h-8 text-blue-600" />
           Ponto de Venda (PDV)
         </h1>
         <p className="text-gray-600 mt-1">

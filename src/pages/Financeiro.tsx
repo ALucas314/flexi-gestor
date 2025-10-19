@@ -241,8 +241,8 @@ Obrigado pela preferência!
       <div className="mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 flex items-center gap-2">
-              <DollarSign className="h-8 w-8 text-green-600" />
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent flex items-center gap-2">
+              <DollarSign className="w-8 h-8 text-blue-600" />
               Financeiro
             </h1>
             <p className="text-gray-600 mt-1">
