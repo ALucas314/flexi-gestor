@@ -168,12 +168,22 @@ export const QuickActions = () => {
   // Carregar ações do localStorage
   useEffect(() => {
     const savedActions = localStorage.getItem('flexi-gestor-quick-actions');
-    if (savedActions) {
+    const actionsVersion = localStorage.getItem('flexi-gestor-actions-version');
+    const currentVersion = '2.0'; // Versão atual dos atalhos
+    
+    // Se não tem versão ou a versão é diferente, resetar para os padrões
+    if (!actionsVersion || actionsVersion !== currentVersion) {
+      console.log('🔄 Atualizando atalhos do Dashboard para versão', currentVersion);
+      setActions(defaultActions);
+      localStorage.setItem('flexi-gestor-quick-actions', JSON.stringify(defaultActions));
+      localStorage.setItem('flexi-gestor-actions-version', currentVersion);
+    } else if (savedActions) {
       setActions(JSON.parse(savedActions));
     } else {
       // Usar ações padrão na primeira vez
       setActions(defaultActions);
       localStorage.setItem('flexi-gestor-quick-actions', JSON.stringify(defaultActions));
+      localStorage.setItem('flexi-gestor-actions-version', currentVersion);
     }
   }, []);
 
