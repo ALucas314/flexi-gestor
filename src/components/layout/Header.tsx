@@ -57,7 +57,7 @@ export const Header = () => {
     console.log('✅ Header: Renderização completa', { unreadCount });
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-neutral-200 shadow-lg">
+    <header className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-indigo-50 via-indigo-100/60 to-indigo-100 backdrop-blur-md border-b border-indigo-200 shadow-lg">
       <div className={`flex items-center justify-between ${isMobile ? 'px-3 py-3' : 'px-2 sm:px-4 md:px-6 py-3 sm:py-4'} ${isMobile ? 'gap-2' : 'gap-2 sm:gap-4'}`}>
         {/* Logo e Navegação */}
         <div className={`flex items-center ${isMobile ? 'space-x-2' : 'space-x-2 md:space-x-3 lg:space-x-4'}`}>

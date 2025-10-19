@@ -48,6 +48,7 @@ const Financeiro = () => {
   const [showReceipt, setShowReceipt] = useState(false);
   const [showPurchase, setShowPurchase] = useState(false);
   const [selectedMovement, setSelectedMovement] = useState<any>(null);
+  const [showAllMovements, setShowAllMovements] = useState(false);
 
   // Função para abrir a receita de uma movimentação (saída)
   const openReceipt = (movement: any) => {
@@ -605,7 +606,7 @@ Compra registrada com sucesso!
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredMovements.map((movement) => (
+                      (showAllMovements ? filteredMovements : filteredMovements.slice(0, 4)).map((movement) => (
                         <TableRow key={movement.id} className="hover:bg-slate-50 transition-colors">
                           <TableCell>
                             <div className="flex items-center gap-2">
@@ -675,6 +676,29 @@ Compra registrada com sucesso!
                   </TableBody>
                 </Table>
               </div>
+              
+              {/* Botão para mostrar todas as movimentações */}
+              {filteredMovements.length > 4 && (
+                <div className="mt-6 flex justify-center">
+                  <Button
+                    onClick={() => setShowAllMovements(!showAllMovements)}
+                    variant="outline"
+                    className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white hover:from-indigo-700 hover:to-indigo-800 hover:text-white border-0 shadow-lg"
+                  >
+                    {showAllMovements ? (
+                      <>
+                        <TrendingUp className="mr-2 h-4 w-4" />
+                        Mostrar Menos
+                      </>
+                    ) : (
+                      <>
+                        <TrendingDown className="mr-2 h-4 w-4" />
+                        Mostrar Todas ({filteredMovements.length} movimentações)
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
