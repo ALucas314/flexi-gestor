@@ -1,4 +1,5 @@
-import { Package, DollarSign, TrendingUp, AlertTriangle, BarChart3, Users, ShoppingCart, ArrowRight } from "lucide-react";
+import { Package, DollarSign, TrendingUp, AlertTriangle, BarChart3, Users, ShoppingCart, ArrowRight, Eye, EyeOff } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { StatsCard } from "@/components/dashboard/StatsCard";
 import { RecentMovements } from "@/components/dashboard/RecentMovements";
 import { QuickActions } from "@/components/dashboard/QuickActions";
@@ -12,9 +13,18 @@ const Index = () => {
   const { getDashboardStats, movements, products } = useData();
   const { isMobile, isTablet, screenWidth } = useResponsive();
   const [stats, setStats] = React.useState(getDashboardStats());
+  const [showQuickActions, setShowQuickActions] = React.useState(() => {
+    const saved = localStorage.getItem('flexi-gestor-show-quick-actions');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
 
   // Verificar se há produtos cadastrados
   const hasProducts = products.length > 0;
+
+  // Salvar preferência de exibição das Ações Rápidas
+  React.useEffect(() => {
+    localStorage.setItem('flexi-gestor-show-quick-actions', JSON.stringify(showQuickActions));
+  }, [showQuickActions]);
 
   // Pegar movimentações mais recentes
   const recentMovements = movements
@@ -140,10 +150,38 @@ const Index = () => {
       </div>
 
       {/* Seção de Ações Rápidas - Responsiva */}
-      <div className={`grid ${isMobile ? 'grid-cols-1' : 'grid-cols-1 2xl:grid-cols-3'} ${isMobile ? 'gap-4' : 'gap-6 sm:gap-8'}`}>
-        <div className={`${isMobile ? '' : '2xl:col-span-2'}`}>
-          <QuickActions />
+      <div className="space-y-4">
+        {/* Cabeçalho com Toggle */}
+        <div className="flex items-center justify-between">
+          <h2 className={`${isMobile ? 'text-lg' : 'text-xl sm:text-2xl'} font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent flex items-center gap-2`}>
+            <ShoppingCart className={`${isMobile ? 'w-5 h-5' : 'w-6 h-6'} text-indigo-600`} />
+            Ações Rápidas
+          </h2>
+          <Button
+            onClick={() => setShowQuickActions(!showQuickActions)}
+            variant="outline"
+            size={isMobile ? "sm" : "default"}
+            className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white hover:from-indigo-700 hover:to-indigo-800 hover:text-white border-0 shadow-md"
+          >
+            {showQuickActions ? (
+              <>
+                <EyeOff className="mr-2 h-4 w-4" />
+                {!isMobile && 'Ocultar'}
+              </>
+            ) : (
+              <>
+                <Eye className="mr-2 h-4 w-4" />
+                {!isMobile && 'Mostrar'}
+              </>
+            )}
+          </Button>
         </div>
+
+        {showQuickActions && (
+          <div className={`grid ${isMobile ? 'grid-cols-1' : 'grid-cols-1 2xl:grid-cols-3'} ${isMobile ? 'gap-4' : 'gap-6 sm:gap-8'}`}>
+            <div className={`${isMobile ? '' : '2xl:col-span-2'}`}>
+              <QuickActions />
+            </div>
         
         {/* Card de Resumo Rápido com Design Moderno - Responsivo */}
         <div className={`bg-gradient-to-br from-slate-50 to-slate-100 ${isMobile ? 'rounded-xl' : 'rounded-2xl sm:rounded-3xl'} ${isMobile ? 'shadow-lg' : 'shadow-lg sm:shadow-xl'} border border-slate-200/50 overflow-hidden`}>
@@ -233,6 +271,8 @@ const Index = () => {
             </div>
           </div>
         </div>
+          </div>
+        )}
       </div>
 
       {/* Gráficos - Só aparecem quando há produtos - Responsivo */}
