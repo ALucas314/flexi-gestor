@@ -278,9 +278,9 @@ Compra registrada com sucesso!
   }
 
   return (
-    <div className="container mx-auto p-4 sm:p-6 max-w-7xl">
+    <main className="flex-1 p-2 sm:p-6 space-y-3 sm:space-y-6">
       {/* Cabeçalho */}
-      <div className="mb-6">
+      <div>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent flex items-center gap-2">
@@ -304,127 +304,64 @@ Compra registrada com sucesso!
         </div>
       </div>
 
-      {/* Tabs: Resumo Financeiro e Movimentações */}
-      <Tabs defaultValue="resumo" className="space-y-6">
+      {/* Tabs: Movimentações de Estoque e Resumo Financeiro */}
+      <Tabs defaultValue="movimentacoes" className="space-y-6">
         <TabsList className="grid w-full grid-cols-2 lg:w-auto">
-          <TabsTrigger value="resumo" className="gap-2">
-            <PiggyBank className="h-4 w-4" />
-            Resumo Financeiro
-          </TabsTrigger>
           <TabsTrigger value="movimentacoes" className="gap-2">
             <Receipt className="h-4 w-4" />
             Movimentações de Estoque
           </TabsTrigger>
+          <TabsTrigger value="resumo" className="gap-2">
+            <PiggyBank className="h-4 w-4" />
+            Resumo Financeiro
+          </TabsTrigger>
         </TabsList>
 
-        {/* ABA 1: RESUMO FINANCEIRO */}
+        {/* ABA 2: RESUMO FINANCEIRO */}
         <TabsContent value="resumo" className="space-y-6">
-          {/* Cards de Resumo do Mês */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Receitas do Mês */}
-            <Card className="border-green-200 bg-gradient-to-br from-green-50 to-white hover:shadow-lg transition-shadow">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-gray-600 flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4 text-green-600" />
-                  Receitas do Mês
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold text-green-600">
-                  R$ {thisMonthEntradas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+          {/* Resumo Executivo - Card Único */}
+          <Card className="bg-gradient-to-br from-indigo-50 to-purple-50 border-indigo-200 shadow-xl">
+            <CardHeader>
+              <CardTitle className="text-xl font-bold text-indigo-900 flex items-center gap-2">
+                <PiggyBank className="h-6 w-6 text-indigo-600" />
+                Resumo Executivo Geral
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="flex items-center justify-between p-4 bg-white/60 rounded-xl border border-blue-200">
+                  <div>
+                    <p className="text-sm text-gray-600 mb-1">💵 Entradas (Custos)</p>
+                    <p className="text-2xl font-bold text-blue-600">R$ {totalEntradas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                    <p className="text-xs text-gray-500 mt-1">{entradas.length} registros</p>
+                  </div>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  {entradas.length} entradas registradas
-                </p>
-              </CardContent>
-            </Card>
-
-            {/* Despesas do Mês */}
-            <Card className="border-red-200 bg-gradient-to-br from-red-50 to-white hover:shadow-lg transition-shadow">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-gray-600 flex items-center gap-2">
-                  <TrendingDown className="h-4 w-4 text-red-600" />
-                  Saídas do Mês
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold text-red-600">
-                  R$ {thisMonthSaidas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                
+                <div className="flex items-center justify-between p-4 bg-white/60 rounded-xl border border-orange-200">
+                  <div>
+                    <p className="text-sm text-gray-600 mb-1">💸 Saídas (Receitas)</p>
+                    <p className="text-2xl font-bold text-orange-600">R$ {totalSaidas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                    <p className="text-xs text-gray-500 mt-1">{saidas.length} registros</p>
+                  </div>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  {saidas.length} saídas registradas
-                </p>
-              </CardContent>
-            </Card>
-
-            {/* Saldo do Mês */}
-            <Card className={`border-${thisMonthSaldo >= 0 ? 'indigo' : 'red'}-200 bg-gradient-to-br from-${thisMonthSaldo >= 0 ? 'indigo' : 'red'}-50 to-white hover:shadow-lg transition-shadow`}>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-gray-600 flex items-center gap-2">
-                  <Wallet className="h-4 w-4 text-indigo-600" />
-                  Saldo do Mês
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className={`text-3xl font-bold ${thisMonthSaldo >= 0 ? 'text-indigo-600' : 'text-red-600'}`}>
-                  R$ {thisMonthSaldo.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                
+                <div className={`flex items-center justify-between p-4 bg-white/60 rounded-xl border-2 ${saldo >= 0 ? 'border-green-500' : 'border-red-500'}`}>
+                  <div className="flex-1">
+                    <p className="text-sm text-gray-600 mb-1">💰 Saldo Final</p>
+                    <p className={`text-2xl font-bold ${saldo >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {saldo >= 0 ? '+' : ''}R$ {saldo.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </p>
+                    <p className={`text-xs ${saldo >= 0 ? 'text-green-600' : 'text-red-600'} mt-1 font-semibold`}>
+                      {saldo >= 0 ? '✅ LUCRO' : '⚠️ PREJUÍZO'}
+                    </p>
+                  </div>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  {thisMonthMovements.length} movimentações no mês
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Cards de Totais Gerais */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card className="border-blue-200 bg-gradient-to-br from-blue-50 to-white">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-blue-800">
-                  💵 Total de Receitas (Geral)
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-blue-600">
-                  R$ {totalEntradas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                </div>
-                <p className="text-xs text-blue-500 mt-1">Todas as entradas registradas</p>
-              </CardContent>
-            </Card>
-
-            <Card className="border-orange-200 bg-gradient-to-br from-orange-50 to-white">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-orange-800">
-                  💸 Total de Saídas (Geral)
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-orange-600">
-                  R$ {totalSaidas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                </div>
-                <p className="text-xs text-orange-500 mt-1">Todas as saídas registradas</p>
-              </CardContent>
-            </Card>
-
-            <Card className={`border-${saldo >= 0 ? 'green' : 'red'}-200 bg-gradient-to-br from-${saldo >= 0 ? 'green' : 'red'}-50 to-white`}>
-              <CardHeader className="pb-2">
-                <CardTitle className={`text-sm font-medium text-${saldo >= 0 ? 'green' : 'red'}-800`}>
-                  💰 Saldo Total (Geral)
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className={`text-2xl font-bold ${saldo >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  R$ {saldo.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                </div>
-                <p className={`text-xs ${saldo >= 0 ? 'text-green-500' : 'text-red-500'} mt-1`}>
-                  {saldo >= 0 ? 'Lucro acumulado' : 'Prejuízo acumulado'}
-                </p>
-              </CardContent>
-            </Card>
-          </div>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
-        {/* ABA 2: MOVIMENTAÇÕES DE ESTOQUE */}
+        {/* ABA 1: MOVIMENTAÇÕES DE ESTOQUE (Padrão) */}
         <TabsContent value="movimentacoes" className="space-y-6">
           {/* Cards de Estatísticas de Movimentações */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -880,7 +817,7 @@ Compra registrada com sucesso!
           )}
         </DialogContent>
       </Dialog>
-    </div>
+    </main>
   );
 };
 
