@@ -208,7 +208,7 @@ const Index = () => {
               name: p.name,
               category: p.category,
               stock: p.stock,
-              unitPrice: p.price
+              price: p.price
             }))} />
           </div>
 
