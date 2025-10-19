@@ -203,14 +203,39 @@ Obrigado pela preferência!
       exitDate: data.exitDate,
     };
 
+    // Validar se há estoque suficiente nos lotes selecionados
+    if (selectedBatches.length > 0) {
+      for (const selectedBatch of selectedBatches) {
+        const batch = availableBatches.find(b => b.id === selectedBatch.batchId);
+        if (batch && selectedBatch.quantity > batch.quantity) {
+          toast({
+            title: "❌ Estoque Insuficiente no Lote!",
+            description: `Lote ${batch.batchNumber} tem apenas ${batch.quantity} unidades disponíveis`,
+            variant: "destructive",
+          });
+          return;
+        }
+        if (selectedBatch.quantity <= 0) {
+          toast({
+            title: "❌ Quantidade Inválida!",
+            description: "A quantidade deve ser maior que zero",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+    }
+
     // Atualizar lotes selecionados no backend
     if (selectedBatches.length > 0) {
       try {
         const batchUpdates = selectedBatches.map(async (selectedBatch) => {
           const batch = availableBatches.find(b => b.id === selectedBatch.batchId);
           if (batch) {
+            const newQuantity = batch.quantity - selectedBatch.quantity;
+            // Garantir que nunca fique negativo
             return batchesAPI.update(batch.id, {
-              quantity: batch.quantity - selectedBatch.quantity
+              quantity: Math.max(0, newQuantity)
             });
           }
         });
