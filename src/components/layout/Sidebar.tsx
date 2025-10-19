@@ -153,10 +153,32 @@ export const Sidebar = ({ className, variant = 'overlay', onNavigate }: SidebarP
 
       {/* Navegação Principal - Responsiva */}
       <nav className="flex-1 p-3 sm:p-4 md:p-6 space-y-2">
-        <div className="mb-3 sm:mb-4">
-          <h2 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-2 sm:mb-3">
+        <div className="mb-3 sm:mb-4 flex items-center justify-between">
+          <h2 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">
             Navegação Principal
           </h2>
+          
+          {/* Botão de Pin também na navegação - Desktop */}
+          {!isMobile && !isTablet && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                togglePin();
+                if (variant === 'overlay' && onNavigate) {
+                  onNavigate();
+                }
+              }}
+              className="h-7 w-7 p-0 hover:bg-indigo-100 transition-colors rounded-lg"
+              title={isPinned ? "Desafixar menu" : "Fixar menu"}
+            >
+              {isPinned ? (
+                <PinOff className="h-3.5 w-3.5 text-indigo-600" />
+              ) : (
+                <Pin className="h-3.5 w-3.5 text-indigo-600" />
+              )}
+            </Button>
+          )}
         </div>
         
         {navigationItems.map((item) => (
