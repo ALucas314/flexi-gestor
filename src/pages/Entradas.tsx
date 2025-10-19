@@ -28,9 +28,10 @@ interface StockEntry {
   entryDate: Date;
   notes: string;
   status: "pendente" | "aprovado" | "cancelado";
+  receiptNumber?: string; // Número único da nota fiscal
 }
 
-type StockEntryFormData = Omit<StockEntry, 'id' | 'productName' | 'productSku' | 'totalCost'>;
+type StockEntryFormData = Omit<StockEntry, 'id' | 'productName' | 'productSku' | 'totalCost' | 'receiptNumber'>;
 
 const Entradas = () => {
   // Estados
@@ -138,6 +139,19 @@ const Entradas = () => {
     return entryDate.getMonth() === now.getMonth() && entryDate.getFullYear() === now.getFullYear();
   }).length;
 
+  // Gerar número de nota fiscal único
+  const generateReceiptNumber = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    const milliseconds = String(now.getMilliseconds()).padStart(3, '0');
+    return `NFC-${year}${month}${day}-${hours}${minutes}${seconds}${milliseconds}`;
+  };
+
   // Funções CRUD
   const addEntry = async (data: StockEntryFormData) => {
     const product = products.find(p => p.id === data.productId);
@@ -190,6 +204,7 @@ const Entradas = () => {
 
         const totalQuantity = getTotalBatchQuantity();
         const totalCost = selectedBatches.reduce((sum, batch) => sum + (batch.quantity * (batch.unitCost || 0)), 0);
+        const receiptNumber = generateReceiptNumber();
 
         const newEntry: StockEntry = {
           ...data,
@@ -200,6 +215,7 @@ const Entradas = () => {
           unitCost: totalCost / totalQuantity, // Custo médio
           totalCost: totalCost,
           entryDate: data.entryDate,
+          receiptNumber: receiptNumber,
         };
 
         // Adicionar entrada local
@@ -245,6 +261,8 @@ const Entradas = () => {
       }
     } else {
       // Entrada sem lotes (modo antigo)
+      const receiptNumber = generateReceiptNumber();
+      
       const newEntry: StockEntry = {
         ...data,
         id: Date.now().toString(),
@@ -252,6 +270,7 @@ const Entradas = () => {
         productSku: product.sku,
         totalCost: data.quantity * data.unitCost,
         entryDate: data.entryDate,
+        receiptNumber: receiptNumber,
       };
 
       // Adicionar entrada local
