@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, ShoppingCart, TrendingUp, TrendingDown, Package, ArrowRight, Settings, Edit, Trash2, Save, X, RotateCcw } from "lucide-react";
+import { Plus, ShoppingCart, TrendingUp, TrendingDown, Package, ArrowRight, Settings, Edit, Trash2, Save, X, RotateCcw, Receipt, DollarSign, BarChart3 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useResponsive } from "@/hooks/use-responsive";
 
@@ -25,6 +25,16 @@ interface QuickAction {
 // Ações padrão disponíveis
 const defaultActions = [
   {
+    id: "pdv",
+    title: "PDV - Ponto de Venda",
+    description: "Vendas rápidas com receita automática",
+    icon: "Receipt",
+    color: "from-indigo-500 to-indigo-600",
+    hoverColor: "from-indigo-600 to-indigo-700",
+    path: "/pdv",
+    order: 0
+  },
+  {
     id: "new-product",
     title: "Novo Produto",
     description: "Cadastrar produto no estoque",
@@ -32,62 +42,58 @@ const defaultActions = [
     color: "from-blue-500 to-blue-600",
     hoverColor: "from-blue-600 to-blue-700",
     path: "/produtos",
-    order: 0
+    order: 1
   },
   {
     id: "new-sale",
-    title: "Registrar Venda",
-    description: "Nova venda de produtos",
+    title: "Registrar Saída",
+    description: "Saídas de estoque com receita",
     icon: "ShoppingCart",
     color: "from-green-500 to-green-600",
     hoverColor: "from-green-600 to-green-700",
     path: "/saidas",
-    order: 1
+    order: 2
   },
   {
     id: "stock-entry",
     title: "Entrada Estoque",
-    description: "Compra de fornecedor",
+    description: "Compras e reposições",
     icon: "TrendingUp",
     color: "from-emerald-500 to-emerald-600",
     hoverColor: "from-emerald-600 to-emerald-700",
     path: "/entradas",
-    order: 2
+    order: 3
   },
   {
-    id: "stock-adjustment",
-    title: "Ajuste Estoque",
-    description: "Corrigir quantidade",
-    icon: "TrendingDown",
-    color: "from-orange-500 to-orange-600",
-    hoverColor: "from-orange-600 to-orange-700",
-    path: "/movimentacoes",
-    order: 3
+    id: "financial",
+    title: "Financeiro",
+    description: "Receitas, despesas e relatórios",
+    icon: "DollarSign",
+    color: "from-amber-500 to-amber-600",
+    hoverColor: "from-amber-600 to-amber-700",
+    path: "/financeiro",
+    order: 4
   },
   {
     id: "reports",
     title: "Relatórios",
-    description: "Visualizar relatórios",
+    description: "Análises e exportações",
     icon: "BarChart3",
     color: "from-purple-500 to-purple-600",
     hoverColor: "from-purple-600 to-purple-700",
     path: "/relatorios",
-    order: 4
-  },
-  {
-    id: "configurations",
-    title: "Configurações",
-    description: "Configurar sistema",
-    icon: "Settings",
-    color: "from-gray-500 to-gray-600",
-    hoverColor: "from-gray-600 to-gray-700",
-    path: "/configuracoes",
     order: 5
   }
 ];
 
 // Páginas disponíveis para ações rápidas
 const availablePages = [
+  { 
+    name: "PDV - Ponto de Venda", 
+    path: "/pdv", 
+    description: "Vendas rápidas com receita automática",
+    icon: "Receipt"
+  },
   { 
     name: "Produtos", 
     path: "/produtos", 
@@ -97,7 +103,7 @@ const availablePages = [
   { 
     name: "Saídas", 
     path: "/saidas", 
-    description: "Registrar vendas e saídas",
+    description: "Registrar vendas e saídas com receita",
     icon: "ShoppingCart"
   },
   { 
@@ -107,22 +113,16 @@ const availablePages = [
     icon: "TrendingUp"
   },
   { 
-    name: "Movimentações", 
-    path: "/movimentacoes", 
-    description: "Histórico de movimentações",
-    icon: "RotateCcw"
+    name: "Financeiro", 
+    path: "/financeiro", 
+    description: "Receitas, despesas e exportações",
+    icon: "DollarSign"
   },
   { 
     name: "Relatórios", 
     path: "/relatorios", 
-    description: "Visualizar relatórios",
+    description: "Análises e relatórios detalhados",
     icon: "BarChart3"
-  },
-  { 
-    name: "Configurações", 
-    path: "/configuracoes", 
-    description: "Configurar sistema",
-    icon: "Settings"
   }
 ];
 
@@ -133,15 +133,19 @@ const iconMap = {
   TrendingUp: TrendingUp,
   TrendingDown: TrendingDown,
   RotateCcw: RotateCcw,
-  BarChart3: () => <div className="w-5 h-5 bg-current rounded-sm" />,
-  Settings: Settings
+  BarChart3: BarChart3,
+  Settings: Settings,
+  Receipt: Receipt,
+  DollarSign: DollarSign
 };
 
 // Cores disponíveis
 const colorOptions = [
+  { name: "Índigo", value: "from-indigo-500 to-indigo-600", hover: "from-indigo-600 to-indigo-700" },
   { name: "Azul", value: "from-blue-500 to-blue-600", hover: "from-blue-600 to-blue-700" },
   { name: "Verde", value: "from-green-500 to-green-600", hover: "from-green-600 to-green-700" },
   { name: "Esmeralda", value: "from-emerald-500 to-emerald-600", hover: "from-emerald-600 to-emerald-700" },
+  { name: "Âmbar", value: "from-amber-500 to-amber-600", hover: "from-amber-600 to-amber-700" },
   { name: "Laranja", value: "from-orange-500 to-orange-600", hover: "from-orange-600 to-orange-700" },
   { name: "Roxo", value: "from-purple-500 to-purple-600", hover: "from-purple-600 to-purple-700" },
   { name: "Cinza", value: "from-gray-500 to-gray-600", hover: "from-gray-600 to-gray-700" },
