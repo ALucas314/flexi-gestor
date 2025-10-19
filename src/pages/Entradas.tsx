@@ -561,8 +561,9 @@ const Entradas = () => {
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="space-y-2">
-            <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-neutral-900 tracking-tight">
-              📦 Entradas de Estoque
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent flex items-center gap-2">
+              <TrendingUp className="w-8 h-8 text-blue-600" />
+              Entradas de Estoque
             </h1>
             <p className="text-base sm:text-lg md:text-xl text-neutral-600 max-w-2xl">
               Gerencie todas as entradas de produtos, registre compras e mantenha o controle completo do seu inventário
