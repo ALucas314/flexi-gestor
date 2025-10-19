@@ -115,39 +115,14 @@ export const Sidebar = ({ className, variant = 'overlay', onNavigate }: SidebarP
       
       {/* Header do Sidebar - Responsivo */}
       <div className="p-3 sm:p-4 md:p-6 border-b border-neutral-200 bg-gradient-to-br from-indigo-50 to-indigo-100">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2 sm:space-x-3">
-            <div className="w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 bg-gradient-to-br from-indigo-600 to-indigo-700 rounded-lg sm:rounded-xl flex items-center justify-center shadow-lg">
-              <span className="text-sm sm:text-base md:text-lg text-white font-bold">FG</span>
-            </div>
-            <div>
-              <h1 className="text-sm sm:text-base md:text-lg font-bold text-indigo-900">Flexi Gestor</h1>
-              <p className="text-xs text-indigo-700">Sistema de Gestão</p>
-            </div>
+        <div className="flex items-center space-x-2 sm:space-x-3">
+          <div className="w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 bg-gradient-to-br from-indigo-600 to-indigo-700 rounded-lg sm:rounded-xl flex items-center justify-center shadow-lg">
+            <span className="text-sm sm:text-base md:text-lg text-white font-bold">FG</span>
           </div>
-          
-          {/* Botão de Pin - Aparece em desktop (tanto no overlay quanto fixado) */}
-          {!isMobile && !isTablet && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                togglePin();
-                // Só fechar o sheet se estiver no modo overlay
-                if (variant === 'overlay' && onNavigate) {
-                  onNavigate();
-                }
-              }}
-              className="h-9 w-9 p-0 hover:bg-indigo-200/50 transition-colors"
-              title={isPinned ? "Desafixar menu (voltar ao modo overlay)" : "Fixar menu (manter sempre visível)"}
-            >
-              {isPinned ? (
-                <PinOff className="h-4 w-4 text-indigo-700" />
-              ) : (
-                <Pin className="h-4 w-4 text-indigo-700" />
-              )}
-            </Button>
-          )}
+          <div>
+            <h1 className="text-sm sm:text-base md:text-lg font-bold text-indigo-900">Flexi Gestor</h1>
+            <p className="text-xs text-indigo-700">Sistema de Gestão</p>
+          </div>
         </div>
       </div>
 
