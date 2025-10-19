@@ -471,7 +471,7 @@ const PDV = () => {
               {/* Botões de Ação */}
               <div className="space-y-2 pt-2">
                 <Button 
-                  className="w-full bg-blue-600 hover:bg-blue-700"
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white"
                   onClick={() => window.print()}
                 >
                   <Printer className="mr-2 h-4 w-4" />
