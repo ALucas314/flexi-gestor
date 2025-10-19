@@ -24,7 +24,6 @@ import NotFound from "./pages/NotFound";
 import { AuthProvider } from "./contexts/AuthContext";
 import { DataProvider } from "./contexts/DataContext";
 import { SidebarProvider } from "./contexts/SidebarContext";
-import { MobileDebug } from "./components/MobileDebug";
 
 const queryClient = new QueryClient();
 
@@ -40,7 +39,6 @@ const App = () => (
             <Toaster />
             <Sonner />
             <BrowserRouter>
-            <MobileDebug />
             <Routes>
               {/* 🧪 Rota de Teste (TEMPORÁRIA) */}
               <Route path="/test" element={<Test />} />
