@@ -28,9 +28,10 @@ interface StockExit {
   exitDate: Date;
   notes: string;
   status: "pendente" | "confirmado" | "cancelado";
+  receiptNumber?: string; // Número único da receita
 }
 
-type StockExitFormData = Omit<StockExit, 'id' | 'productName' | 'productSku' | 'totalPrice'>;
+type StockExitFormData = Omit<StockExit, 'id' | 'productName' | 'productSku' | 'totalPrice' | 'receiptNumber'>;
 
 const Saidas = () => {
   // Estados
@@ -109,6 +110,19 @@ const Saidas = () => {
     });
   };
 
+  // Gerar número de receita único
+  const generateReceiptNumber = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    const milliseconds = String(now.getMilliseconds()).padStart(3, '0');
+    return `REC-${year}${month}${day}-${hours}${minutes}${seconds}${milliseconds}`;
+  };
+
   // Função para abrir receita
   const openReceipt = (exit: StockExit) => {
     setSelectedExit(exit);
@@ -122,7 +136,7 @@ const Saidas = () => {
 📄 RECEITA DE SAÍDA
 Flexi Gestor - Sistema de Gestão
 ━━━━━━━━━━━━━━━━━━━━━━━━━
-
+${exit.receiptNumber ? `\nNº Receita: ${exit.receiptNumber}\n` : ''}
 Data: ${new Date(exit.exitDate).toLocaleDateString('pt-BR')}
 Cliente: ${exit.customer}
 
@@ -200,6 +214,8 @@ Obrigado pela preferência!
       return;
     }
 
+    const receiptNumber = generateReceiptNumber();
+    
     const newExit: StockExit = {
       ...data,
       id: Date.now().toString(),
@@ -209,6 +225,7 @@ Obrigado pela preferência!
       unitPrice: unitPrice,
       totalPrice: totalPrice,
       exitDate: data.exitDate,
+      receiptNumber: receiptNumber,
     };
 
     // Validar se há estoque suficiente nos lotes selecionados
@@ -886,6 +903,12 @@ Obrigado pela preferência!
                 </div>
                 
                 <div className="space-y-1 text-sm">
+                  {selectedExit.receiptNumber && (
+                    <div className="flex justify-between bg-indigo-50 p-2 rounded-lg border border-indigo-200">
+                      <span className="text-indigo-700 font-semibold">Nº Receita:</span>
+                      <span className="font-bold text-indigo-900">{selectedExit.receiptNumber}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <span className="text-gray-600">Data:</span>
                     <span className="font-semibold">

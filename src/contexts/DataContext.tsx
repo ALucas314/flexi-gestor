@@ -31,6 +31,7 @@ interface Movement {
   description: string;
   date: Date;
   total: number;
+  receiptNumber?: string; // Número único da receita (apenas para saídas)
 }
 
 interface Notification {
