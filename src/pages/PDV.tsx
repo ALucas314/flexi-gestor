@@ -1,7 +1,7 @@
 // 🛒 Página de Ponto de Venda (PDV)
 // Sistema de vendas rápido e intuitivo
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,6 +48,16 @@ const PDV = () => {
   const [isProcessingSale, setIsProcessingSale] = useState(false);
   const [showReceipt, setShowReceipt] = useState(false);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Controlar estado de carregamento
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 500);
+    
+    return () => clearTimeout(timer);
+  }, []);
 
   // Calcular total do carrinho
   const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
@@ -165,6 +175,23 @@ const PDV = () => {
     p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     p.sku.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Tela de carregamento
+  if (isLoading) {
+    return (
+      <main className="flex-1 p-3 sm:p-6 space-y-4 sm:space-y-6">
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+              <ShoppingCart className="w-8 h-8 text-white" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">🛒 Carregando PDV...</h3>
+            <p className="text-gray-600">Preparando sistema de vendas</p>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <div className="container mx-auto p-4 sm:p-6 max-w-7xl">
