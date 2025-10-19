@@ -1,0 +1,85 @@
+import { Toaster } from "@/components/ui/toaster";
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { LayoutWithSidebar } from "@/components/layout/LayoutWithSidebar";
+import AuthGuard from "@/components/AuthGuard";
+import Index from "./pages/Index";
+import Produtos from "./pages/Produtos";
+import Entradas from "./pages/Entradas";
+import Saidas from "./pages/Saidas";
+import Relatorios from "./pages/Relatorios";
+import Financeiro from "./pages/Financeiro";
+import PDV from "./pages/PDV";
+import Perfil from "./pages/Perfil";
+import AlterarSenha from "./pages/AlterarSenha";
+import Login from "./pages/Login";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
+import Test from "./pages/Test";
+import NotFound from "./pages/NotFound";
+
+// 📊 Importar contextos com Prisma
+import { AuthProvider } from "./contexts/AuthContext";
+import { DataProvider } from "./contexts/DataContext";
+import { SidebarProvider } from "./contexts/SidebarContext";
+import { MobileDebug } from "./components/MobileDebug";
+
+const queryClient = new QueryClient();
+
+const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <TooltipProvider>
+      {/* 🔐 Auth Provider - Gerencia autenticação com JWT */}
+      <AuthProvider>
+        {/* 🗄️ Data Provider - Gerencia dados com Prisma API */}
+        <DataProvider>
+          {/* 📌 Sidebar Provider - Gerencia estado da sidebar (pinada/overlay) */}
+          <SidebarProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+            <MobileDebug />
+            <Routes>
+              {/* 🧪 Rota de Teste (TEMPORÁRIA) */}
+              <Route path="/test" element={<Test />} />
+              
+              {/* 🔐 Rota de Login (sem proteção) */}
+              <Route path="/login" element={<Login />} />
+              
+              {/* 📧 Rota de Recuperação de Senha (sem proteção) */}
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              
+              {/* 🔐 Rota de Reset de Senha com Token (sem proteção) */}
+              <Route path="/reset-password" element={<ResetPassword />} />
+              
+              {/* 🛡️ Rotas Protegidas */}
+              <Route path="/*" element={
+                <AuthGuard>
+                  <LayoutWithSidebar>
+                        <Routes>
+                          <Route path="/" element={<Index />} />
+                          <Route path="/produtos" element={<Produtos />} />
+                          <Route path="/entradas" element={<Entradas />} />
+                          <Route path="/saidas" element={<Saidas />} />
+                          <Route path="/relatorios" element={<Relatorios />} />
+                          <Route path="/financeiro" element={<Financeiro />} />
+                          <Route path="/pdv" element={<PDV />} />
+                          <Route path="/perfil" element={<Perfil />} />
+                          <Route path="/alterar-senha" element={<AlterarSenha />} />
+                          <Route path="*" element={<NotFound />} />
+                        </Routes>
+                  </LayoutWithSidebar>
+                </AuthGuard>
+              } />
+            </Routes>
+          </BrowserRouter>
+          </SidebarProvider>
+        </DataProvider>
+      </AuthProvider>
+    </TooltipProvider>
+  </QueryClientProvider>
+);
+
+export default App;

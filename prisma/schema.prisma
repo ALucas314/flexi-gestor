@@ -1,0 +1,118 @@
+// 📊 Schema do Prisma para Flexi Gestor
+// Este arquivo define a estrutura do banco de dados
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// 👤 Modelo de Usuário
+model User {
+  id        String   @id @default(uuid())
+  username  String   @unique
+  email     String   @unique
+  password  String   // Hash bcrypt da senha
+  name      String
+  role      String   @default("user") // 'admin' ou 'user'
+  avatar    String?  @default("👤")
+  resetToken String?  // Token para reset de senha
+  resetTokenExpiry DateTime? // Expira em 1 hora
+  createdAt DateTime @default(now())
+  lastLogin DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relações
+  products      Product[]
+  movements     Movement[]
+  notifications Notification[]
+  batches       Batch[]
+}
+
+// 📦 Modelo de Produto
+model Product {
+  id          String   @id @default(uuid())
+  name        String
+  description String
+  category    String
+  price       Float
+  stock       Int      // Estoque total (soma de todos os lotes)
+  minStock    Int
+  sku         String   @unique
+  status      String   @default("ativo") // 'ativo' ou 'inativo'
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Chave estrangeira
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Relações
+  movements Movement[]
+  batches   Batch[]    // Lotes do produto
+
+  @@index([userId])
+}
+
+// 📅 Modelo de Lote (Batch)
+model Batch {
+  id              String    @id @default(uuid())
+  batchNumber     String    // Número do lote (ex: "LOTE-001")
+  quantity        Int       // Quantidade neste lote
+  manufactureDate DateTime? // Data de fabricação
+  expiryDate      DateTime? // Data de validade
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Chave estrangeira
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, batchNumber]) // Um produto não pode ter lotes com mesmo número
+  @@index([productId])
+  @@index([userId])
+}
+
+// 📊 Modelo de Movimentação
+model Movement {
+  id          String   @id @default(uuid())
+  type        String   // 'entrada', 'saida', 'ajuste'
+  quantity    Int
+  unitPrice   Float
+  total       Float
+  description String
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  // Chaves estrangeiras
+  productId   String
+  product     Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  userId      String
+  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([userId])
+}
+
+// 🔔 Modelo de Notificação
+model Notification {
+  id        String   @id @default(uuid())
+  title     String
+  message   String
+  type      String   // 'success', 'error', 'warning', 'info'
+  read      Boolean  @default(false)
+  timestamp DateTime @default(now())
+
+  // Chave estrangeira
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}

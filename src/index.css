@@ -1,0 +1,439 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Esconder scrollbar em todos os elementos */
+* {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* Internet Explorer 10+ */
+}
+
+*::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
+
+/* CSS Custom Properties para personalização - Design System DigitalCraft */
+:root {
+  /* Cores Primárias - Tons suaves e pastéis */
+  --color-primary: #93C5FD;
+  --color-primary-light: #BFDBFE;
+  --color-primary-dark: #7DD3FC;
+  
+  /* Cores Secundárias - Cinza muito suave */
+  --color-secondary: #CBD5E1;
+  --color-secondary-light: #E2E8F0;
+  --color-secondary-dark: #94A3B8;
+  
+  /* Cores de Acento - Azul celeste suave */
+  --color-accent: #7DD3FC;
+  --color-accent-light: #A5F3FC;
+  --color-accent-dark: #67E8F9;
+  
+  /* Cores Neutras - Escala de Cinza Suave */
+  --color-neutral-50: #F8FAFC;
+  --color-neutral-100: #F1F5F9;
+  --color-neutral-200: #E2E8F0;
+  --color-neutral-300: #CBD5E1;
+  --color-neutral-400: #94A3B8;
+  --color-neutral-500: #64748B;
+  --color-neutral-600: #475569;
+  --color-neutral-700: #334155;
+  --color-neutral-800: #1E293B;
+  --color-neutral-900: #0F172A;
+  
+  /* Cores de Estado - Tons suaves e harmoniosos */
+  --color-success: #86EFAC;
+  --color-warning: #FDE047;
+  --color-error: #FCA5A5;
+  --color-info: #93C5FD;
+  
+  /* Espaçamentos e Bordas */
+  --spacing-base: 1rem;
+  --spacing-xs: 0.25rem;
+  --spacing-sm: 0.5rem;
+  --spacing-md: 1rem;
+  --spacing-lg: 1.5rem;
+  --spacing-xl: 2rem;
+  --spacing-2xl: 3rem;
+  
+  --border-radius: 0.75rem;
+  --border-radius-sm: 0.5rem;
+  --border-radius-lg: 1rem;
+  --border-radius-xl: 1.5rem;
+  
+  /* Sombras - Mais suaves e sutis */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.03);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.06), 0 2px 4px -2px rgb(0 0 0 / 0.06);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.06), 0 4px 6px -4px rgb(0 0 0 / 0.06);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.06), 0 8px 10px -6px rgb(0 0 0 / 0.06);
+  
+  /* Transições */
+  --transition-fast: 150ms ease-in-out;
+  --transition-normal: 250ms ease-in-out;
+  --transition-slow: 350ms ease-in-out;
+}
+
+/* Utility classes para usar as variáveis CSS */
+.bg-primary { background-color: var(--color-primary); }
+.text-primary { color: var(--color-primary); }
+.border-primary { border-color: var(--color-primary); }
+
+.bg-secondary { background-color: var(--color-secondary); }
+.text-secondary { color: var(--color-secondary); }
+.border-secondary { border-color: var(--color-secondary); }
+
+.bg-accent { background-color: var(--color-accent); }
+.text-accent { color: var(--color-accent); }
+.border-accent { border-color: var(--color-accent); }
+
+/* Gradiente personalizado */
+.gradient-primary {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+}
+
+.gradient-subtle {
+  background: linear-gradient(135deg, var(--color-neutral-50), var(--color-neutral-100));
+}
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    /* Cores de Fundo - Tons neutros suaves e pastéis */
+    --background: 210 40% 98%;
+    --foreground: 220 15% 25%;
+
+    /* Cards e Containers - Branco suave com sutil transparência */
+    --card: 0 0% 100%;
+    --card-foreground: 220 15% 25%;
+
+    /* Popover e Tooltips */
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 15% 25%;
+
+    /* Cores Primárias - Azul suave e pastel */
+    --primary: 210 100% 75%;
+    --primary-foreground: 220 15% 25%;
+
+    /* Cores Secundárias - Cinza muito suave */
+    --secondary: 210 20% 96%;
+    --secondary-foreground: 220 15% 25%;
+
+    /* Cores de Acento - Azul celeste suave */
+    --accent: 200 100% 80%;
+    --accent-foreground: 220 15% 25%;
+    
+    /* Cores de Estado - Tons suaves e harmoniosos */
+    --success: 160 70% 75%;
+    --success-foreground: 220 15% 25%;
+    
+    --warning: 45 90% 75%;
+    --warning-foreground: 220 15% 25%;
+
+    --destructive: 0 70% 75%;
+    --destructive-foreground: 220 15% 25%;
+
+    /* Cores de Informação - Azul suave */
+    --info: 210 100% 80%;
+    --info-foreground: 220 15% 25%;
+    
+    /* Bordas e Divisores - Muito suaves */
+    --muted: 210 20% 96%;
+    --muted-foreground: 220 10% 40%;
+    
+    --border: 210 20% 90%;
+    --input: 210 20% 90%;
+    
+    /* Ring e Focus - Azul suave */
+    --ring: 210 100% 75%;
+    
+    /* Radius */
+    --radius: 0.75rem;
+    
+    /* Sombras - Mais suaves e sutis */
+    --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.04);
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.03);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.06), 0 2px 4px -2px rgb(0 0 0 / 0.06);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.06), 0 4px 6px -4px rgb(0 0 0 / 0.06);
+    --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.06), 0 8px 10px -6px rgb(0 0 0 / 0.06);
+  }
+}
+
+/* Tipografia Elegante e Profissional - Estilo DigitalCraft */
+@layer base {
+  html {
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-size: 16px; /* Base font size */
+    height: 100%;
+    overflow-x: hidden;
+  }
+  
+  body {
+    font-size: 0.875rem;
+    color: hsl(var(--foreground));
+    background-color: hsl(var(--background));
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+  }
+  
+  #root {
+    min-height: 100vh;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  /* Correções específicas para mobile */
+  @media (max-width: 768px) {
+    html {
+      font-size: 14px;
+    }
+    
+    body {
+      font-size: 0.875rem;
+      line-height: 1.5;
+    }
+    
+    /* Garantir que elementos não saiam da tela */
+    * {
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+    
+    /* Corrigir problemas de layout mobile */
+    .min-h-screen {
+      min-height: 100vh !important;
+    }
+    
+    /* Garantir que containers sejam responsivos */
+    .container {
+      padding-left: 1rem !important;
+      padding-right: 1rem !important;
+    }
+  }
+  
+  /* Hierarquia de Tipografia - Usando classes Tailwind */
+  h1, .h1 {
+    @apply text-4xl font-extrabold leading-tight tracking-tight;
+    color: hsl(var(--foreground));
+  }
+  
+  h2, .h2 {
+    @apply text-3xl font-bold leading-tight tracking-tight;
+    color: hsl(var(--foreground));
+  }
+  
+  h3, .h3 {
+    @apply text-2xl font-semibold leading-tight tracking-tight;
+    color: hsl(var(--foreground));
+  }
+  
+  h4, .h4 {
+    @apply text-xl font-semibold leading-tight;
+    color: hsl(var(--foreground));
+  }
+  
+  h5, .h5 {
+    @apply text-lg font-semibold leading-tight;
+    color: hsl(var(--foreground));
+  }
+  
+  h6, .h6 {
+    @apply text-base font-semibold leading-tight;
+    color: hsl(var(--foreground));
+  }
+  
+  /* Texto de Corpo */
+  .text-body {
+    @apply text-sm leading-relaxed;
+    color: hsl(var(--muted-foreground));
+  }
+  
+  .text-body-large {
+    @apply text-base leading-relaxed;
+    color: hsl(var(--muted-foreground));
+  }
+  
+  .text-body-small {
+    @apply text-xs leading-relaxed;
+    color: hsl(var(--muted-foreground));
+  }
+  
+  /* Texto de Caption */
+  .text-caption {
+    @apply text-xs leading-tight uppercase tracking-wider font-medium;
+    color: hsl(var(--muted-foreground));
+  }
+}
+
+/* Componentes Base Melhorados - Estilo DigitalCraft */
+@layer components {
+  /* Botões com Design Profissional */
+  .btn-primary {
+    @apply bg-primary text-primary-foreground hover:bg-primary/90;
+    @apply font-semibold px-6 py-3 rounded-xl;
+    @apply transition-all duration-200 ease-in-out;
+    @apply shadow-lg hover:shadow-xl;
+    @apply focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2;
+  }
+  
+  .btn-secondary {
+    @apply bg-secondary text-secondary-foreground hover:bg-secondary/80;
+    @apply font-semibold px-6 py-3 rounded-xl;
+    @apply transition-all duration-200 ease-in-out;
+    @apply shadow-md hover:shadow-lg;
+    @apply focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2;
+  }
+  
+  .btn-outline {
+    @apply border-2 border-input bg-background hover:bg-accent hover:text-accent-foreground;
+    @apply font-semibold px-6 py-3 rounded-xl;
+    @apply transition-all duration-200 ease-in-out;
+    @apply focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2;
+  }
+  
+  /* Cards com Design Sofisticado */
+  .card-modern {
+    @apply bg-card text-card-foreground rounded-2xl border-0;
+    @apply shadow-lg hover:shadow-xl transition-all duration-300;
+    @apply overflow-hidden backdrop-blur-sm;
+  }
+  
+  .card-header-modern {
+    @apply p-8 pb-6;
+    @apply border-b border-border/50;
+  }
+  
+  .card-content-modern {
+    @apply p-8 pt-6;
+  }
+  
+  /* Inputs com Design Profissional */
+  .input-modern {
+    @apply flex h-12 w-full rounded-xl border-2 border-input bg-background px-4 py-3;
+    @apply text-sm ring-offset-background;
+    @apply transition-all duration-200 ease-in-out;
+    @apply focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2;
+    @apply placeholder:text-muted-foreground;
+    @apply disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  
+  /* Tabelas com Design Elegante */
+  .table-modern {
+    @apply w-full caption-bottom text-sm;
+  }
+  
+  .table-header-modern {
+    @apply bg-muted/50;
+  }
+  
+  .table-row-modern {
+    @apply border-b border-border/50 transition-colors;
+    @apply hover:bg-muted/50 data-[state=selected]:bg-muted;
+  }
+  
+  /* Badges com Design Profissional */
+  .badge-modern {
+    @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold;
+    @apply transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2;
+  }
+  
+  /* Animações e Transições */
+  .fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+  }
+  
+  .slide-up {
+    animation: slideUp 0.3s ease-out;
+  }
+  
+  .scale-in {
+    animation: scaleIn 0.2s ease-out;
+  }
+}
+
+/* Animações Personalizadas */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Utilitários de Layout */
+@layer utilities {
+  /* Gradientes Profissionais */
+  .gradient-primary {
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary)/0.8));
+  }
+  
+  .gradient-subtle {
+    background: linear-gradient(135deg, hsl(var(--background)), hsl(var(--muted)));
+  }
+  
+  /* Sombras Profissionais */
+  .shadow-soft {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+  }
+  
+  .shadow-medium {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+  }
+  
+  .shadow-strong {
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.06);
+  }
+  
+  /* Bordas e Divisores */
+  .border-subtle {
+    border-color: hsl(var(--border)/0.5);
+  }
+  
+  .divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, hsl(var(--border)), transparent);
+  }
+  
+  /* Espaçamentos Consistentes */
+  .space-section {
+    @apply space-y-8;
+  }
+  
+  .space-content {
+    @apply space-y-6;
+  }
+  
+  .space-items {
+    @apply space-y-3;
+  }
+}

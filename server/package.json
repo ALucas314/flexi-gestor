@@ -1,0 +1,8 @@
+{
+  "name": "flexi-gestor-server",
+  "version": "1.0.0",
+  "type": "commonjs",
+  "description": "Backend do Flexi Gestor com Prisma",
+  "main": "src/server.ts"
+}
+
