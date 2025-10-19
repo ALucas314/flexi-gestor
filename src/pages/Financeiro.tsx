@@ -173,7 +173,7 @@ const Financeiro = () => {
 📄 RECEITA
 Flexi Gestor - Sistema de Gestão
 ━━━━━━━━━━━━━━━━━━━━━━━━━
-
+${movement.receiptNumber ? `\nNº Receita: ${movement.receiptNumber}\n` : ''}
 Data/Hora: ${new Date(movement.date).toLocaleString('pt-BR')}
 Tipo: Venda PDV
 
@@ -618,6 +618,12 @@ Compra registrada com sucesso!
                 </div>
                 
                 <div className="space-y-1 text-sm">
+                  {selectedMovement.receiptNumber && (
+                    <div className="flex justify-between bg-indigo-50 p-2 rounded-lg border border-indigo-200">
+                      <span className="text-indigo-700 font-semibold">Nº Receita:</span>
+                      <span className="font-bold text-indigo-900">{selectedMovement.receiptNumber}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <span className="text-gray-600">Data/Hora:</span>
                     <span className="font-semibold">
