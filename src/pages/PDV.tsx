@@ -374,18 +374,18 @@ const PDV = () => {
                   {/* Botões de Ação */}
                   <div className="space-y-2">
                     <Button 
-                      className="w-full bg-green-600 hover:bg-green-700"
+                      className="w-full bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white px-6 py-3 rounded-xl shadow-xl hover:shadow-2xl transition-all duration-200 transform hover:scale-105"
                       onClick={finalizeSale}
                       disabled={isProcessingSale}
                     >
                       {isProcessingSale ? (
                         <>
-                          <Receipt className="mr-2 h-4 w-4 animate-pulse" />
+                          <Receipt className="w-5 h-5 mr-2 animate-pulse" />
                           Processando...
                         </>
                       ) : (
                         <>
-                          <CreditCard className="mr-2 h-4 w-4" />
+                          <CreditCard className="w-5 h-5 mr-2" />
                           Finalizar Venda
                         </>
                       )}
