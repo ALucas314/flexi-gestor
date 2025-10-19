@@ -55,10 +55,19 @@ export function ProductsChart({ products }: ProductsChartProps) {
             ))}
           </Pie>
           <Tooltip 
-            formatter={(value, name) => [
-              name === 'quantidade' ? value : `R$ ${Number(value).toFixed(2)}`,
-              name === 'quantidade' ? 'Quantidade' : 'Valor Total'
-            ]}
+            content={({ active, payload }) => {
+              if (active && payload && payload.length) {
+                const data = payload[0].payload;
+                return (
+                  <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg">
+                    <p className="font-semibold text-gray-900">{data.name}</p>
+                    <p className="text-sm text-gray-600">Quantidade: {data.quantidade} produtos</p>
+                    <p className="text-sm font-bold text-green-600">Valor Total: R$ {data.valor.toFixed(2)}</p>
+                  </div>
+                );
+              }
+              return null;
+            }}
           />
           <Legend 
             wrapperStyle={{ fontSize: '12px' }}
@@ -105,10 +114,19 @@ export function ProductsChart({ products }: ProductsChartProps) {
               ))}
             </Pie>
             <Tooltip 
-              formatter={(value, name) => [
-                name === 'quantidade' ? value : `R$ ${Number(value).toFixed(2)}`,
-                name === 'quantidade' ? 'Quantidade' : 'Valor Total'
-              ]}
+              content={({ active, payload }) => {
+                if (active && payload && payload.length) {
+                  const data = payload[0].payload;
+                  return (
+                    <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg">
+                      <p className="font-semibold text-gray-900">{data.name}</p>
+                      <p className="text-sm text-gray-600">Quantidade: {data.quantidade} produtos</p>
+                      <p className="text-sm font-bold text-green-600">Valor Total: R$ {data.valor.toFixed(2)}</p>
+                    </div>
+                  );
+                }
+                return null;
+              }}
             />
             <Legend />
           </PieChart>
