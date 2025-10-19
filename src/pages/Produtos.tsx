@@ -332,9 +332,9 @@ const Produtos = () => {
           }
         }}>
           <DialogTrigger asChild>
-            <Button className="w-full sm:w-auto h-9 text-sm">
-              <Plus className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
-              <span className="text-xs sm:text-sm">Novo Produto</span>
+            <Button className="w-full sm:w-auto bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-xl sm:rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-200 transform hover:scale-105">
+              <Plus className="w-5 h-5 sm:w-6 sm:h-6 mr-2 sm:mr-3" />
+              Novo Produto
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-[70vw] sm:max-w-2xl max-h-[70vh] overflow-y-auto mx-auto">
