@@ -253,10 +253,10 @@ Obrigado pela preferência!
           <div className="flex gap-2">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button className="bg-green-600 hover:bg-green-700" size={isMobile ? "sm" : "default"}>
-                  <Download className="mr-2 h-4 w-4" />
-                  {!isMobile && "Exportar"}
-                  <ChevronDown className="ml-2 h-4 w-4" />
+                <Button className="w-full sm:w-auto bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-xl sm:rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-200 transform hover:scale-105">
+                  <Download className="w-5 h-5 sm:w-6 sm:h-6 mr-2 sm:mr-3" />
+                  Exportar
+                  <ChevronDown className="w-4 h-4 ml-2" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
