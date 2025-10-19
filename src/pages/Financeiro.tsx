@@ -2,6 +2,7 @@
 // Gerenciamento de receitas, despesas, fluxo de caixa e movimentações de estoque
 
 import { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,12 +40,26 @@ import { useResponsive } from "@/hooks/use-responsive";
 const Financeiro = () => {
   const { isMobile } = useResponsive();
   const { movements, products } = useData();
+  const location = useLocation();
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState<string>("todos");
   const [filterProduct, setFilterProduct] = useState<string>("todos");
   const [isLoading, setIsLoading] = useState(true);
   const [showReceipt, setShowReceipt] = useState(false);
+  const [showPurchase, setShowPurchase] = useState(false);
   const [selectedMovement, setSelectedMovement] = useState<any>(null);
+
+  // Função para abrir a receita de uma movimentação (saída)
+  const openReceipt = (movement: any) => {
+    setSelectedMovement(movement);
+    setShowReceipt(true);
+  };
+
+  // Função para abrir o comprovante de compra (entrada)
+  const openPurchase = (movement: any) => {
+    setSelectedMovement(movement);
+    setShowPurchase(true);
+  };
 
   // Controlar estado de carregamento
   useEffect(() => {
@@ -54,6 +69,22 @@ const Financeiro = () => {
     
     return () => clearTimeout(timer);
   }, []);
+
+  // Abrir modal automaticamente se houver um ID na navegação
+  useEffect(() => {
+    if (location.state?.openMovementId && movements.length > 0) {
+      const movement = movements.find(m => m.id === location.state.openMovementId);
+      if (movement) {
+        if (movement.type === 'saida') {
+          openReceipt(movement);
+        } else if (movement.type === 'entrada') {
+          openPurchase(movement);
+        }
+      }
+      // Limpar o state após abrir
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state, movements]);
 
   // Calcular valores financeiros baseados nas movimentações
   const entradas = movements.filter(m => m.type === 'entrada');
@@ -87,12 +118,6 @@ const Financeiro = () => {
   // Estatísticas
   const totalMovements = movements.length;
   const productosMovimentados = new Set(movements.map(m => m.productId)).size;
-
-  // Função para abrir a receita de uma movimentação
-  const openReceipt = (movement: any) => {
-    setSelectedMovement(movement);
-    setShowReceipt(true);
-  };
 
   // Função para exportar relatório em CSV (Excel)
   const exportToCSV = () => {
@@ -212,6 +237,53 @@ Obrigado pela preferência!
       const a = document.createElement('a');
       a.href = url;
       a.download = `receita-${new Date(movement.date).toISOString().split('T')[0]}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    }
+  };
+
+  const downloadPurchase = (movement: any) => {
+    const purchaseText = `
+━━━━━━━━━━━━━━━━━━━━━━━━━
+🛒 NOTA DE COMPRA
+Flexi Gestor - Sistema de Gestão
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Data/Hora: ${new Date(movement.date).toLocaleString('pt-BR')}
+Tipo: Compra de Estoque
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+PRODUTO ADQUIRIDO:
+${movement.productName}
+${movement.quantity} unidades x R$ ${movement.unitPrice.toFixed(2)}
+
+TOTAL PAGO: R$ ${movement.total.toFixed(2)}
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Observações:
+${movement.description}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+Compra registrada com sucesso!
+📦 Flexi Gestor - Controle de Estoque
+━━━━━━━━━━━━━━━━━━━━━━━━━
+    `.trim();
+
+    // Tentar compartilhar no mobile (se suportado)
+    if (navigator.share) {
+      navigator.share({
+        title: 'Nota de Compra - Flexi Gestor',
+        text: purchaseText,
+      }).catch((error) => console.log('Erro ao compartilhar:', error));
+    } else {
+      // Fallback: baixar como arquivo de texto
+      const blob = new Blob([purchaseText], { type: 'text/plain' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `compra-${new Date(movement.date).toISOString().split('T')[0]}.txt`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -584,6 +656,15 @@ Obrigado pela preferência!
                                 <span className="hidden sm:inline">Receita</span>
                                 <span className="sm:hidden">📄</span>
                               </Badge>
+                            ) : movement.type === 'entrada' ? (
+                              <Badge 
+                                className="bg-green-100 text-green-800 hover:bg-green-200 border-green-300 cursor-pointer transition-all hover:scale-105 text-xs"
+                                onClick={() => openPurchase(movement)}
+                              >
+                                <Receipt className="w-3 h-3 mr-1" />
+                                <span className="hidden sm:inline">Compra</span>
+                                <span className="sm:hidden">🛒</span>
+                              </Badge>
                             ) : (
                               <span className="text-slate-400 text-sm">—</span>
                             )}
@@ -599,7 +680,7 @@ Obrigado pela preferência!
         </TabsContent>
       </Tabs>
 
-      {/* Modal de Receita */}
+      {/* Modal de Receita (Saída) */}
       <Dialog open={showReceipt} onOpenChange={setShowReceipt}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -703,6 +784,116 @@ Obrigado pela preferência!
               <div className="text-center text-xs text-gray-500 pt-2 border-t">
                 <p>Obrigado pela preferência!</p>
                 <p className="mt-1">💚 Flexi Gestor - Gestão Inteligente</p>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Compra (Entrada) */}
+      <Dialog open={showPurchase} onOpenChange={setShowPurchase}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-blue-600">
+              <CheckCircle className="h-6 w-6" />
+              Comprovante de Compra
+            </DialogTitle>
+          </DialogHeader>
+          
+          {selectedMovement && (
+            <div className="space-y-4">
+              {/* Cabeçalho do Comprovante */}
+              <div className="border-b pb-4">
+                <div className="text-center mb-3">
+                  <h2 className="text-2xl font-bold text-gray-900">🛒 NOTA DE COMPRA</h2>
+                  <p className="text-sm text-gray-600">Flexi Gestor - Sistema de Gestão</p>
+                </div>
+                
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Data/Hora:</span>
+                    <span className="font-semibold">
+                      {new Date(selectedMovement.date).toLocaleString('pt-BR')}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Tipo:</span>
+                    <span className="font-semibold">Compra de Estoque</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Produto */}
+              <div className="space-y-2">
+                <h3 className="font-semibold text-gray-900">Produto Adquirido:</h3>
+                <div className="border rounded-lg p-3 bg-blue-50">
+                  <div className="flex justify-between items-start pb-2">
+                    <div className="flex-1">
+                      <p className="font-medium text-sm">{selectedMovement.productName}</p>
+                      <p className="text-xs text-gray-500">
+                        {selectedMovement.quantity} unidades x R$ {selectedMovement.unitPrice.toFixed(2)}
+                      </p>
+                    </div>
+                    <p className="font-semibold text-sm">
+                      R$ {selectedMovement.total.toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Descrição */}
+              {selectedMovement.description && (
+                <div className="space-y-2">
+                  <h3 className="font-semibold text-gray-900">Observações:</h3>
+                  <div className="border rounded-lg p-3 bg-gray-50">
+                    <p className="text-sm text-gray-700">{selectedMovement.description}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Total Pago */}
+              <div className="border-t pt-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-lg font-bold text-gray-900">TOTAL PAGO:</span>
+                  <span className="text-2xl font-bold text-blue-600">
+                    R$ {selectedMovement.total.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Botões de Ação */}
+              <div className="space-y-2 pt-2">
+                <Button 
+                  className="w-full bg-blue-600 hover:bg-blue-700"
+                  onClick={() => downloadPurchase(selectedMovement)}
+                >
+                  <Share2 className="mr-2 h-4 w-4" />
+                  Compartilhar Comprovante
+                </Button>
+
+                {!isMobile && (
+                  <Button 
+                    className="w-full bg-green-600 hover:bg-green-700 text-white"
+                    onClick={() => window.print()}
+                  >
+                    <Printer className="mr-2 h-4 w-4" />
+                    Imprimir Comprovante
+                  </Button>
+                )}
+                
+                <Button 
+                  variant="outline" 
+                  className="w-full"
+                  onClick={() => setShowPurchase(false)}
+                >
+                  Fechar
+                </Button>
+              </div>
+
+              {/* Rodapé */}
+              <div className="text-center text-xs text-gray-500 pt-2 border-t">
+                <p>Compra registrada com sucesso!</p>
+                <p className="mt-1">📦 Flexi Gestor - Controle de Estoque</p>
               </div>
             </div>
           )}

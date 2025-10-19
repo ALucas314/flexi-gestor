@@ -82,6 +82,7 @@ const Entradas = () => {
     setSelectedBatches(prev => [...prev, { 
       batchNumber: '', 
       quantity: 0,
+      unitCost: 0,
       manufactureDate: undefined,
       expiryDate: undefined
     }]);
@@ -145,12 +146,20 @@ const Entradas = () => {
     // Se houver lotes selecionados, criar cada lote no backend
     if (selectedBatches.length > 0) {
       try {
-        // Validar se todos os lotes têm número e quantidade
+        // Validar se todos os lotes têm número, quantidade e custo unitário
         for (const batch of selectedBatches) {
           if (!batch.batchNumber || batch.quantity <= 0) {
             toast({
               title: "⚠️ Dados Incompletos!",
               description: "Todos os lotes devem ter número e quantidade válidos.",
+              variant: "destructive",
+            });
+            return;
+          }
+          if (!batch.unitCost || batch.unitCost <= 0) {
+            toast({
+              title: "⚠️ Custo Obrigatório!",
+              description: "Todos os lotes devem ter um custo unitário válido maior que zero.",
               variant: "destructive",
             });
             return;
@@ -198,13 +207,14 @@ const Entradas = () => {
         setEntries(updatedEntries);
         localStorage.setItem('flexi-gestor-entries', JSON.stringify(updatedEntries));
 
-        // Adicionar movimentação no contexto global
+        // Adicionar movimentação no contexto global (usar custo médio quando há lotes)
+        const averageCost = totalCost / totalQuantity;
         addMovement({
           type: 'entrada',
           productId: data.productId,
           productName: product.name,
           quantity: totalQuantity,
-          unitPrice: data.unitCost,
+          unitPrice: averageCost,
           description: `Entrada de ${totalQuantity} unidades em ${selectedBatches.length} lote(s) - ${data.supplier}`,
           date: data.entryDate,
         });
@@ -1222,6 +1232,17 @@ const Entradas = () => {
                     </FormItem>
                   )}
                 />
+              </div>
+              
+              {/* Display do Total Calculado Automaticamente */}
+              <div className="bg-gradient-to-r from-blue-50 to-emerald-50 border-2 border-blue-200 rounded-xl p-4 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <DollarSign className="w-5 h-5 text-blue-600" />
+                  <span className="text-sm font-semibold text-neutral-700">Total Calculado:</span>
+                </div>
+                <span className="text-2xl font-bold text-emerald-600">
+                  R$ {((form.watch('quantity') || 0) * (form.watch('unitCost') || 0)).toFixed(2)}
+                </span>
               </div>
               
               {/* Terceira linha - Data e Status */}

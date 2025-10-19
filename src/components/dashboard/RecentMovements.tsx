@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { TrendingUp, TrendingDown, RotateCcw, Clock, ArrowRight, Package } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 interface Movement {
   id: string;
@@ -55,8 +56,18 @@ const getMovementStyles = (type: string) => {
 };
 
 export const RecentMovements = ({ movements }: RecentMovementsProps) => {
+  const navigate = useNavigate();
+  
   // Pegar apenas as últimas 4 movimentações
   const recentMovements = movements.slice(0, 4);
+
+  const handleMovementClick = (movementId: string) => {
+    navigate('/financeiro', { state: { openMovementId: movementId } });
+  };
+
+  const handleViewAll = () => {
+    navigate('/financeiro');
+  };
 
   return (
     <Card className="bg-white border-0 shadow-lg rounded-2xl overflow-hidden">
@@ -82,7 +93,8 @@ export const RecentMovements = ({ movements }: RecentMovementsProps) => {
             {recentMovements.map((movement) => (
               <div
                 key={movement.id}
-                className={`flex items-center justify-between p-4 rounded-xl border-l-4 transition-all duration-200 cursor-pointer ${getMovementStyles(movement.type)}`}
+                onClick={() => handleMovementClick(movement.id)}
+                className={`flex items-center justify-between p-4 rounded-xl border-l-4 transition-all duration-200 cursor-pointer hover:shadow-md ${getMovementStyles(movement.type)}`}
               >
                 <div className="flex items-start space-x-4 flex-1">
                   {/* Ícone */}
@@ -135,7 +147,10 @@ export const RecentMovements = ({ movements }: RecentMovementsProps) => {
               <div className="text-sm text-neutral-500">
                 <span>Mostrando as últimas {recentMovements.length} movimentações</span>
               </div>
-              <button className="text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors duration-200">
+              <button 
+                onClick={handleViewAll}
+                className="text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors duration-200"
+              >
                 Ver todas →
               </button>
             </div>

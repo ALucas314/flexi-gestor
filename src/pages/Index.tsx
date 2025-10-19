@@ -4,7 +4,6 @@ import { RecentMovements } from "@/components/dashboard/RecentMovements";
 import { QuickActions } from "@/components/dashboard/QuickActions";
 import { SalesChart } from "@/components/dashboard/SalesChart";
 import { ProductsChart } from "@/components/dashboard/ProductsChart";
-import { StockChart } from "@/components/dashboard/StockChart";
 import { useData } from "@/contexts/DataContext";
 import { useResponsive } from "@/hooks/use-responsive";
 import React from "react";
@@ -141,8 +140,8 @@ const Index = () => {
       </div>
 
       {/* Seção de Ações Rápidas - Responsiva */}
-      <div className={`grid ${isMobile ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-3'} ${isMobile ? 'gap-4' : 'gap-6 sm:gap-8'}`}>
-        <div className={`${isMobile ? '' : 'lg:col-span-2'}`}>
+      <div className={`grid ${isMobile ? 'grid-cols-1' : 'grid-cols-1 2xl:grid-cols-3'} ${isMobile ? 'gap-4' : 'gap-6 sm:gap-8'}`}>
+        <div className={`${isMobile ? '' : '2xl:col-span-2'}`}>
           <QuickActions />
         </div>
         
@@ -157,34 +156,80 @@ const Index = () => {
             </h3>
           </div>
           <div className={`${isMobile ? 'p-3' : 'p-4 sm:p-6'} ${isMobile ? 'space-y-2' : 'space-y-3 sm:space-y-4'}`}>
-            <div className={`group flex items-center justify-between ${isMobile ? 'p-2' : 'p-3 sm:p-4'} bg-gradient-to-r from-blue-50 to-blue-100 ${isMobile ? 'rounded-lg' : 'rounded-xl sm:rounded-2xl'} hover:from-blue-100 hover:to-blue-200 transition-all duration-300 hover:scale-105 border border-blue-200/30`}>
-              <div className={`flex items-center ${isMobile ? 'space-x-2' : 'space-x-2 sm:space-x-3'}`}>
-                <div className={`${isMobile ? 'w-6 h-6' : 'w-8 h-8 sm:w-10 sm:h-10'} bg-gradient-to-br from-blue-300 to-blue-400 ${isMobile ? 'rounded-lg' : 'rounded-lg sm:rounded-xl'} flex items-center justify-center`}>
+            <div className={`group flex items-center justify-between gap-2 ${isMobile ? 'p-2' : 'p-3 sm:p-4'} bg-gradient-to-r from-blue-50 to-blue-100 ${isMobile ? 'rounded-lg' : 'rounded-xl sm:rounded-2xl'} hover:from-blue-100 hover:to-blue-200 transition-all duration-300 hover:scale-105 border border-blue-200/30`}>
+              <div className={`flex items-center ${isMobile ? 'space-x-2' : 'space-x-2 sm:space-x-3'} flex-1 min-w-0`}>
+                <div className={`${isMobile ? 'w-6 h-6' : 'w-8 h-8 sm:w-10 sm:h-10'} bg-gradient-to-br from-blue-300 to-blue-400 ${isMobile ? 'rounded-lg' : 'rounded-lg sm:rounded-xl'} flex items-center justify-center flex-shrink-0`}>
                   <Package className={`${isMobile ? 'w-3 h-3' : 'w-4 h-4 sm:w-5 sm:h-5'} text-blue-700`} />
                 </div>
-                <span className={`${isMobile ? 'text-xs' : 'text-xs sm:text-sm'} font-semibold text-slate-700`}>Produtos Ativos</span>
+                <span className={`${isMobile ? 'text-xs' : 'text-xs sm:text-sm'} font-semibold text-slate-700 truncate`}>Produtos Ativos</span>
               </div>
-              <span className={`${isMobile ? 'text-base' : 'text-lg sm:text-xl'} font-black text-blue-700`}>{stats.totalProducts}</span>
+              <span className={`${isMobile ? 'text-base' : 'text-lg sm:text-xl'} font-black text-blue-700 flex-shrink-0 whitespace-nowrap`}>{stats.totalProducts}</span>
             </div>
             
-            <div className={`group flex items-center justify-between ${isMobile ? 'p-2' : 'p-3 sm:p-4'} bg-gradient-to-r from-blue-50 to-blue-100 ${isMobile ? 'rounded-lg' : 'rounded-xl sm:rounded-2xl'} hover:from-blue-100 hover:to-blue-200 transition-all duration-300 hover:scale-105 border border-blue-200/30`}>
-              <div className={`flex items-center ${isMobile ? 'space-x-2' : 'space-x-2 sm:space-x-3'}`}>
-                <div className={`${isMobile ? 'w-6 h-6' : 'w-8 h-8 sm:w-10 sm:h-10'} bg-gradient-to-br from-blue-300 to-blue-400 ${isMobile ? 'rounded-lg' : 'rounded-lg sm:rounded-xl'} flex items-center justify-center`}>
+            <div className={`group flex items-center justify-between gap-2 ${isMobile ? 'p-2' : 'p-3 sm:p-4'} bg-gradient-to-r from-blue-50 to-blue-100 ${isMobile ? 'rounded-lg' : 'rounded-xl sm:rounded-2xl'} hover:from-blue-100 hover:to-blue-200 transition-all duration-300 hover:scale-105 border border-blue-200/30`}>
+              <div className={`flex items-center ${isMobile ? 'space-x-2' : 'space-x-2 sm:space-x-3'} flex-1 min-w-0`}>
+                <div className={`${isMobile ? 'w-6 h-6' : 'w-8 h-8 sm:w-10 sm:h-10'} bg-gradient-to-br from-blue-300 to-blue-400 ${isMobile ? 'rounded-lg' : 'rounded-lg sm:rounded-xl'} flex items-center justify-center flex-shrink-0`}>
                   <ShoppingCart className={`${isMobile ? 'w-3 h-3' : 'w-4 h-4 sm:w-5 sm:h-5'} text-blue-700`} />
                 </div>
-                <span className={`${isMobile ? 'text-xs' : 'text-xs sm:text-sm'} font-semibold text-slate-700`}>Movimentações</span>
+                <span className={`${isMobile ? 'text-xs' : 'text-xs sm:text-sm'} font-semibold text-slate-700 truncate`}>Movimentações</span>
               </div>
-              <span className={`${isMobile ? 'text-base' : 'text-lg sm:text-xl'} font-black text-blue-700`}>{movements.length}</span>
+              <span className={`${isMobile ? 'text-base' : 'text-lg sm:text-xl'} font-black text-blue-700 flex-shrink-0 whitespace-nowrap`}>{movements.length}</span>
             </div>
             
-            <div className={`group flex items-center justify-between ${isMobile ? 'p-2' : 'p-3 sm:p-4'} bg-gradient-to-r from-purple-50 to-purple-100 ${isMobile ? 'rounded-lg' : 'rounded-xl sm:rounded-2xl'} hover:from-purple-100 hover:to-purple-200 transition-all duration-300 hover:scale-105 border border-purple-200/30`}>
-              <div className={`flex items-center ${isMobile ? 'space-x-2' : 'space-x-2 sm:space-x-3'}`}>
-                <div className={`${isMobile ? 'w-6 h-6' : 'w-8 h-8 sm:w-10 sm:h-10'} bg-gradient-to-br from-purple-300 to-purple-400 ${isMobile ? 'rounded-lg' : 'rounded-lg sm:rounded-xl'} flex items-center justify-center`}>
+            <div className={`group flex items-center justify-between gap-2 ${isMobile ? 'p-2' : 'p-3 sm:p-4'} bg-gradient-to-r from-purple-50 to-purple-100 ${isMobile ? 'rounded-lg' : 'rounded-xl sm:rounded-2xl'} hover:from-purple-100 hover:to-purple-200 transition-all duration-300 hover:scale-105 border border-purple-200/30`}>
+              <div className={`flex items-center ${isMobile ? 'space-x-2' : 'space-x-2 sm:space-x-3'} flex-1 min-w-0`}>
+                <div className={`${isMobile ? 'w-6 h-6' : 'w-8 h-8 sm:w-10 sm:h-10'} bg-gradient-to-br from-purple-300 to-purple-400 ${isMobile ? 'rounded-lg' : 'rounded-lg sm:rounded-xl'} flex items-center justify-center flex-shrink-0`}>
                   <DollarSign className={`${isMobile ? 'w-3 h-3' : 'w-4 h-4 sm:w-5 sm:h-5'} text-purple-700`} />
                 </div>
-                <span className={`${isMobile ? 'text-xs' : 'text-xs sm:text-sm'} font-semibold text-slate-700`}>Valor Total</span>
+                <span className={`${isMobile ? 'text-xs' : 'text-xs sm:text-sm'} font-semibold text-slate-700 truncate`}>Valor Total</span>
               </div>
-              <span className={`${isMobile ? 'text-base' : 'text-lg sm:text-xl'} font-black text-purple-700`}>R$ {stats.stockValue.toFixed(0)}</span>
+              <span className={`${isMobile ? 'text-base' : 'text-lg sm:text-xl'} font-black text-purple-700 flex-shrink-0 whitespace-nowrap`}>R$ {stats.stockValue.toFixed(0)}</span>
+            </div>
+            
+            {/* Top 5 Produtos - Responsivo */}
+            <div className={`${isMobile ? 'mt-3 pt-3' : 'mt-4 pt-4'} border-t border-slate-200`}>
+              <h4 className={`${isMobile ? 'text-xs' : 'text-sm'} font-semibold text-slate-700 ${isMobile ? 'mb-2' : 'mb-3'} flex items-center ${isMobile ? 'gap-1.5' : 'gap-2'}`}>
+                <TrendingUp className={`${isMobile ? 'w-3.5 h-3.5' : 'w-4 h-4'} text-indigo-600`} />
+                🏆 Top 5 Produtos
+              </h4>
+              {products.length > 0 ? (
+                <div className={`${isMobile ? 'space-y-1.5' : 'space-y-2'}`}>
+                  {products
+                    .filter(p => p.stock > 0)
+                    .sort((a, b) => b.stock - a.stock)
+                    .slice(0, 5)
+                    .map((product, index) => {
+                      const totalValue = product.stock * product.price;
+                      return (
+                        <div 
+                          key={product.id} 
+                          className={`flex items-center justify-between ${isMobile ? 'p-1.5' : 'p-2'} bg-white rounded-lg border border-blue-100 hover:shadow-sm transition-all gap-2`}
+                        >
+                          <div className={`flex items-center ${isMobile ? 'gap-1.5' : 'gap-2'} flex-1 min-w-0`}>
+                            <div className={`flex items-center justify-center ${isMobile ? 'w-5 h-5 flex-shrink-0' : 'w-6 h-6 flex-shrink-0'} bg-gradient-to-br from-indigo-600 to-indigo-700 rounded text-white font-bold text-xs`}>
+                              {index + 1}º
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className={`font-semibold text-gray-900 ${isMobile ? 'text-xs' : 'text-xs'} truncate`}>{product.name}</p>
+                              <div className={`flex items-center ${isMobile ? 'gap-0.5' : 'gap-1'} mt-0.5 flex-wrap`}>
+                                <span className={`${isMobile ? 'text-xs' : 'text-xs'} text-blue-600 font-medium whitespace-nowrap`}>{product.stock} un</span>
+                                <span className={`${isMobile ? 'text-xs' : 'text-xs'} text-gray-400`}>×</span>
+                                <span className={`${isMobile ? 'text-xs' : 'text-xs'} text-gray-600 whitespace-nowrap`}>R$ {product.price.toFixed(2)}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <p className={`font-bold text-green-600 ${isMobile ? 'text-xs' : 'text-sm'} whitespace-nowrap`}>
+                              R$ {totalValue.toFixed(2)}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              ) : (
+                <p className={`${isMobile ? 'text-xs' : 'text-xs'} text-gray-500 text-center ${isMobile ? 'py-3' : 'py-4'}`}>Nenhum produto em estoque</p>
+              )}
             </div>
           </div>
         </div>
@@ -211,13 +256,6 @@ const Index = () => {
               price: p.price
             }))} />
           </div>
-
-          <StockChart products={products.map(p => ({
-            id: p.id,
-            name: p.name,
-            stock: p.stock,
-            price: p.price
-          }))} />
         </>
       ) : (
         /* Mensagem quando não há produtos com Design Melhorado - Responsivo */
