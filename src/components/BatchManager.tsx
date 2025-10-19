@@ -93,12 +93,23 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
         return;
       }
 
+      // Validar quantidade mínima
+      const quantity = parseInt(formData.quantity);
+      if (quantity <= 0) {
+        toast({
+          title: '❌ Quantidade Inválida',
+          description: 'A quantidade deve ser maior que zero',
+          variant: 'destructive'
+        });
+        return;
+      }
+
       setIsLoading(true);
 
       await batchesAPI.create({
         productId,
         batchNumber: formData.batchNumber,
-        quantity: parseInt(formData.quantity),
+        quantity: quantity,
         manufactureDate: formData.manufactureDate || null,
         expiryDate: formData.expiryDate || null
       });

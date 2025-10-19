@@ -97,6 +97,15 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       });
     }
 
+    // Validar quantidade mínima
+    const parsedQuantity = parseInt(quantity);
+    if (parsedQuantity <= 0) {
+      return res.status(400).json({ 
+        error: 'Quantidade inválida',
+        message: 'A quantidade deve ser maior que zero'
+      });
+    }
+
     // Verificar se o produto existe e pertence ao usuário
     const product = await prisma.product.findFirst({
       where: { id: productId, userId }
@@ -129,7 +138,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       data: {
         productId,
         batchNumber,
-        quantity: parseInt(quantity),
+        quantity: parsedQuantity,
         manufactureDate: manufactureDate ? new Date(manufactureDate) : null,
         expiryDate: expiryDate ? new Date(expiryDate) : null,
         userId
@@ -180,12 +189,23 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
       });
     }
 
+    // Validar quantidade se fornecida
+    if (quantity !== undefined) {
+      const parsedQuantity = parseInt(quantity);
+      if (parsedQuantity < 0) {
+        return res.status(400).json({ 
+          error: 'Quantidade inválida',
+          message: 'A quantidade não pode ser negativa'
+        });
+      }
+    }
+
     // Atualizar lote
     const batch = await prisma.batch.update({
       where: { id },
       data: {
         ...(batchNumber && { batchNumber }),
-        ...(quantity && { quantity: parseInt(quantity) }),
+        ...(quantity !== undefined && { quantity: Math.max(0, parseInt(quantity)) }),
         ...(manufactureDate && { manufactureDate: new Date(manufactureDate) }),
         ...(expiryDate && { expiryDate: new Date(expiryDate) })
       },

@@ -114,6 +114,37 @@ const PDV = () => {
     if (cart.length === 0) return;
     if (isProcessingSale) return;
     
+    // Validar estoque antes de processar
+    for (const item of cart) {
+      const product = products.find(p => p.id === item.id);
+      if (!product) {
+        toast({
+          title: "❌ Produto não encontrado",
+          description: `O produto ${item.name} não está mais disponível`,
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      if (product.stock <= 0) {
+        toast({
+          title: "❌ Estoque Zerado!",
+          description: `O produto ${item.name} não tem estoque disponível`,
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      if (product.stock < item.quantity) {
+        toast({
+          title: "❌ Estoque Insuficiente!",
+          description: `${item.name}: apenas ${product.stock} unidades disponíveis`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+    
     setIsProcessingSale(true);
     
     try {
