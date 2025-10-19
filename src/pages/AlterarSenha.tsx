@@ -338,10 +338,10 @@ const AlterarSenha = () => {
 
           {/* 💡 Sidebar com Dicas de Segurança */}
           <div className="lg:col-span-1 space-y-6">
-            <Card className="shadow-xl border-0 bg-gradient-to-br from-yellow-50 to-orange-50">
+            <Card className="shadow-xl border-0 bg-gradient-to-r from-indigo-50 via-indigo-100/60 to-indigo-100">
               <CardHeader className="pb-4">
                 <CardTitle className="flex items-center space-x-2 text-lg">
-                  <div className="w-10 h-10 bg-gradient-to-br from-yellow-500 to-orange-500 rounded-xl flex items-center justify-center">
+                  <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl flex items-center justify-center">
                     <AlertCircle className="h-5 w-5 text-white" />
                   </div>
                   <span className="text-gray-900">Dicas de Segurança</span>
@@ -376,7 +376,7 @@ const AlterarSenha = () => {
                 </div>
                 
                 <div className="flex items-start space-x-3 p-3 bg-white/60 rounded-xl">
-                  <div className="w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 mt-0.5">
+                  <div className="w-6 h-6 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 mt-0.5">
                     4
                   </div>
                   <p className="text-sm text-gray-700">

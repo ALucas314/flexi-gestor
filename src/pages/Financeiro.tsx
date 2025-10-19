@@ -11,7 +11,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { 
   DollarSign, 
   TrendingUp, 
@@ -30,9 +29,7 @@ import {
   CheckCircle,
   Printer,
   Share2,
-  FileSpreadsheet,
-  FileCode,
-  ChevronDown
+  FileSpreadsheet
 } from "lucide-react";
 import { useData } from "@/contexts/DataContext";
 import { useResponsive } from "@/hooks/use-responsive";
@@ -91,9 +88,9 @@ const Financeiro = () => {
   const entradas = movements.filter(m => m.type === 'entrada');
   const saidas = movements.filter(m => m.type === 'saida');
   
-  const totalEntradas = entradas.reduce((sum, m) => sum + m.total, 0);
-  const totalSaidas = saidas.reduce((sum, m) => sum + m.total, 0);
-  const saldo = totalEntradas - totalSaidas;
+  const totalEntradas = entradas.reduce((sum, m) => sum + m.total, 0); // Custos de compra
+  const totalSaidas = saidas.reduce((sum, m) => sum + m.total, 0); // Receitas de venda
+  const saldo = totalSaidas - totalEntradas; // Lucro = Receitas - Custos
 
   // Movimentações do mês atual
   const now = new Date();
@@ -104,7 +101,7 @@ const Financeiro = () => {
 
   const thisMonthEntradas = thisMonthMovements.filter(m => m.type === 'entrada').reduce((sum, m) => sum + m.total, 0);
   const thisMonthSaidas = thisMonthMovements.filter(m => m.type === 'saida').reduce((sum, m) => sum + m.total, 0);
-  const thisMonthSaldo = thisMonthEntradas - thisMonthSaidas;
+  const thisMonthSaldo = thisMonthSaidas - thisMonthEntradas; // Lucro do mês = Receitas - Custos
 
   // Filtros para movimentações
   const filteredMovements = movements.filter(movement => {
@@ -136,12 +133,19 @@ const Financeiro = () => {
       `R$ ${m.total.toFixed(2)}`
     ]);
     
-    // Adicionar totais
+    // Adicionar totais e resumo financeiro
     data.push([]);
-    data.push(['RESUMO']);
-    data.push(['Total de Entradas', '', '', '', '', '', `R$ ${totalEntradas.toFixed(2)}`]);
-    data.push(['Total de Saídas', '', '', '', '', '', `R$ ${totalSaidas.toFixed(2)}`]);
-    data.push(['Saldo', '', '', '', '', '', `R$ ${saldo.toFixed(2)}`]);
+    data.push(['═══════════════ RESUMO FINANCEIRO ═══════════════']);
+    data.push([]);
+    data.push(['📥 Total de Entradas (Custos de Compra)', '', '', '', '', '', `R$ ${totalEntradas.toFixed(2)}`]);
+    data.push(['📤 Total de Saídas (Receitas de Venda)', '', '', '', '', '', `R$ ${totalSaidas.toFixed(2)}`]);
+    data.push([]);
+    data.push(['💰 SALDO (Lucro/Prejuízo)', '', '', '', '', '', `R$ ${saldo.toFixed(2)}`]);
+    data.push(['', '', '', '', '', '', saldo >= 0 ? '✅ LUCRO' : '⚠️ PREJUÍZO']);
+    data.push([]);
+    data.push(['📊 Total de Movimentações', '', '', '', '', '', filteredMovements.length.toString()]);
+    data.push(['📦 Produtos Movimentados', '', '', '', '', '', productosMovimentados.toString()]);
+    data.push(['📅 Período do Relatório', '', '', '', '', '', new Date().toLocaleDateString('pt-BR')]);
     
     // Criar CSV
     const csvContent = [
@@ -156,41 +160,6 @@ const Financeiro = () => {
     const link = document.createElement('a');
     link.href = url;
     link.download = `financeiro-${new Date().toISOString().split('T')[0]}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
-  };
-
-  // Função para exportar relatório em XML
-  const exportToXML = () => {
-    const xmlContent = `<?xml version="1.0" encoding="UTF-8"?>
-<RelatorioFinanceiro>
-  <DataGeracao>${new Date().toISOString()}</DataGeracao>
-  <Resumo>
-    <TotalEntradas>${totalEntradas.toFixed(2)}</TotalEntradas>
-    <TotalSaidas>${totalSaidas.toFixed(2)}</TotalSaidas>
-    <Saldo>${saldo.toFixed(2)}</Saldo>
-    <TotalMovimentacoes>${filteredMovements.length}</TotalMovimentacoes>
-  </Resumo>
-  <Movimentacoes>
-${filteredMovements.map(m => `    <Movimentacao>
-      <Data>${new Date(m.date).toISOString()}</Data>
-      <Tipo>${m.type}</Tipo>
-      <Produto>${m.productName}</Produto>
-      <Descricao>${m.description}</Descricao>
-      <Quantidade>${m.quantity}</Quantidade>
-      <ValorUnitario>${m.unitPrice.toFixed(2)}</ValorUnitario>
-      <Total>${m.total.toFixed(2)}</Total>
-    </Movimentacao>`).join('\n')}
-  </Movimentacoes>
-</RelatorioFinanceiro>`;
-    
-    const blob = new Blob([xmlContent], { type: 'application/xml' });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `financeiro-${new Date().toISOString().split('T')[0]}.xml`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -324,25 +293,13 @@ Compra registrada com sucesso!
           </div>
           
           <div className="flex gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button className="w-full sm:w-auto bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-xl sm:rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-200 transform hover:scale-105">
-                  <Download className="w-5 h-5 sm:w-6 sm:h-6 mr-2 sm:mr-3" />
-                  Exportar
-                  <ChevronDown className="w-4 h-4 ml-2" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem onClick={exportToCSV} className="cursor-pointer">
-                  <FileSpreadsheet className="mr-2 h-4 w-4 text-green-600" />
-                  Exportar Excel (CSV)
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={exportToXML} className="cursor-pointer">
-                  <FileCode className="mr-2 h-4 w-4 text-blue-600" />
-                  Exportar XML
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <Button 
+              onClick={exportToCSV}
+              className="w-full sm:w-auto bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-xl sm:rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-200 transform hover:scale-105"
+            >
+              <FileSpreadsheet className="w-5 h-5 sm:w-6 sm:h-6 mr-2 sm:mr-3" />
+              Exportar Excel
+            </Button>
           </div>
         </div>
       </div>
@@ -482,16 +439,16 @@ Compra registrada com sucesso!
               </CardContent>
             </Card>
 
-            <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200 hover:shadow-lg transition-all">
+            <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200 hover:shadow-lg transition-all">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-green-800">💰 Valor Total</CardTitle>
-                <Package className="h-5 w-5 text-green-600" />
+                <CardTitle className="text-sm font-medium text-purple-800">💵 Saldo</CardTitle>
+                <Wallet className="h-5 w-5 text-purple-600" />
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold text-green-700">
-                  R$ {(totalEntradas + totalSaidas).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                <div className={`text-3xl font-bold ${saldo >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                  R$ {Math.abs(saldo).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </div>
-                <p className="text-xs text-green-600">Movimentado</p>
+                <p className="text-xs text-purple-600">{saldo >= 0 ? 'Lucro' : 'Prejuízo'}</p>
               </CardContent>
             </Card>
 

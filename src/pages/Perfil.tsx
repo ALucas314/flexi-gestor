@@ -179,7 +179,7 @@ const Perfil = () => {
                 size="sm"
                 onClick={() => setIsEditing(!isEditing)}
                 disabled={isLoading}
-                className="text-xs sm:text-sm"
+                className={`text-xs sm:text-sm ${isEditing ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white shadow-xl hover:shadow-2xl transition-all duration-200' : ''}`}
               >
                 {isEditing ? <Save className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" /> : <Edit className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />}
                 {isEditing ? 'Salvar' : 'Editar'}
@@ -230,7 +230,11 @@ const Perfil = () => {
 
             {isEditing && (
               <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 pt-3 sm:pt-4">
-                <Button onClick={handleSaveProfile} disabled={isLoading} className="text-sm">
+                <Button 
+                  onClick={handleSaveProfile} 
+                  disabled={isLoading} 
+                  className="text-sm bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white shadow-xl hover:shadow-2xl transition-all duration-200"
+                >
                   {isLoading ? 'Salvando...' : 'Salvar Alterações'}
                 </Button>
                 <Button variant="outline" onClick={() => setIsEditing(false)} className="text-sm">
@@ -285,8 +289,7 @@ const Perfil = () => {
 
             <div className="space-y-2">
               <Button
-                variant="outline"
-                className="w-full text-sm"
+                className="w-full text-sm bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white shadow-xl hover:shadow-2xl transition-all duration-200"
                 onClick={() => setIsChangingPassword(true)}
               >
                 <Shield className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
