@@ -147,51 +147,53 @@ export const Sidebar = ({ className, variant = 'overlay', onNavigate }: SidebarP
           )}
         </div>
         
-        {navigationItems.map((item) => (
-          <NavLink
-            key={item.path}
-            to={item.path}
-            onClick={() => onNavigate?.()} // Fechar o menu ao clicar
-            className={({ isActive }) =>
-              cn(
+        {navigationItems.map((item) => {
+          const isActive = location.pathname === item.path;
+          
+          return (
+            <NavLink
+              key={item.path}
+              to={item.path}
+              onClick={() => onNavigate?.()} // Fechar o menu ao clicar
+              className={cn(
                 "group flex items-center rounded-xl font-medium transition-all duration-200 relative overflow-hidden",
                 isMobile ? "space-x-2 px-3 py-2.5 min-h-[40px]" : "space-x-3 px-4 py-3 min-h-[44px]",
                 isActive
                   ? "bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-lg shadow-indigo-500/25"
                   : "text-gray-800 font-semibold hover:text-indigo-700 hover:bg-indigo-50 hover:shadow-md"
-              )
-            }
-          >
-            {/* Indicador de item ativo */}
-            {({ isActive }) => isActive && (
-              <div className="absolute left-0 top-0 bottom-0 w-1 bg-white rounded-r-full" />
-            )}
-            
-            <div className={cn(
-              "flex items-center justify-center rounded-lg transition-all duration-200",
-              isMobile ? "w-7 h-7" : "w-8 h-8",
-              location.pathname === item.path
-                ? "bg-white/20 text-white"
-                : "bg-indigo-100 text-indigo-700 group-hover:bg-indigo-200 group-hover:text-indigo-800"
-            )}>
-              <item.icon className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'} stroke-[2.5]`} />
-            </div>
-            
-            <div className="flex-1 min-w-0">
-              <div className={`${isMobile ? 'text-sm' : 'font-medium'}`}>{item.label}</div>
-              {!isMobile && (
-                <div className={cn(
-                  "text-xs transition-colors duration-200 font-medium",
-                  location.pathname === item.path
-                    ? "text-white/80"
-                    : "text-gray-600 group-hover:text-indigo-600"
-                )}>
-                  {item.description}
-                </div>
               )}
-            </div>
-          </NavLink>
-        ))}
+            >
+              {/* Indicador de item ativo */}
+              {isActive && (
+                <div className="absolute left-0 top-0 bottom-0 w-1 bg-white rounded-r-full" />
+              )}
+              
+              <div className={cn(
+                "flex items-center justify-center rounded-lg transition-all duration-200",
+                isMobile ? "w-7 h-7" : "w-8 h-8",
+                isActive
+                  ? "bg-white/20 text-white"
+                  : "bg-indigo-100 text-indigo-700 group-hover:bg-indigo-200 group-hover:text-indigo-800"
+              )}>
+                <item.icon className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'} stroke-[2.5]`} />
+              </div>
+              
+              <div className="flex-1 min-w-0">
+                <div className={`${isMobile ? 'text-sm' : 'font-medium'}`}>{item.label}</div>
+                {!isMobile && (
+                  <div className={cn(
+                    "text-xs transition-colors duration-200 font-medium",
+                    isActive
+                      ? "text-white/80"
+                      : "text-gray-600 group-hover:text-indigo-600"
+                  )}>
+                    {item.description}
+                  </div>
+                )}
+              </div>
+            </NavLink>
+          );
+        })}
       </nav>
 
       {/* Footer do Sidebar - Responsivo */}

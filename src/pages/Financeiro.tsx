@@ -220,7 +220,7 @@ Obrigado pela preferência!
 🛒 NOTA DE COMPRA
 Flexi Gestor - Sistema de Gestão
 ━━━━━━━━━━━━━━━━━━━━━━━━━
-
+${movement.receiptNumber ? `\nNº NF Compra: ${movement.receiptNumber}\n` : ''}
 Data/Hora: ${new Date(movement.date).toLocaleString('pt-BR')}
 Tipo: Compra de Estoque
 
@@ -734,6 +734,12 @@ Compra registrada com sucesso!
                 </div>
                 
                 <div className="space-y-1 text-sm">
+                  {selectedMovement.receiptNumber && (
+                    <div className="flex justify-between bg-blue-50 p-2 rounded-lg border border-blue-200">
+                      <span className="text-blue-700 font-semibold">Nº NF Compra:</span>
+                      <span className="font-bold text-blue-900">{selectedMovement.receiptNumber}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <span className="text-gray-600">Data/Hora:</span>
                     <span className="font-semibold">
