@@ -9,7 +9,7 @@ interface ProductsChartProps {
     name: string;
     category: string;
     stock: number;
-    unitPrice: number;
+    price: number;
   }>;
 }
 
@@ -19,9 +19,9 @@ export function ProductsChart({ products }: ProductsChartProps) {
     const category = product.category || 'Sem Categoria';
     if (acc[category]) {
       acc[category].count += 1;
-      acc[category].totalValue += product.stock * product.unitPrice;
+      acc[category].totalValue += product.stock * product.price;
     } else {
-      acc[category] = { count: 1, totalValue: product.stock * product.unitPrice };
+      acc[category] = { count: 1, totalValue: product.stock * product.price };
     }
     return acc;
   }, {} as Record<string, { count: number; totalValue: number }>);
