@@ -108,7 +108,7 @@ export const Sidebar = ({ className, variant = 'overlay', onNavigate }: SidebarP
 
   return (
     <div className={cn(
-      "flex flex-col bg-white border-r border-neutral-200 shadow-xl h-full",
+      "flex flex-col bg-gradient-to-br from-indigo-50 via-indigo-100/60 to-indigo-100 border-r border-indigo-200 shadow-xl h-full",
       isMobile ? "w-full max-w-sm" : isTablet ? "w-72" : "w-80",
       className
     )}>
@@ -129,7 +129,7 @@ export const Sidebar = ({ className, variant = 'overlay', onNavigate }: SidebarP
       {/* Navegação Principal - Responsiva */}
       <nav className="flex-1 p-3 sm:p-4 md:p-6 space-y-2">
         <div className="mb-3 sm:mb-4 flex items-center justify-between">
-          <h2 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">
+          <h2 className="text-xs font-bold text-indigo-700 uppercase tracking-wider">
             Navegação Principal
           </h2>
           
@@ -158,7 +158,7 @@ export const Sidebar = ({ className, variant = 'overlay', onNavigate }: SidebarP
                 isMobile ? "space-x-2 px-3 py-2.5 min-h-[40px]" : "space-x-3 px-4 py-3 min-h-[44px]",
                 isActive
                   ? "bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-lg shadow-indigo-500/25"
-                  : "text-neutral-600 hover:text-neutral-900 hover:bg-indigo-50 hover:shadow-md"
+                  : "text-gray-800 font-semibold hover:text-indigo-700 hover:bg-indigo-50 hover:shadow-md"
               )
             }
           >
@@ -172,19 +172,19 @@ export const Sidebar = ({ className, variant = 'overlay', onNavigate }: SidebarP
               isMobile ? "w-7 h-7" : "w-8 h-8",
               location.pathname === item.path
                 ? "bg-white/20 text-white"
-                : "bg-neutral-100 text-neutral-600 group-hover:bg-indigo-100 group-hover:text-indigo-600"
+                : "bg-indigo-100 text-indigo-700 group-hover:bg-indigo-200 group-hover:text-indigo-800"
             )}>
-              <item.icon className={`${isMobile ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} />
+              <item.icon className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'} stroke-[2.5]`} />
             </div>
             
             <div className="flex-1 min-w-0">
               <div className={`${isMobile ? 'text-sm' : 'font-medium'}`}>{item.label}</div>
               {!isMobile && (
                 <div className={cn(
-                  "text-xs transition-colors duration-200",
+                  "text-xs transition-colors duration-200 font-medium",
                   location.pathname === item.path
                     ? "text-white/80"
-                    : "text-neutral-400 group-hover:text-neutral-600"
+                    : "text-gray-600 group-hover:text-indigo-600"
                 )}>
                   {item.description}
                 </div>
@@ -195,10 +195,10 @@ export const Sidebar = ({ className, variant = 'overlay', onNavigate }: SidebarP
       </nav>
 
       {/* Footer do Sidebar - Responsivo */}
-      <div className={`${isMobile ? 'p-3' : 'p-4'} border-t border-neutral-200 bg-gradient-to-br from-neutral-100 to-neutral-200`}>
+      <div className={`${isMobile ? 'p-3' : 'p-4'} border-t border-indigo-200 bg-gradient-to-br from-indigo-100 to-indigo-200`}>
         <div className="text-center">
-          <p className={`${isMobile ? 'text-xs' : 'text-xs'} text-neutral-500 ${isMobile ? 'mb-0.5' : 'mb-1'}`}>Versão 2.0.0</p>
-          <p className={`${isMobile ? 'text-xs' : 'text-xs'} text-neutral-400`}>© 2024 Flexi Gestor</p>
+          <p className={`${isMobile ? 'text-xs' : 'text-xs'} text-indigo-700 font-semibold ${isMobile ? 'mb-0.5' : 'mb-1'}`}>Versão 2.0.0</p>
+          <p className={`${isMobile ? 'text-xs' : 'text-xs'} text-indigo-600 font-medium`}>© 2024 Flexi Gestor</p>
         </div>
       </div>
     </div>
