@@ -115,14 +115,32 @@ export const Sidebar = ({ className, variant = 'overlay', onNavigate }: SidebarP
       
       {/* Header do Sidebar - Responsivo */}
       <div className="p-3 sm:p-4 md:p-6 border-b border-neutral-200 bg-gradient-to-br from-indigo-50 to-indigo-100">
-        <div className="flex items-center space-x-2 sm:space-x-3">
-          <div className="w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 bg-gradient-to-br from-indigo-600 to-indigo-700 rounded-lg sm:rounded-xl flex items-center justify-center shadow-lg">
-            <span className="text-sm sm:text-base md:text-lg text-white font-bold">FG</span>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2 sm:space-x-3">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 bg-gradient-to-br from-indigo-600 to-indigo-700 rounded-lg sm:rounded-xl flex items-center justify-center shadow-lg">
+              <span className="text-sm sm:text-base md:text-lg text-white font-bold">FG</span>
+            </div>
+            <div>
+              <h1 className="text-sm sm:text-base md:text-lg font-bold text-indigo-900">Flexi Gestor</h1>
+              <p className="text-xs text-indigo-700">Sistema de Gestão</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-sm sm:text-base md:text-lg font-bold text-indigo-900">Flexi Gestor</h1>
-            <p className="text-xs text-indigo-700">Sistema de Gestão</p>
-          </div>
+          
+          {/* Botão de Pin ao lado do X (só no overlay/sheet) */}
+          {variant === 'overlay' && !isMobile && !isTablet && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                togglePin();
+                if (onNavigate) onNavigate(); // Fechar o sheet ao fixar
+              }}
+              className="h-9 w-9 p-0 hover:bg-indigo-200/50 transition-colors"
+              title="Fixar menu (manter sempre visível)"
+            >
+              <Pin className="h-4 w-4 text-indigo-700" />
+            </Button>
+          )}
         </div>
       </div>
 
@@ -133,25 +151,16 @@ export const Sidebar = ({ className, variant = 'overlay', onNavigate }: SidebarP
             Navegação Principal
           </h2>
           
-          {/* Botão de Pin também na navegação - Desktop */}
-          {!isMobile && !isTablet && (
+          {/* Botão de Pin na navegação - Só quando fixado */}
+          {variant === 'fixed' && !isMobile && !isTablet && (
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => {
-                togglePin();
-                if (variant === 'overlay' && onNavigate) {
-                  onNavigate();
-                }
-              }}
+              onClick={togglePin}
               className="h-7 w-7 p-0 hover:bg-indigo-100 transition-colors rounded-lg"
-              title={isPinned ? "Desafixar menu" : "Fixar menu"}
+              title="Desafixar menu (voltar ao modo overlay)"
             >
-              {isPinned ? (
-                <PinOff className="h-3.5 w-3.5 text-indigo-600" />
-              ) : (
-                <Pin className="h-3.5 w-3.5 text-indigo-600" />
-              )}
+              <PinOff className="h-3.5 w-3.5 text-indigo-600" />
             </Button>
           )}
         </div>
