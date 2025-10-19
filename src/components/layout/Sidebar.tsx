@@ -194,15 +194,6 @@ export const Sidebar = ({ className, variant = 'overlay', onNavigate }: SidebarP
         ))}
       </nav>
 
-      {/* Seção de Ferramentas - Responsiva */}
-      <div className={`${isMobile ? 'p-4' : 'p-6'} border-t border-neutral-200 bg-gradient-to-br from-neutral-50 to-neutral-100`}>
-        <div className={`${isMobile ? 'mb-2' : 'mb-3'}`}>
-          <h3 className={`${isMobile ? 'text-xs' : 'text-xs'} font-semibold text-neutral-500 uppercase tracking-wider ${isMobile ? 'mb-2' : 'mb-3'}`}>
-            Ferramentas
-          </h3>
-        </div>
-      </div>
-
       {/* Footer do Sidebar - Responsivo */}
       <div className={`${isMobile ? 'p-3' : 'p-4'} border-t border-neutral-200 bg-gradient-to-br from-neutral-100 to-neutral-200`}>
         <div className="text-center">
