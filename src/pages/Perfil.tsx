@@ -99,41 +99,20 @@ const Perfil = () => {
     }
 
     try {
-      // Usar a função real do Firebase
-      const success = await changePassword(formData.currentPassword, formData.newPassword);
+      // Usar a função do Supabase (não precisa senha atual)
+      const success = await changePassword(formData.newPassword);
       
       if (success) {
-        toast({
-          title: "✅ Senha Alterada!",
-          description: "Sua senha foi alterada com sucesso. Você será redirecionado para fazer login novamente.",
-          variant: "default",
-        });
-        
         setIsChangingPassword(false);
         setFormData(prev => ({
           ...prev,
-          currentPassword: '',
           newPassword: '',
           confirmPassword: ''
         }));
-        
-        // Aguardar um pouco e redirecionar para login
-        setTimeout(() => {
-          window.location.href = '/login';
-        }, 2000);
-      } else {
-        toast({
-          title: "❌ Erro ao Alterar Senha",
-          description: "Não foi possível alterar a senha. Verifique se a senha atual está correta.",
-          variant: "destructive",
-        });
       }
     } catch (error) {
-      toast({
-        title: "❌ Erro ao Alterar Senha",
-        description: "Não foi possível alterar a senha.",
-        variant: "destructive",
-      });
+      // Os toasts já são exibidos no AuthContext
+      console.error('Erro ao alterar senha:', error);
     }
   };
 
@@ -281,16 +260,16 @@ const Perfil = () => {
               </div>
               
               <div className="flex items-center justify-between">
-                <span className="text-xs sm:text-sm text-muted-foreground">Membro desde</span>
+                <span className="text-xs sm:text-sm text-muted-foreground">Email</span>
                 <span className="text-xs sm:text-sm font-medium">
-                  {user.createdAt ? new Date(user.createdAt).toLocaleDateString('pt-BR') : 'N/A'}
+                  {user.email}
                 </span>
               </div>
               
               <div className="flex items-center justify-between">
-                <span className="text-xs sm:text-sm text-muted-foreground">Último login</span>
+                <span className="text-xs sm:text-sm text-muted-foreground">ID do Usuário</span>
                 <span className="text-xs sm:text-sm font-medium">
-                  {user.lastLogin ? new Date(user.lastLogin).toLocaleDateString('pt-BR') : 'N/A'}
+                  {user.id.slice(0, 8)}...
                 </span>
               </div>
             </div>

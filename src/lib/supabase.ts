@@ -16,8 +16,19 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Credenciais do Supabase não encontradas nas variáveis de ambiente')
 }
 
-// Criar e exportar o cliente Supabase
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Criar e exportar o cliente Supabase com configurações de persistência
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    // Persistir sessão no localStorage (não expira ao fechar aba)
+    persistSession: true,
+    // Auto-refresh do token antes de expirar
+    autoRefreshToken: true,
+    // Detectar mudanças de sessão em outras abas
+    detectSessionInUrl: true,
+    // Storage personalizado (usa localStorage por padrão)
+    storage: window.localStorage,
+  },
+})
 
 // Tipos do banco de dados
 export type Json =

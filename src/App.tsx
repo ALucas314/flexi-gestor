@@ -25,6 +25,9 @@ import { AuthProvider } from "./contexts/AuthContext";
 import { DataProvider } from "./contexts/DataContext";
 import { SidebarProvider } from "./contexts/SidebarContext";
 
+// 🔄 Auto-reload quando HMR falha
+import { HMRReloader } from "./components/HMRReloader";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -36,6 +39,8 @@ const App = () => (
         <DataProvider>
           {/* 📌 Sidebar Provider - Gerencia estado da sidebar (pinada/overlay) */}
           <SidebarProvider>
+            {/* 🔄 Auto-reload quando HMR desconecta */}
+            <HMRReloader />
             <Toaster />
             <Sonner />
             <BrowserRouter>
