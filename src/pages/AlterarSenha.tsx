@@ -90,15 +90,6 @@ const AlterarSenha = () => {
 
   const handleChangePassword = async () => {
     // Validações
-    if (!formData.currentPassword) {
-      toast({
-        title: "❌ Campo Obrigatório",
-        description: "Digite sua senha atual.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     if (!formData.newPassword) {
       toast({
         title: "❌ Campo Obrigatório",
@@ -127,50 +118,21 @@ const AlterarSenha = () => {
       return;
     }
 
-    if (formData.currentPassword === formData.newPassword) {
-      toast({
-        title: "❌ Senha Igual",
-        description: "A nova senha deve ser diferente da senha atual.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     try {
-      // Usar a função real do Firebase
-      const success = await changePassword(formData.currentPassword, formData.newPassword);
+      // Usar a função do Supabase (não precisa senha atual)
+      const success = await changePassword(formData.newPassword);
       
       if (success) {
-        toast({
-          title: "✅ Senha Alterada!",
-          description: "Sua senha foi alterada com sucesso. Você será redirecionado para fazer login novamente.",
-          variant: "default",
-        });
-        
         // Limpar formulário
         setFormData({
           currentPassword: '',
           newPassword: '',
           confirmPassword: ''
         });
-        
-        // Aguardar um pouco e redirecionar para login
-        setTimeout(() => {
-          navigate('/login');
-        }, 2000);
-      } else {
-        toast({
-          title: "❌ Erro ao Alterar Senha",
-          description: "Não foi possível alterar a senha. Verifique se a senha atual está correta.",
-          variant: "destructive",
-        });
       }
     } catch (error) {
-      toast({
-        title: "❌ Erro ao Alterar Senha",
-        description: "Não foi possível alterar a senha. Verifique sua senha atual.",
-        variant: "destructive",
-      });
+      // Os toasts já são exibidos no AuthContext
+      console.error('Erro ao alterar senha:', error);
     }
   };
 

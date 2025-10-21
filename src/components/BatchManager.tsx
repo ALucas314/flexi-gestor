@@ -17,7 +17,8 @@ import {
   Trash2,
   Edit
 } from 'lucide-react';
-import { batchesAPI } from '@/lib/api';
+import { getBatchesByProduct, createBatch, deleteBatch } from '@/lib/batches';
+import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 
 interface Batch {
@@ -47,6 +48,7 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
   onBatchesChange 
 }) => {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [batches, setBatches] = useState<Batch[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -59,18 +61,27 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
 
   // Carregar lotes do produto
   const loadBatches = async () => {
+    if (!user?.id) return;
+    
     try {
       setIsLoading(true);
-      const data = await batchesAPI.getByProduct(productId);
-      setBatches(data.batches || []);
+      const batchesData = await getBatchesByProduct(productId, user.id);
+      setBatches(batchesData.map(b => ({
+        id: b.id,
+        batchNumber: b.batchNumber,
+        quantity: b.quantity,
+        manufactureDate: b.manufactureDate?.toISOString() || null,
+        expiryDate: b.expiryDate?.toISOString() || null,
+        createdAt: b.createdAt.toISOString()
+      })));
       
       // Gerar próximo número de lote automaticamente
-      const nextBatchNumber = (data.batches?.length || 0) + 1;
+      const nextBatchNumber = batchesData.length + 1;
       setFormData(prev => ({
         ...prev,
         batchNumber: nextBatchNumber.toString()
       }));
-    } catch (error: any) {
+    } catch (error) {
       console.error('Erro ao carregar lotes:', error);
     } finally {
       setIsLoading(false);
@@ -78,11 +89,23 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
   };
 
   useEffect(() => {
-    loadBatches();
+    if (user?.id && productId) {
+      loadBatches();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productId]);
 
   // Adicionar novo lote
   const handleAddBatch = async () => {
+    if (!user?.id) {
+      toast({
+        title: '❌ Erro',
+        description: 'Usuário não autenticado',
+        variant: 'destructive'
+      });
+      return;
+    }
+
     try {
       if (!formData.batchNumber || !formData.quantity) {
         toast({
@@ -104,15 +127,27 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
         return;
       }
 
+      // Validar quantidade máxima (não pode exceder o estoque)
+      if (quantity > productStock) {
+        toast({
+          title: '⚠️ Estoque Insuficiente',
+          description: `A quantidade do lote (${quantity}) não pode ser maior que o estoque disponível (${productStock})`,
+          variant: 'destructive'
+        });
+        return;
+      }
+
       setIsLoading(true);
 
-      await batchesAPI.create({
+      await createBatch(
         productId,
-        batchNumber: formData.batchNumber,
-        quantity: quantity,
-        manufactureDate: formData.manufactureDate || null,
-        expiryDate: formData.expiryDate || null
-      });
+        formData.batchNumber,
+        quantity,
+        0, // unitCost - pode ser zero aqui
+        user.id,
+        formData.manufactureDate ? new Date(formData.manufactureDate) : undefined,
+        formData.expiryDate ? new Date(formData.expiryDate) : undefined
+      );
 
       toast({
         title: '✅ Lote Adicionado!',
@@ -126,10 +161,11 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
       
       // Notificar mudança
       onBatchesChange?.();
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Não foi possível criar o lote';
       toast({
         title: '❌ Erro ao Adicionar Lote',
-        description: error.message || 'Não foi possível criar o lote',
+        description: errorMessage,
         variant: 'destructive'
       });
     } finally {
@@ -139,13 +175,15 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
 
   // Deletar lote
   const handleDeleteBatch = async (batchId: string, batchNumber: string) => {
+    if (!user?.id) return;
+    
     if (!confirm(`Deseja realmente deletar o lote ${batchNumber}?`)) {
       return;
     }
 
     try {
       setIsLoading(true);
-      await batchesAPI.delete(batchId);
+      await deleteBatch(batchId, user.id);
 
       toast({
         title: '✅ Lote Deletado!',
@@ -155,10 +193,11 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
 
       await loadBatches();
       onBatchesChange?.();
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Não foi possível deletar o lote';
       toast({
         title: '❌ Erro ao Deletar Lote',
-        description: error.message,
+        description: errorMessage,
         variant: 'destructive'
       });
     } finally {
@@ -249,11 +288,27 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
                   id="quantity"
                   type="number"
                   min="1"
-                  placeholder="Ex: 100"
+                  max={productStock}
+                  placeholder={`Máximo: ${productStock} unidades em estoque`}
                   value={formData.quantity}
-                  onChange={(e) => setFormData(prev => ({ ...prev, quantity: e.target.value }))}
-                  className="text-lg font-semibold"
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value) || 0;
+                    if (value <= productStock || e.target.value === '') {
+                      setFormData(prev => ({ ...prev, quantity: e.target.value }));
+                    }
+                  }}
+                  className={`text-lg font-semibold ${
+                    parseInt(formData.quantity) > productStock ? 'border-red-500 focus:ring-red-500' : ''
+                  }`}
                 />
+                <p className="text-xs text-gray-600">
+                  📦 Estoque disponível: <span className="font-bold text-indigo-600">{productStock} unidades</span>
+                  {parseInt(formData.quantity) > productStock && (
+                    <span className="block text-red-600 font-semibold mt-1">
+                      ⚠️ Quantidade excede o estoque disponível!
+                    </span>
+                  )}
+                </p>
               </div>
 
               <div className="space-y-2">

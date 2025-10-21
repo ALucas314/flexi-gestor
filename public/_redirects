@@ -1,0 +1,4 @@
+# Redirects para SPA (React Router)
+# Todas as rotas vão para index.html
+/*    /index.html   200
+

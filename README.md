@@ -40,10 +40,13 @@ O **Flexi Gestor** é uma solução empresarial moderna e intuitiva desenvolvida
 
 ### 🔧 **Stack Técnica**
 - **Frontend**: React 18 + TypeScript
+- **Backend**: Supabase (PostgreSQL + Auth + API)
 - **Styling**: Tailwind CSS + CSS Modules
 - **Build Tool**: Vite (Ultra-rápido)
 - **UI Components**: Shadcn/ui (Design System)
 - **State Management**: React Context + Hooks
+- **Autenticação**: Supabase Auth com Row Level Security
+- **Banco de Dados**: PostgreSQL (Supabase)
 - **Responsividade**: Mobile-first approach
 
 ---
@@ -133,6 +136,7 @@ User Input → React Components → Context API → Local Storage → UI Update
 - Node.js 18+ 
 - npm ou yarn
 - Git
+- Conta Supabase (gratuita): [supabase.com](https://supabase.com)
 
 ### ⚡ **Instalação Rápida**
 
@@ -146,21 +150,36 @@ cd flexi-gestor
 # 3. Instale as dependências
 npm install
 
-# 4. Execute em desenvolvimento
+# 4. Configure o Supabase
+# Siga o guia: docs/INICIO-SUPABASE.md
+
+# 5. Execute em desenvolvimento
 npm run dev
 
-# 5. Build para produção
+# 6. Build para produção
 npm run build
 ```
+
+### 🔧 **Configuração do Supabase**
+
+1. **Crie um projeto no Supabase**: [supabase.com/dashboard](https://supabase.com/dashboard)
+2. **Execute o SQL**: Copie e execute `docs/supabase-schema.sql` no SQL Editor
+3. **Configure Auth**: Desabilite "Confirm email" em Authentication → Providers → Email
+4. **Crie arquivo .env**:
+```env
+VITE_SUPABASE_URL=sua_url_aqui
+VITE_SUPABASE_ANON_KEY=sua_chave_aqui
+```
+
+📚 **Guia completo**: Veja `docs/GUIA-FINAL-SUPABASE.md`
 
 ### 🔧 **Scripts Disponíveis**
 ```json
 {
-  "dev": "vite",           // Desenvolvimento
-  "build": "tsc && vite build",  // Build produção
+  "dev": "vite",                 // Desenvolvimento
+  "build": "vite build",         // Build produção
   "preview": "vite preview",     // Preview build
-  "lint": "eslint src",          // Análise de código
-  "type-check": "tsc --noEmit"   // Verificação TypeScript
+  "lint": "eslint ."             // Análise de código
 }
 ```
 

@@ -12,7 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useForm } from "react-hook-form";
 import { useToast } from "@/hooks/use-toast";
 import { useData } from "@/contexts/DataContext";
-import { batchesAPI } from "@/lib/api";
+import { getBatchesByProduct, createBatch, updateBatchQuantity } from "@/lib/batches";
+import { useAuth } from "@/contexts/AuthContext";
 import { Label } from "@/components/ui/label";
 
 // Interface da entrada de estoque
@@ -35,7 +36,6 @@ type StockEntryFormData = Omit<StockEntry, 'id' | 'productName' | 'productSku' |
 
 const Entradas = () => {
   // Estados
-  const [entries, setEntries] = useState<StockEntry[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -44,10 +44,32 @@ const Entradas = () => {
   const [availableBatches, setAvailableBatches] = useState<any[]>([]);
   const [selectedBatches, setSelectedBatches] = useState<Array<{batchNumber: string, quantity: number, manufactureDate?: Date, expiryDate?: Date}>>([]);
   const [selectedProductId, setSelectedProductId] = useState<string>("");
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [entryToDelete, setEntryToDelete] = useState<StockEntry | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Hooks
   const { toast } = useToast();
-  const { products, addMovement, addNotification } = useData();
+  const { products, movements, addMovement, deleteMovement, addNotification } = useData();
+  const { user } = useAuth();
+
+  // Filtrar apenas as entradas dos movements
+  const entries = movements
+    .filter(m => m.type === 'entrada')
+    .map(m => ({
+      id: m.id,
+      productId: m.productId,
+      productName: m.productName || m.product?.name || 'Desconhecido',
+      productSku: m.product?.sku || '',
+      quantity: m.quantity,
+      unitCost: m.unitPrice,
+      totalCost: m.total,
+      supplier: m.description.includes(' - ') ? m.description.split(' - ')[1] : 'Fornecedor',
+      entryDate: m.date,
+      notes: m.description,
+      status: 'aprovado' as const,
+      receiptNumber: m.receiptNumber
+    }));
 
   // Formulário
   const form = useForm<StockEntryFormData>({
@@ -64,16 +86,15 @@ const Entradas = () => {
 
   // Carregar lotes quando selecionar um produto
   const loadBatchesForProduct = async (productId: string) => {
+    if (!user?.id) return;
+    
     try {
       setSelectedProductId(productId);
       setSelectedBatches([]); // Resetar lotes selecionados
       
-      const data = await batchesAPI.getByProduct(productId);
-      setAvailableBatches(data.batches || []);
-      
-      console.log(`📦 ${data.batches?.length || 0} lotes existentes para o produto`);
+      const batches = await getBatchesByProduct(productId, user.id);
+      setAvailableBatches(batches || []);
     } catch (error) {
-      console.error('Erro ao carregar lotes:', error);
       setAvailableBatches([]);
     }
   };
@@ -108,18 +129,11 @@ const Entradas = () => {
     return selectedBatches.reduce((sum, batch) => sum + (batch.quantity || 0), 0);
   };
 
-  // Carregar dados do localStorage
+  // Controlar carregamento inicial
   useEffect(() => {
-    // Simular carregamento inicial
     const timer = setTimeout(() => {
       setIsLoading(false);
     }, 500);
-    
-    // Carregar entradas
-    const savedEntries = localStorage.getItem('flexi-gestor-entries');
-    if (savedEntries) {
-      setEntries(JSON.parse(savedEntries));
-    }
     
     return () => clearTimeout(timer);
   }, []);
@@ -187,18 +201,26 @@ const Entradas = () => {
           
           if (existingBatch) {
             // Atualizar lote existente - adicionar quantidade
-            await batchesAPI.update(existingBatch.id, {
-              quantity: existingBatch.quantity + batch.quantity
-            });
+            if (user?.id) {
+              await updateBatchQuantity(
+                existingBatch.id, 
+                existingBatch.quantity + batch.quantity,
+                user.id
+              );
+            }
           } else {
             // Criar novo lote
-            await batchesAPI.create({
-              productId: data.productId,
-              batchNumber: batch.batchNumber,
-              quantity: batch.quantity,
-              manufactureDate: batch.manufactureDate,
-              expiryDate: batch.expiryDate
-            });
+            if (user?.id) {
+              await createBatch(
+                data.productId,
+                batch.batchNumber,
+                batch.quantity,
+                0, // unitCost
+                user.id,
+                batch.manufactureDate,
+                batch.expiryDate
+              );
+            }
           }
         }
 
@@ -218,12 +240,7 @@ const Entradas = () => {
           receiptNumber: receiptNumber,
         };
 
-        // Adicionar entrada local
-        const updatedEntries = [newEntry, ...entries];
-        setEntries(updatedEntries);
-        localStorage.setItem('flexi-gestor-entries', JSON.stringify(updatedEntries));
-
-        // Adicionar movimentação no contexto global (usar custo médio quando há lotes)
+        // Adicionar movimentação no contexto global (usar custo médio quando há lotes) - salva no Supabase
         const averageCost = totalCost / totalQuantity;
         addMovement({
           type: 'entrada',
@@ -273,12 +290,7 @@ const Entradas = () => {
         receiptNumber: receiptNumber,
       };
 
-      // Adicionar entrada local
-      const updatedEntries = [newEntry, ...entries];
-      setEntries(updatedEntries);
-      localStorage.setItem('flexi-gestor-entries', JSON.stringify(updatedEntries));
-
-      // Adicionar movimentação no contexto global
+      // Adicionar movimentação no contexto global - salva no Supabase
       addMovement({
         type: 'entrada',
         productId: data.productId,
@@ -321,9 +333,13 @@ const Entradas = () => {
       totalCost: data.quantity * data.unitCost,
     };
 
-    const updatedEntries = entries.map(e => e.id === editingEntry.id ? updatedEntry : e);
-    setEntries(updatedEntries);
-    localStorage.setItem('flexi-gestor-entries', JSON.stringify(updatedEntries));
+    // Nota: Edição de movimentações em desenvolvimento
+    toast({
+      title: "ℹ️ Em Desenvolvimento",
+      description: "Edição de entradas será implementada em breve"
+    });
+    setIsEditDialogOpen(false);
+    return;
 
     // Atualizar movimentação no contexto global
     addMovement({
@@ -354,26 +370,37 @@ const Entradas = () => {
     });
   };
 
-  const deleteEntry = (entryId: string) => {
-    const entry = entries.find(e => e.id === entryId);
-    if (!entry) return;
+  const handleDeleteEntry = (entry: StockEntry) => {
+    setEntryToDelete(entry);
+    setIsDeleteDialogOpen(true);
+  };
 
-    const updatedEntries = entries.filter(e => e.id !== entryId);
-    setEntries(updatedEntries);
-    localStorage.setItem('flexi-gestor-entries', JSON.stringify(updatedEntries));
+  const confirmDeleteEntry = async () => {
+    if (!entryToDelete || isDeleting) return;
 
-    // Adicionar notificação
-    addNotification(
-        '🗑️ Entrada Removida',
-        `Produto: ${entry.productName}\nQuantidade: ${entry.quantity} unidades\nFornecedor: ${entry.supplier}\nCusto: R$ ${entry.unitCost.toFixed(2)}\nTotal: R$ ${entry.totalCost.toFixed(2)}`,
-        'warning'
-      );
+    try {
+      setIsDeleting(true);
+      
+      await deleteMovement(entryToDelete.id);
 
-    toast({
-      title: "🗑️ Entrada Removida!",
-      description: `Entrada de ${entry.productName} foi removida com sucesso.`,
-      variant: "default",
-    });
+      toast({
+        title: "✅ Entrada Removida!",
+        description: `Entrada de ${entryToDelete.quantity} unidades foi removida e o estoque foi ajustado.`,
+        variant: "default",
+      });
+
+      // Fechar dialog após sucesso
+      setIsDeleteDialogOpen(false);
+      setEntryToDelete(null);
+    } catch (error: any) {
+      toast({
+        title: "❌ Erro ao Remover",
+        description: error.message || "Não foi possível remover a entrada.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const openEditDialog = (entry: StockEntry) => {
@@ -390,6 +417,15 @@ const Entradas = () => {
     setIsEditDialogOpen(true);
   };
 
+  // Função helper para formatar data compatível com Excel
+  const formatDateForExcel = (date: Date) => {
+    const d = new Date(date);
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
+
   // Função para exportar dados em CSV com formatação profissional
   const exportToCSV = () => {
     if (filteredEntries.length === 0) {
@@ -397,106 +433,51 @@ const Entradas = () => {
       return;
     }
 
+    const now = new Date();
+    const dataGeracao = formatDateForExcel(now);
+    const horaGeracao = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
     // Cabeçalho do relatório com formatação profissional e emojis
     const reportData = [
-      ['🍇 FLEXI GESTOR - SISTEMA DE GESTÃO EMPRESARIAL'],
-      ['📥 RELATÓRIO DE ENTRADAS DE ESTOQUE'],
+      ['FLEXI GESTOR - SISTEMA DE GESTAO EMPRESARIAL'],
+      ['RELATORIO DE ENTRADAS DE ESTOQUE'],
       [''],
-      ['📋 INFORMAÇÕES DO RELATÓRIO'],
-      ['📅 Data de Geração:', new Date().toLocaleDateString('pt-BR', { 
-        day: '2-digit', 
-        month: '2-digit', 
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      })],
-      ['🕐 Hora de Geração:', new Date().toLocaleTimeString('pt-BR', { 
-        hour: '2-digit', 
-        minute: '2-digit' 
-      })],
-      ['📊 Total de Registros:', filteredEntries.length.toString()],
+      ['INFORMACOES DO RELATORIO'],
+      ['Data de Geracao:', dataGeracao],
+      ['Hora de Geracao:', horaGeracao],
+      ['Total de Registros:', filteredEntries.length.toString()],
       [''],
-      ['💰 RESUMO EXECUTIVO'],
-      ['📦 Quantidade Total de Produtos', `${filteredEntries.reduce((sum, entry) => sum + entry.quantity, 0)} unidades`],
-      ['💵 Custo Total das Entradas', `R$ ${filteredEntries.reduce((sum, entry) => sum + entry.totalCost, 0).toFixed(2).replace('.', ',')}`],
-      ['📈 Custo Médio por Produto', `R$ ${(filteredEntries.reduce((sum, entry) => sum + entry.totalCost, 0) / filteredEntries.reduce((sum, entry) => sum + entry.quantity, 0)).toFixed(2).replace('.', ',')}`],
+      ['RESUMO EXECUTIVO'],
+      ['Quantidade Total de Produtos', `${filteredEntries.reduce((sum, entry) => sum + entry.quantity, 0)} unidades`],
+      ['Custo Total das Entradas', `R$ ${filteredEntries.reduce((sum, entry) => sum + entry.totalCost, 0).toFixed(2).replace('.', ',')}`],
+      ['Custo Medio por Produto', `R$ ${(filteredEntries.reduce((sum, entry) => sum + entry.totalCost, 0) / filteredEntries.reduce((sum, entry) => sum + entry.quantity, 0)).toFixed(2).replace('.', ',')}`],
       [''],
-      ['📋 DETALHAMENTO COMPLETO DAS ENTRADAS'],
-      ['ID da Entrada', 'Nome do Produto', 'SKU do Produto', 'Fornecedor', 'Quantidade Recebida', 'Custo Unitário (R$)', 'Custo Total (R$)', 'Data de Entrada', 'Status da Entrada', 'Observações/Notas']
+      ['DETALHAMENTO COMPLETO DAS ENTRADAS'],
+      ['ID', 'Produto', 'SKU', 'Fornecedor', 'Quantidade', 'Custo Unit.', 'Custo Total', 'Data', 'Status', 'Observacoes']
     ];
 
     // Adicionar dados das entradas com formatação melhorada
     filteredEntries.forEach(entry => {
-      const entryDate = new Date(entry.entryDate);
-      const formattedDate = entryDate.toLocaleDateString('pt-BR', {
-        day: '2-digit',
-        month: '2-digit', 
-        year: 'numeric'
-      });
+      const formattedDate = formatDateForExcel(entry.entryDate);
       
       reportData.push([
-        `#${entry.id}`,
+        entry.id,
         entry.productName,
         entry.productSku,
         entry.supplier,
-        `${entry.quantity} unidades`,
-        `R$ ${entry.unitCost.toFixed(2).replace('.', ',')}`,
-        `R$ ${entry.totalCost.toFixed(2).replace('.', ',')}`,
+        entry.quantity.toString(),
+        entry.unitCost.toFixed(2).replace('.', ','),
+        entry.totalCost.toFixed(2).replace('.', ','),
         formattedDate,
-        entry.status === 'completed' ? '✅ Concluída' : entry.status === 'pending' ? '⏳ Pendente' : '❌ Cancelada',
-        entry.notes || '📝 Sem observações'
+        entry.status === 'aprovado' ? 'Aprovado' : entry.status === 'pendente' ? 'Pendente' : 'Cancelado',
+        entry.notes || 'Sem observacoes'
       ]);
     });
 
-    // Adicionar rodapé do relatório com formatação profissional
-    reportData.push([
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      ''
-    ]);
-    reportData.push([
-      '✅ RELATÓRIO GERADO AUTOMATICAMENTE PELO SISTEMA FLEXI GESTOR',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      ''
-    ]);
-    reportData.push([
-      '📧 Para suporte técnico: contato@flexigestor.com',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      ''
-    ]);
-    reportData.push([
-      '🌐 Sistema desenvolvido com tecnologia React + Firebase',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      ''
-    ]);
+    // Adicionar rodapé do relatório
+    reportData.push(['']);
+    reportData.push(['RELATORIO GERADO AUTOMATICAMENTE PELO FLEXI GESTOR']);
+    reportData.push(['Sistema de Gestao Empresarial - www.flexigestor.com']);
 
     // Converter para string CSV com formatação profissional e separadores visuais
     const csvContent = reportData.map((row, index) => {
@@ -534,13 +515,9 @@ const Entradas = () => {
       }).join(';'); // Usar ponto e vírgula como separador (padrão Excel)
     }).join('\n');
 
-    // Criar e baixar o arquivo com nome profissional e informações extras
+    // Criar e baixar o arquivo
     const currentDate = new Date().toISOString().split('T')[0];
-    const currentTime = new Date().toLocaleTimeString('pt-BR', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    }).replace(':', 'h');
-    const fileName = `📥 RELATORIO_ENTRADAS_ESTOQUE_${currentDate}_${currentTime}.csv`;
+    const fileName = `Entradas_${currentDate}.csv`;
     
     const blob = new Blob(['\ufeff' + csvContent], { 
       type: 'text/csv;charset=utf-8;' 
@@ -564,7 +541,6 @@ const Entradas = () => {
   // Função para aplicar filtros
   const applyFilters = () => {
     // Aqui você pode implementar filtros adicionais se necessário
-    console.log('Aplicando filtros...');
   };
 
   // Tela de carregamento
@@ -1125,7 +1101,7 @@ const Entradas = () => {
                           <Button 
                             variant="ghost" 
                             size="sm"
-                            onClick={() => deleteEntry(entry.id)}
+                            onClick={() => handleDeleteEntry(entry)}
                             className="text-red-600 hover:text-red-700 hover:bg-red-50 p-2 sm:p-3 rounded-xl sm:rounded-2xl transition-all duration-150"
                           >
                             <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -1140,6 +1116,69 @@ const Entradas = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Modal de Confirmação de Exclusão */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <Trash2 className="h-5 w-5 text-red-600" />
+              Confirmar Exclusão de Entrada
+            </DialogTitle>
+            <DialogDescription>
+              Esta ação não pode ser desfeita. A entrada será removida e o estoque será ajustado.
+            </DialogDescription>
+          </DialogHeader>
+
+          {entryToDelete && (
+            <div className="py-4">
+              <div className="bg-red-50 rounded-lg p-4 border border-red-200">
+                <h4 className="font-semibold text-sm mb-2 text-red-900">Entrada a ser excluída:</h4>
+                <div className="space-y-1 text-sm">
+                  <p><strong>Produto:</strong> {entryToDelete.productName}</p>
+                  <p><strong>Quantidade:</strong> {entryToDelete.quantity} unidades</p>
+                  <p><strong>Fornecedor:</strong> {entryToDelete.supplier}</p>
+                  <p><strong>Custo Total:</strong> R$ {entryToDelete.totalCost.toFixed(2)}</p>
+                  <p className="text-xs text-red-700 mt-2">
+                    ⚠️ O estoque será <strong>reduzido</strong> em {entryToDelete.quantity} unidades
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setIsDeleteDialogOpen(false);
+                setEntryToDelete(null);
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={confirmDeleteEntry}
+              disabled={isDeleting}
+            >
+              {isDeleting ? (
+                <>
+                  <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                  Excluindo...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Excluir Entrada
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Modal de Edição com Design Sofisticado */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>

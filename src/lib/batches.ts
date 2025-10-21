@@ -1,0 +1,170 @@
+/**
+ * 📦 Helper para gerenciar Batches no Supabase
+ */
+
+import { supabase } from './supabase';
+
+export interface Batch {
+  id: string;
+  productId: string;
+  batchNumber: string;
+  quantity: number;
+  unitCost: number;
+  manufactureDate?: Date;
+  expiryDate?: Date;
+  createdAt: Date;
+}
+
+// Buscar todos os lotes de um produto
+export const getBatchesByProduct = async (productId: string, userId: string): Promise<Batch[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('lotes')
+      .select('*')
+      .eq('produto_id', productId)
+      .eq('usuario_id', userId)
+      .order('criado_em', { ascending: false });
+
+    if (error) {
+      console.error('❌ Erro ao buscar lotes:', error);
+      throw error;
+    }
+
+    return (data || []).map((b: any) => ({
+      id: b.id,
+      productId: b.produto_id,
+      batchNumber: b.numero_lote,
+      quantity: b.quantidade,
+      unitCost: parseFloat(b.custo_unitario) || 0,
+      manufactureDate: undefined, // Removido do schema
+      expiryDate: b.data_validade ? new Date(b.data_validade) : undefined,
+      createdAt: new Date(b.criado_em)
+    }));
+  } catch (error) {
+    console.error('❌ Erro ao buscar lotes:', error);
+    return [];
+  }
+};
+
+// Criar um novo lote
+export const createBatch = async (
+  productId: string,
+  batchNumber: string,
+  quantity: number,
+  unitCost: number,
+  userId: string,
+  manufactureDate?: Date,
+  expiryDate?: Date
+): Promise<Batch | null> => {
+  try {
+    const { data, error } = await supabase
+      .from('lotes')
+      .insert([{
+        produto_id: productId,
+        numero_lote: batchNumber,
+        quantidade: quantity,
+        custo_unitario: unitCost,
+        data_validade: expiryDate?.toISOString(),
+        usuario_id: userId
+      }])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('❌ Erro ao criar lote:', error);
+      throw error;
+    }
+
+    return {
+      id: data.id,
+      productId: data.produto_id,
+      batchNumber: data.numero_lote,
+      quantity: data.quantidade,
+      unitCost: parseFloat(data.custo_unitario) || 0,
+      manufactureDate: undefined,
+      expiryDate: data.data_validade ? new Date(data.data_validade) : undefined,
+      createdAt: new Date(data.criado_em)
+    };
+  } catch (error) {
+    console.error('❌ Erro ao criar lote:', error);
+    return null;
+  }
+};
+
+// Atualizar quantidade de um lote existente
+export const updateBatchQuantity = async (
+  batchId: string,
+  newQuantity: number,
+  userId: string
+): Promise<boolean> => {
+  try {
+    const { error } = await supabase
+      .from('lotes')
+      .update({ quantidade: newQuantity })
+      .eq('id', batchId)
+      .eq('usuario_id', userId);
+
+    if (error) {
+      console.error('❌ Erro ao atualizar lote:', error);
+      throw error;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('❌ Erro ao atualizar lote:', error);
+    return false;
+  }
+};
+
+// Deletar lote
+export const deleteBatch = async (batchId: string, userId: string): Promise<boolean> => {
+  try {
+    const { error } = await supabase
+      .from('lotes')
+      .delete()
+      .eq('id', batchId)
+      .eq('usuario_id', userId);
+
+    if (error) {
+      console.error('❌ Erro ao deletar lote:', error);
+      throw error;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('❌ Erro ao deletar lote:', error);
+    return false;
+  }
+};
+
+// Atualizar estoque ao fazer movimentação de entrada/saída
+export const adjustBatchQuantity = async (
+  batchId: string,
+  quantityChange: number,
+  userId: string
+): Promise<boolean> => {
+  try {
+    // Buscar lote atual
+    const { data: batch, error: fetchError } = await supabase
+      .from('lotes')
+      .select('quantidade')
+      .eq('id', batchId)
+      .eq('usuario_id', userId)
+      .single();
+
+    if (fetchError || !batch) {
+      console.error('❌ Lote não encontrado');
+      return false;
+    }
+
+    // Calcular nova quantidade
+    const newQuantity = Math.max(0, batch.quantidade + quantityChange);
+
+    // Atualizar
+    return await updateBatchQuantity(batchId, newQuantity, userId);
+  } catch (error) {
+    console.error('❌ Erro ao ajustar quantidade do lote:', error);
+    return false;
+  }
+};
+

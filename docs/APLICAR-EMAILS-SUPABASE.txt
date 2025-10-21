@@ -1,0 +1,108 @@
+═══════════════════════════════════════════════════════════════
+  GUIA RÁPIDO: CONFIGURAR EMAILS NO SUPABASE
+═══════════════════════════════════════════════════════════════
+
+📍 PASSO 1: ABRIR SUPABASE
+═══════════════════════════════════════════════════════════════
+
+1. Vá em: https://app.supabase.com
+2. Selecione: Flexi Gestor
+3. Menu → Authentication → Email Templates
+
+
+📧 PASSO 2: RESET PASSWORD (Recuperar Senha)
+═══════════════════════════════════════════════════════════════
+
+1. Clique em: "Reset Password"
+
+2. Campo "Subject" → Cole:
+   🔐 Recupere sua senha - Flexi Gestor
+
+3. Campo "Message Body (HTML)" → Cole TODO o conteúdo do arquivo:
+   docs/email-reset-password.html
+
+4. Clique em: Save
+
+
+✨ PASSO 3: CONFIRM SIGNUP (Confirmar Cadastro)
+═══════════════════════════════════════════════════════════════
+
+1. Clique em: "Confirm signup"
+
+2. Campo "Subject" → Cole:
+   🎉 Bem-vindo ao Flexi Gestor! Confirme seu email
+
+3. Campo "Message Body (HTML)" → Cole TODO o conteúdo do arquivo:
+   docs/email-confirm-signup.html
+
+4. Clique em: Save
+
+
+🔑 PASSO 4: MAGIC LINK (Link Mágico)
+═══════════════════════════════════════════════════════════════
+
+1. Clique em: "Magic Link"
+
+2. Campo "Subject" → Cole:
+   🔑 Seu link de acesso - Flexi Gestor
+
+3. Campo "Message Body (HTML)" → Cole TODO o conteúdo do arquivo:
+   docs/email-magic-link.html
+
+4. Clique em: Save
+
+
+📧 PASSO 5: CHANGE EMAIL (Mudar Email)
+═══════════════════════════════════════════════════════════════
+
+1. Clique em: "Change Email Address"
+
+2. Campo "Subject" → Cole:
+   📧 Confirme seu novo email - Flexi Gestor
+
+3. Campo "Message Body (HTML)" → Cole TODO o conteúdo do arquivo:
+   docs/email-change-email.html
+
+4. Clique em: Save
+
+
+✅ PASSO 6: TESTAR
+═══════════════════════════════════════════════════════════════
+
+1. Abra: http://localhost:8080
+2. Clique em: "Esqueci minha senha"
+3. Digite seu email
+4. Envie
+5. Verifique sua caixa de entrada
+6. Email deve estar BONITO e em PORTUGUÊS! 🎉
+
+
+═══════════════════════════════════════════════════════════════
+  ARQUIVOS NECESSÁRIOS
+═══════════════════════════════════════════════════════════════
+
+📄 docs/email-reset-password.html       → Reset Password
+📄 docs/email-confirm-signup.html       → Confirm Signup  
+📄 docs/email-magic-link.html           → Magic Link
+📄 docs/email-change-email.html         → Change Email
+
+
+═══════════════════════════════════════════════════════════════
+  RESUMO
+═══════════════════════════════════════════════════════════════
+
+Total de templates: 4
+Tempo estimado: 8 minutos
+Dificuldade: Fácil
+
+Resultado:
+  ✅ Emails bonitos
+  ✅ Em português
+  ✅ Com tema do site
+  ✅ Profissionais
+
+
+═══════════════════════════════════════════════════════════════
+
+Pronto! Agora só copiar e colar no Supabase! 🚀
+

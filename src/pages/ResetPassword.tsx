@@ -1,18 +1,19 @@
-// 🔐 Página de Reset de Senha (com token do email)
+// 🔐 Página de Reset de Senha com Supabase
 // O usuário acessa esta página clicando no link recebido por email
 
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Lock, Eye, EyeOff, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/lib/supabase';
 
 const ResetPassword = () => {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const token = searchParams.get('token');
+  const { changePassword } = useAuth();
 
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -26,36 +27,62 @@ const ResetPassword = () => {
 
   // Validar token ao carregar a página
   useEffect(() => {
-    const validateToken = async () => {
-      if (!token) {
-        setMessage({ type: 'error', text: 'Token inválido ou ausente' });
-        setIsValidating(false);
-        setTokenValid(false);
-        return;
-      }
-
+    const validateSession = async () => {
       try {
-        const response = await fetch(`http://localhost:3001/api/auth/validate-reset-token/${token}`);
-        const data = await response.json();
+        // O Supabase redireciona com #access_token=...&type=recovery
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        const accessToken = hashParams.get('access_token');
+        const type = hashParams.get('type');
 
-        if (data.valid) {
-          setTokenValid(true);
-          setUserEmail(data.email);
+        if (type === 'recovery' && accessToken) {
+          // Definir a sessão com o token de recuperação
+          const { data, error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: hashParams.get('refresh_token') || ''
+          });
+
+          if (error) {
+            setMessage({ type: 'error', text: 'Link inválido ou expirado' });
+            setTokenValid(false);
+          } else if (data.user) {
+            // Verificar se o perfil existe, senão criar
+            const { data: profile, error: profileError } = await supabase
+              .from('perfis')
+              .select('*')
+              .eq('id', data.user.id)
+              .single();
+
+            if (profileError && profileError.code === 'PGRST116') {
+              // Perfil não existe, criar
+              await supabase.from('perfis').insert([{
+                id: data.user.id,
+                email: data.user.email,
+                nome: data.user.user_metadata?.name || null,
+                criado_em: new Date().toISOString(),
+                atualizado_em: new Date().toISOString()
+              }]);
+            }
+            
+            setTokenValid(true);
+            setUserEmail(data.user.email || '');
+          } else {
+            setMessage({ type: 'error', text: 'Token inválido' });
+            setTokenValid(false);
+          }
         } else {
-          setMessage({ type: 'error', text: data.message || 'Token inválido ou expirado' });
+          setMessage({ type: 'error', text: 'Link de recuperação inválido' });
           setTokenValid(false);
         }
       } catch (error) {
-        console.error('Erro ao validar token:', error);
-        setMessage({ type: 'error', text: 'Erro ao validar token. Tente novamente.' });
+        setMessage({ type: 'error', text: 'Erro ao validar link de recuperação' });
         setTokenValid(false);
       } finally {
         setIsValidating(false);
       }
     };
 
-    validateToken();
-  }, [token]);
+    validateSession();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,40 +107,27 @@ const ResetPassword = () => {
     setMessage(null);
 
     try {
-      const response = await fetch('http://localhost:3001/api/auth/reset-password', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          token,
-          newPassword
-        })
-      });
+      const success = await changePassword(newPassword);
 
-      const data = await response.json();
-
-      if (response.ok) {
+      if (success) {
         setMessage({ 
           type: 'success', 
           text: 'Senha alterada com sucesso! Redirecionando para login...' 
         });
         
+        // Fazer logout para limpar a sessão de recuperação
+        await supabase.auth.signOut();
+        
         // Redirecionar para login após 3 segundos
         setTimeout(() => {
           navigate('/login');
         }, 3000);
-      } else {
-        setMessage({ 
-          type: 'error', 
-          text: data.message || 'Erro ao alterar senha. Tente novamente.' 
-        });
       }
     } catch (error) {
       console.error('Erro:', error);
       setMessage({ 
         type: 'error', 
-        text: 'Erro ao conectar com o servidor. Verifique sua conexão.' 
+        text: 'Erro ao alterar senha. Tente novamente.' 
       });
     } finally {
       setIsLoading(false);
@@ -162,7 +176,7 @@ const ResetPassword = () => {
 
             <Button
               onClick={() => navigate('/forgot-password')}
-              className="w-full bg-gradient-to-r from-blue-600 to-purple-600"
+              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white"
             >
               Solicitar Novo Link
             </Button>
@@ -268,7 +282,7 @@ const ResetPassword = () => {
               {/* Botão Redefinir */}
               <Button
                 type="submit"
-                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white"
                 disabled={isLoading}
               >
                 {isLoading ? (
@@ -316,4 +330,3 @@ const ResetPassword = () => {
 };
 
 export default ResetPassword;
-

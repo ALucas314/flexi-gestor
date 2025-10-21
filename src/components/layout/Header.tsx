@@ -26,64 +26,57 @@ import { useResponsive } from "@/hooks/use-responsive";
 import { useNavigate } from "react-router-dom";
 
 export const Header = () => {
-  console.log('🔷 Header: Iniciando renderização');
+  // Todos os hooks devem estar no topo, antes de qualquer lógica condicional
+  const { 
+    notifications, 
+    markNotificationAsRead, 
+    removeNotification, 
+    clearAllNotifications,
+    addNotification 
+  } = useData();
   
-  try {
-    const { 
-      notifications, 
-      markNotificationAsRead, 
-      removeNotification, 
-      clearAllNotifications,
-      addNotification 
-    } = useData();
-    
-    console.log('✅ Header: useData carregado', { notificationsCount: notifications?.length || 0 });
-    
-    const { user, logout } = useAuth();
-    console.log('✅ Header: useAuth carregado', { user: user?.username || 'N/A' });
-    
-    const navigate = useNavigate();
-    const { togglePin } = useSidebar();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const { isPinned, togglePin } = useSidebar();
+  const { isMobile, isTablet, screenWidth } = useResponsive();
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
 
-    // Hook para responsividade
-    const { isMobile, isTablet, screenWidth } = useResponsive();
-    console.log('✅ Header: useResponsive carregado', { isMobile, screenWidth });
+  // Mostrar burger apenas se: for mobile OU sidebar não está pinado
+  const showBurger = isMobile || isTablet || !isPinned;
 
-    // Estado para controlar o Sheet (menu lateral)
-    const [isSheetOpen, setIsSheetOpen] = useState(false);
-
-    // Calcular notificações não lidas
-    const unreadCount = notifications?.filter(n => !n.read).length || 0;
-    console.log('✅ Header: Renderização completa', { unreadCount });
+  // Calcular notificações não lidas
+  const unreadCount = notifications?.filter(n => !n.read).length || 0;
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-indigo-50 via-indigo-100/60 to-indigo-100 backdrop-blur-md border-b border-indigo-200 shadow-lg">
       <div className={`flex items-center justify-between ${isMobile ? 'px-3 py-3' : 'px-2 sm:px-4 md:px-6 py-3 sm:py-4'} ${isMobile ? 'gap-2' : 'gap-2 sm:gap-4'}`}>
         {/* Logo e Navegação */}
         <div className={`flex items-center ${isMobile ? 'space-x-2' : 'space-x-2 md:space-x-3 lg:space-x-4'}`}>
-          {/* Menu Burger - Sempre visível */}
-          <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-            <SheetTrigger asChild>
-              <Button 
-                variant="ghost" 
-                size={isMobile ? "default" : "sm"}
-                className={`${isMobile ? 'p-3 h-12 w-12' : 'p-1.5 md:p-2'} hover:bg-indigo-50 rounded-xl transition-all duration-200`}
+          {/* Menu Burger - Visível apenas se não estiver pinado OU for mobile */}
+          {showBurger && (
+            <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
+              <SheetTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size={isMobile ? "default" : "sm"}
+                  className={`${isMobile ? 'p-3 h-12 w-12' : 'p-1.5 md:p-2'} hover:bg-indigo-50 rounded-xl transition-all duration-200`}
+                >
+                  <Menu className={`${isMobile ? 'h-6 w-6' : 'h-5 w-5'} text-indigo-600`} />
+                </Button>
+              </SheetTrigger>
+              <SheetContent 
+                side="left" 
+                className={`${isMobile ? 'w-full max-w-sm' : 'w-80'} p-0`}
+                showPin={!isMobile && !isTablet}
+                onPinClick={() => {
+                  togglePin();
+                  setIsSheetOpen(false);
+                }}
               >
-                <Menu className={`${isMobile ? 'h-6 w-6' : 'h-5 w-5'} text-indigo-600`} />
-              </Button>
-            </SheetTrigger>
-            <SheetContent 
-              side="left" 
-              className={`${isMobile ? 'w-full max-w-sm' : 'w-80'} p-0`}
-              showPin={!isMobile && !isTablet}
-              onPinClick={() => {
-                togglePin();
-                setIsSheetOpen(false);
-              }}
-            >
-              <Sidebar onNavigate={() => setIsSheetOpen(false)} />
-            </SheetContent>
-          </Sheet>
+                <Sidebar onNavigate={() => setIsSheetOpen(false)} />
+              </SheetContent>
+            </Sheet>
+          )}
           
           {/* Logo */}
           <div className={`flex items-center ${isMobile ? 'space-x-2' : 'space-x-2 md:space-x-3'}`}>
@@ -306,12 +299,4 @@ export const Header = () => {
       </div>
     </header>
   );
-  } catch (error) {
-    console.error('❌ Header: Erro ao renderizar', error);
-    return (
-      <header className="fixed top-0 left-0 right-0 z-50 bg-red-100 border-b border-red-300 p-4">
-        <p className="text-red-800 text-sm">⚠️ Erro ao carregar o cabeçalho. Veja o console para detalhes.</p>
-      </header>
-    );
-  }
 };
