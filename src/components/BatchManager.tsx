@@ -127,11 +127,25 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
         return;
       }
 
-      // Validar quantidade máxima (não pode exceder o estoque)
-      if (quantity > productStock) {
+      // Calcular quantidade já alocada em lotes existentes
+      const totalAllocated = batches.reduce((sum, b) => sum + b.quantity, 0);
+      const availableStock = productStock - totalAllocated;
+
+      // Validar se há estoque disponível para alocar
+      if (availableStock <= 0) {
+        toast({
+          title: '⚠️ Sem Estoque Disponível',
+          description: `Todo o estoque (${productStock} unidades) já está alocado em ${batches.length} lote(s). Exclua um lote ou aumente o estoque do produto.`,
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      // Validar se a quantidade não excede o estoque disponível
+      if (quantity > availableStock) {
         toast({
           title: '⚠️ Estoque Insuficiente',
-          description: `A quantidade do lote (${quantity}) não pode ser maior que o estoque disponível (${productStock})`,
+          description: `Você está tentando alocar ${quantity} unidades, mas só há ${availableStock} unidades disponíveis. (Total: ${productStock}, Já Alocado: ${totalAllocated})`,
           variant: 'destructive'
         });
         return;
@@ -284,31 +298,48 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
 
               <div className="space-y-2">
                 <Label htmlFor="quantity">🔢 Quantidade *</Label>
-                <Input
-                  id="quantity"
-                  type="number"
-                  min="1"
-                  max={productStock}
-                  placeholder={`Máximo: ${productStock} unidades em estoque`}
-                  value={formData.quantity}
-                  onChange={(e) => {
-                    const value = parseInt(e.target.value) || 0;
-                    if (value <= productStock || e.target.value === '') {
-                      setFormData(prev => ({ ...prev, quantity: e.target.value }));
-                    }
-                  }}
-                  className={`text-lg font-semibold ${
-                    parseInt(formData.quantity) > productStock ? 'border-red-500 focus:ring-red-500' : ''
-                  }`}
-                />
-                <p className="text-xs text-gray-600">
-                  📦 Estoque disponível: <span className="font-bold text-indigo-600">{productStock} unidades</span>
-                  {parseInt(formData.quantity) > productStock && (
-                    <span className="block text-red-600 font-semibold mt-1">
-                      ⚠️ Quantidade excede o estoque disponível!
-                    </span>
-                  )}
-                </p>
+                {(() => {
+                  const totalAllocated = batches.reduce((sum, b) => sum + b.quantity, 0);
+                  const availableStock = productStock - totalAllocated;
+                  
+                  return (
+                    <>
+                      <Input
+                        id="quantity"
+                        type="number"
+                        min="1"
+                        max={availableStock}
+                        placeholder={`Máximo: ${availableStock} unidades disponíveis`}
+                        value={formData.quantity}
+                        onChange={(e) => {
+                          const value = parseInt(e.target.value) || 0;
+                          if (value <= availableStock || e.target.value === '') {
+                            setFormData(prev => ({ ...prev, quantity: e.target.value }));
+                          }
+                        }}
+                        className={`text-lg font-semibold ${
+                          parseInt(formData.quantity) > availableStock ? 'border-red-500 focus:ring-red-500' : ''
+                        }`}
+                      />
+                      <div className="text-xs space-y-1">
+                        <p className="text-gray-600">
+                          📦 Estoque total: <span className="font-bold text-gray-900">{productStock} unidades</span>
+                        </p>
+                        <p className="text-gray-600">
+                          ✅ Já alocado: <span className="font-bold text-orange-600">{totalAllocated} unidades</span>
+                        </p>
+                        <p className="text-gray-600">
+                          🎯 Disponível para alocar: <span className="font-bold text-green-600">{availableStock} unidades</span>
+                        </p>
+                        {parseInt(formData.quantity) > availableStock && (
+                          <span className="block text-red-600 font-semibold mt-1">
+                            ⚠️ Quantidade excede o estoque disponível!
+                          </span>
+                        )}
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
 
               <div className="space-y-2">

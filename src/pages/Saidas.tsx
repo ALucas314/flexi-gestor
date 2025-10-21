@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useData } from "@/contexts/DataContext";
 import { getBatchesByProduct, updateBatchQuantity } from "@/lib/batches";
 import { useAuth } from "@/contexts/AuthContext";
+import { printReceipt, downloadReceipt } from "@/lib/receiptPDF";
 
 // Interface da saída de estoque
 interface StockExit {
@@ -151,51 +152,34 @@ const Saidas = () => {
   };
 
   // Função para compartilhar/baixar receita
-  const downloadReceipt = (exit: StockExit) => {
-    const receiptText = `
-━━━━━━━━━━━━━━━━━━━━━━━━━
-📄 RECEITA DE SAÍDA
-Flexi Gestor - Sistema de Gestão
-━━━━━━━━━━━━━━━━━━━━━━━━━
-${exit.receiptNumber ? `\nNº Receita: ${exit.receiptNumber}\n` : ''}
-Data: ${new Date(exit.exitDate).toLocaleDateString('pt-BR')}
-Cliente: ${exit.customer}
+  // Função para compartilhar/baixar receita em PDF
+  const handleDownloadReceipt = (exit: StockExit) => {
+    downloadReceipt({
+      type: 'saida',
+      receiptNumber: exit.receiptNumber,
+      date: exit.exitDate,
+      customer: exit.customer,
+      productName: exit.productName,
+      quantity: exit.quantity,
+      unitPrice: exit.unitPrice,
+      totalPrice: exit.totalPrice,
+      notes: exit.notes
+    });
+  };
 
-━━━━━━━━━━━━━━━━━━━━━━━━━
-PRODUTO:
-${exit.productName}
-${exit.quantity} x R$ ${exit.unitPrice.toFixed(2)}
-
-TOTAL: R$ ${exit.totalPrice.toFixed(2)}
-━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Observações:
-${exit.notes || 'Nenhuma observação'}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━
-Obrigado pela preferência!
-💚 Flexi Gestor - Gestão Inteligente
-━━━━━━━━━━━━━━━━━━━━━━━━━
-    `.trim();
-
-    // Tentar compartilhar no mobile
-    if (navigator.share) {
-      navigator.share({
-        title: 'Receita de Saída - Flexi Gestor',
-        text: receiptText,
-      }).catch(() => {});
-    } else {
-      // Fallback: baixar como arquivo
-      const blob = new Blob([receiptText], { type: 'text/plain' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `receita-saida-${new Date(exit.exitDate).toISOString().split('T')[0]}.txt`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-    }
+  // Função para imprimir receita em PDF
+  const handlePrintReceipt = (exit: StockExit) => {
+    printReceipt({
+      type: 'saida',
+      receiptNumber: exit.receiptNumber,
+      date: exit.exitDate,
+      customer: exit.customer,
+      productName: exit.productName,
+      quantity: exit.quantity,
+      unitPrice: exit.unitPrice,
+      totalPrice: exit.totalPrice,
+      notes: exit.notes
+    });
   };
 
   // Funções
@@ -1066,15 +1050,15 @@ Obrigado pela preferência!
               <div className="space-y-2 pt-2">
                 <Button 
                   className="w-full bg-green-600 hover:bg-green-700"
-                  onClick={() => downloadReceipt(selectedExit)}
+                  onClick={() => handleDownloadReceipt(selectedExit)}
                 >
                   <Share2 className="mr-2 h-4 w-4" />
-                  Compartilhar/Baixar Receita
+                  Compartilhar/Baixar PDF
                 </Button>
 
                 <Button 
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                  onClick={() => window.print()}
+                  onClick={() => handlePrintReceipt(selectedExit)}
                 >
                   <Printer className="mr-2 h-4 w-4" />
                   Imprimir Receita

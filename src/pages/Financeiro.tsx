@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { useData } from "@/contexts/DataContext";
 import { useResponsive } from "@/hooks/use-responsive";
+import { printReceipt, downloadReceipt } from "@/lib/receiptPDF";
 
 const Financeiro = () => {
   const { isMobile } = useResponsive();

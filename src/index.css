@@ -2,6 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Evitar flash branco durante reload/transições */
+html {
+  background-color: #f8fafc; /* Cor suave de fundo */
+  transition: background-color 0.3s ease;
+}
+
+body {
+  background-color: #f8fafc;
+  transition: opacity 0.2s ease;
+}
+
+/* Smooth transition durante reloads */
+body.reloading {
+  opacity: 0.98; /* Quase imperceptível */
+}
+
 /* Esconder scrollbar em todos os elementos */
 * {
   scrollbar-width: none; /* Firefox */
