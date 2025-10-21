@@ -117,35 +117,44 @@ const Financeiro = () => {
   const totalMovements = movements.length;
   const productosMovimentados = new Set(movements.map(m => m.productId)).size;
 
+  // Função helper para formatar data compatível com Excel
+  const formatDateForExcel = (date: Date) => {
+    const d = new Date(date);
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
+
   // Função para exportar relatório em CSV (Excel)
   const exportToCSV = () => {
     // Cabeçalho do CSV
-    const headers = ['Data', 'Tipo', 'Produto', 'Descrição', 'Quantidade', 'Valor Unitário', 'Total'];
+    const headers = ['Data', 'Tipo', 'Produto', 'Descricao', 'Quantidade', 'Valor Unit.', 'Total'];
     
     // Dados das movimentações
     const data = filteredMovements.map(m => [
-      new Date(m.date).toLocaleDateString('pt-BR'),
-      m.type === 'entrada' ? 'Entrada' : m.type === 'saida' ? 'Saída' : 'Ajuste',
+      formatDateForExcel(m.date),
+      m.type === 'entrada' ? 'Entrada' : m.type === 'saida' ? 'Saida' : 'Ajuste',
       m.productName,
       m.description,
-      m.quantity,
-      `R$ ${m.unitPrice.toFixed(2)}`,
-      `R$ ${m.total.toFixed(2)}`
+      m.quantity.toString(),
+      m.unitPrice.toFixed(2).replace('.', ','),
+      m.total.toFixed(2).replace('.', ',')
     ]);
     
     // Adicionar totais e resumo financeiro
     data.push([]);
-    data.push(['═══════════════ RESUMO FINANCEIRO ═══════════════']);
+    data.push(['RESUMO FINANCEIRO']);
     data.push([]);
-    data.push(['📥 Total de Entradas (Custos de Compra)', '', '', '', '', '', `R$ ${totalEntradas.toFixed(2)}`]);
-    data.push(['📤 Total de Saídas (Receitas de Venda)', '', '', '', '', '', `R$ ${totalSaidas.toFixed(2)}`]);
+    data.push(['Total de Entradas (Custos)', '', '', '', '', '', totalEntradas.toFixed(2).replace('.', ',')]);
+    data.push(['Total de Saidas (Receitas)', '', '', '', '', '', totalSaidas.toFixed(2).replace('.', ',')]);
     data.push([]);
-    data.push(['💰 SALDO (Lucro/Prejuízo)', '', '', '', '', '', `R$ ${saldo.toFixed(2)}`]);
-    data.push(['', '', '', '', '', '', saldo >= 0 ? '✅ LUCRO' : '⚠️ PREJUÍZO']);
+    data.push(['SALDO (Lucro/Prejuizo)', '', '', '', '', '', saldo.toFixed(2).replace('.', ',')]);
+    data.push(['Status', '', '', '', '', '', saldo >= 0 ? 'LUCRO' : 'PREJUIZO']);
     data.push([]);
-    data.push(['📊 Total de Movimentações', '', '', '', '', '', filteredMovements.length.toString()]);
-    data.push(['📦 Produtos Movimentados', '', '', '', '', '', productosMovimentados.toString()]);
-    data.push(['📅 Período do Relatório', '', '', '', '', '', new Date().toLocaleDateString('pt-BR')]);
+    data.push(['Total de Movimentacoes', '', '', '', '', '', filteredMovements.length.toString()]);
+    data.push(['Produtos Movimentados', '', '', '', '', '', productosMovimentados.toString()]);
+    data.push(['Data do Relatorio', '', '', '', '', '', formatDateForExcel(new Date())]);
     
     // Criar CSV
     const csvContent = [
@@ -159,7 +168,7 @@ const Financeiro = () => {
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `financeiro-${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = `Financeiro_${new Date().toISOString().split('T')[0]}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

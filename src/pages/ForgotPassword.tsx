@@ -1,4 +1,4 @@
-// 📧 Página de Recuperação de Senha
+// 📧 Página de Recuperação de Senha com Supabase
 // Permite que o usuário solicite um link de reset por email
 
 import React, { useState } from 'react';
@@ -8,9 +8,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useAuth } from '@/contexts/AuthContext';
 
 const ForgotPassword = () => {
   const navigate = useNavigate();
+  const { resetPassword } = useAuth();
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
@@ -27,17 +29,9 @@ const ForgotPassword = () => {
     setMessage(null);
 
     try {
-      const response = await fetch('http://localhost:3001/api/auth/forgot-password', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ email })
-      });
+      const success = await resetPassword(email);
 
-      const data = await response.json();
-
-      if (response.ok) {
+      if (success) {
         setMessage({ 
           type: 'success', 
           text: 'Email enviado! Verifique sua caixa de entrada e spam.' 
@@ -46,14 +40,14 @@ const ForgotPassword = () => {
       } else {
         setMessage({ 
           type: 'error', 
-          text: data.message || 'Erro ao enviar email. Tente novamente.' 
+          text: 'Erro ao enviar email. Verifique se o email está correto.' 
         });
       }
     } catch (error) {
       console.error('Erro:', error);
       setMessage({ 
         type: 'error', 
-        text: 'Erro ao conectar com o servidor. Verifique sua conexão.' 
+        text: 'Erro ao enviar email. Tente novamente.' 
         });
     } finally {
       setIsLoading(false);

@@ -1,24 +1,14 @@
-# Dependencies
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
+# Dependências
+node_modules
+.pnp
+.pnp.js
 
-# Build outputs
-dist/
-dist-ssr/
+# Build
+dist
+dist-ssr
 *.local
 
-# Environment variables
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# Editor directories and files
+# Editor
 .vscode/*
 !.vscode/extensions.json
 .idea
@@ -29,90 +19,26 @@ dist-ssr/
 *.sln
 *.sw?
 
-# Logs
-logs
-*.log
-
-# Runtime data
-pids
-*.pid
-*.seed
-*.pid.lock
-
-# Coverage directory used by tools like istanbul
-coverage/
-*.lcov
-
-# nyc test coverage
-.nyc_output
-
-# Dependency directories
-jspm_packages/
-
-# Optional npm cache directory
-.npm
-
-# Optional eslint cache
-.eslintcache
-
-# Optional REPL history
-.node_repl_history
-
-# Output of 'npm pack'
-*.tgz
-
-# Yarn Integrity file
-.yarn-integrity
-
-# parcel-bundler cache (https://parceljs.org/)
-.cache
-.parcel-cache
-
-# Next.js build output
-.next
-
-# Nuxt.js build / generate output
-.nuxt
-
-# Gatsby files
-.cache/
-public
-
-# Storybook build outputs
-.out
-.storybook-out
-
-# Temporary folders
-tmp/
-temp/
-
-# Firebase
-.firebase/
-firebase-debug.log
-firestore-debug.log
-
-# OS generated files
-Thumbs.db
-ehthumbs.db
-Desktop.ini
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Local development
+# Ambiente
+.env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
-/prisma/server/prisma
 
-# Prisma
-prisma/*.db
-prisma/*.db-journal
-prisma/migrations/
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-# Server build
-server/dist/
+# Sistema
+Thumbs.db
+
+# Vite
+.vite
+
+# Cache
+.eslintcache
+*.tsbuildinfo

@@ -22,7 +22,6 @@ import {
 } from "lucide-react";
 import { useResponsive } from "@/hooks/use-responsive";
 import { useData } from "@/contexts/DataContext";
-import { movementsAPI } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 
 interface CartItem {
@@ -42,7 +41,7 @@ interface ReceiptData {
 
 const PDV = () => {
   const { isMobile } = useResponsive();
-  const { products, refreshMovements, refreshProducts } = useData();
+  const { products, addMovement, refreshMovements, refreshProducts } = useData();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [isProcessingSale, setIsProcessingSale] = useState(false);
@@ -150,17 +149,18 @@ const PDV = () => {
     try {
       // Criar uma movimentação de saída para cada item do carrinho
       for (const item of cart) {
-        await movementsAPI.create({
+        await addMovement({
           type: 'saida',
           productId: item.id,
           quantity: item.quantity,
           unitPrice: item.price,
           description: `Venda PDV - ${item.name} (${item.quantity} unidades)`,
-          date: new Date().toISOString()
+          date: new Date()
         });
       }
       
-      // Recarregar dados
+      // Dados já são recarregados automaticamente pelo addMovement
+      // mas vamos garantir que está sincronizado
       await Promise.all([
         refreshMovements(),
         refreshProducts()

@@ -59,87 +59,84 @@ const Relatorios = () => {
   const totalSaidas = saidaMovements.reduce((sum, m) => sum + m.total, 0);
   const lucroEstimado = totalSaidas - totalEntradas;
 
+  // Função helper para formatar data compatível com Excel
+  const formatDateForExcel = (date: Date) => {
+    const d = new Date(date);
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
+
   // 📤 Exportar para CSV/Excel EM FORMATO DE TABELA PROFISSIONAL
   const exportToCSV = () => {
     const currentDate = new Date();
-    const periodText = period === 'todos' ? 'TODOS OS PERÍODOS' : 
-                      period === 'mes' ? 'ESTE MÊS' : 
+    const periodText = period === 'todos' ? 'TODOS OS PERIODOS' : 
+                      period === 'mes' ? 'ESTE MES' : 
                       period === 'trimestre' ? 'ESTE TRIMESTRE' : 'ESTE ANO';
     
     const csvRows = [
-      // 🎨 CABEÇALHO CORPORATIVO
-      ['🏢 FLEXI GESTOR - SISTEMA DE GESTÃO EMPRESARIAL'],
-      ['📊 RELATÓRIO EXECUTIVO DE ESTOQUE E MOVIMENTAÇÕES'],
+      ['FLEXI GESTOR - SISTEMA DE GESTAO EMPRESARIAL'],
+      ['RELATORIO EXECUTIVO DE ESTOQUE E MOVIMENTACOES'],
       [''],
       
-      // 📋 INFORMAÇÕES DO RELATÓRIO EM TABELA
-      ['📋 INFORMAÇÕES DO RELATÓRIO', '', '', '', '', '', ''],
-      ['Campo', 'Valor', '', '', '', '', ''],
-      ['📈 Período Analisado', periodText, '', '', '', '', ''],
-      ['📅 Data de Geração', currentDate.toLocaleDateString('pt-BR'), '', '', '', '', ''],
-      ['🕐 Hora de Geração', currentDate.toLocaleTimeString('pt-BR'), '', '', '', '', ''],
-      ['👤 Usuário Responsável', 'Sistema Automático', '', '', '', '', ''],
+      ['INFORMACOES DO RELATORIO'],
+      ['Campo', 'Valor'],
+      ['Periodo Analisado', periodText],
+      ['Data de Geracao', formatDateForExcel(currentDate)],
+      ['Hora de Geracao', `${String(currentDate.getHours()).padStart(2, '0')}:${String(currentDate.getMinutes()).padStart(2, '0')}`],
       [''],
       
-      // 💰 RESUMO EXECUTIVO EM TABELA
-      ['💰 RESUMO EXECUTIVO', '', '', '', '', '', ''],
-      ['Métrica', 'Valor', 'Unidade', 'Status', 'Observação', '', ''],
-      ['📦 Total de Produtos', totalProducts.toString(), 'unidades', totalProducts > 0 ? '✅ Ativo' : '⚠️ Vazio', 'Produtos cadastrados', '', ''],
-      ['💵 Valor Total do Estoque', `R$ ${totalStockValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 'reais', totalStockValue > 0 ? '✅ Positivo' : '⚠️ Zero', 'Valor investido', '', ''],
-      ['⚠️ Produtos Estoque Baixo', lowStockProducts.length.toString(), 'unidades', lowStockProducts.length === 0 ? '✅ OK' : '🔴 Atenção', 'Necessita reposição', '', ''],
-      ['🔄 Total de Movimentações', periodMovements.length.toString(), 'registros', periodMovements.length > 0 ? '✅ Ativo' : '⚠️ Vazio', 'Histórico completo', '', ''],
-      ['💸 Valor Total Movimentações', `R$ ${(totalEntradas + totalSaidas).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 'reais', (totalEntradas + totalSaidas) > 0 ? '✅ Positivo' : '⚠️ Zero', 'Volume financeiro', '', ''],
+      ['RESUMO EXECUTIVO'],
+      ['Metrica', 'Valor', 'Unidade', 'Status'],
+      ['Total de Produtos', totalProducts.toString(), 'unidades', totalProducts > 0 ? 'Ativo' : 'Vazio'],
+      ['Valor Total do Estoque', totalStockValue.toFixed(2).replace('.', ','), 'reais', totalStockValue > 0 ? 'Positivo' : 'Zero'],
+      ['Produtos Estoque Baixo', lowStockProducts.length.toString(), 'unidades', lowStockProducts.length === 0 ? 'OK' : 'Atencao'],
+      ['Total de Movimentacoes', periodMovements.length.toString(), 'registros', periodMovements.length > 0 ? 'Ativo' : 'Vazio'],
       [''],
       
-      // 📈 ANÁLISE FINANCEIRA EM TABELA
-      ['📈 ANÁLISE FINANCEIRA DETALHADA', '', '', '', '', '', ''],
-      ['Tipo de Movimento', 'Quantidade', 'Valor Total (R$)', 'Percentual', 'Status', 'Tendência', 'Observação'],
-      ['📥 Entradas', entradaMovements.length.toString(), `R$ ${totalEntradas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, `${entradaMovements.length > 0 ? ((entradaMovements.length / periodMovements.length) * 100).toFixed(1) : '0,0'}%`, totalEntradas > 0 ? '✅ Positivo' : '⚠️ Zero', entradaMovements.length > saidaMovements.length ? '📈 Crescimento' : '📉 Redução', 'Compras e reposições'],
-      ['📤 Saídas', saidaMovements.length.toString(), `R$ ${totalSaidas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, `${saidaMovements.length > 0 ? ((saidaMovements.length / periodMovements.length) * 100).toFixed(1) : '0,0'}%`, totalSaidas > 0 ? '✅ Positivo' : '⚠️ Zero', saidaMovements.length > entradaMovements.length ? '📈 Crescimento' : '📉 Redução', 'Vendas e consumo'],
-      ['💎 Lucro/Prejuízo', '1', `R$ ${lucroEstimado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, `${totalSaidas > 0 ? ((lucroEstimado / totalSaidas) * 100).toFixed(2) : '0,00'}%`, lucroEstimado >= 0 ? '✅ Lucro' : '🔴 Prejuízo', lucroEstimado >= 0 ? '📈 Positivo' : '📉 Negativo', 'Resultado estimado'],
+      ['ANALISE FINANCEIRA'],
+      ['Tipo', 'Quantidade', 'Valor Total', 'Percentual', 'Status'],
+      ['Entradas', entradaMovements.length.toString(), totalEntradas.toFixed(2).replace('.', ','), entradaMovements.length > 0 ? ((entradaMovements.length / periodMovements.length) * 100).toFixed(1).replace('.', ',') + '%' : '0%', totalEntradas > 0 ? 'Positivo' : 'Zero'],
+      ['Saidas', saidaMovements.length.toString(), totalSaidas.toFixed(2).replace('.', ','), saidaMovements.length > 0 ? ((saidaMovements.length / periodMovements.length) * 100).toFixed(1).replace('.', ',') + '%' : '0%', totalSaidas > 0 ? 'Positivo' : 'Zero'],
+      ['Lucro/Prejuizo', '1', lucroEstimado.toFixed(2).replace('.', ','), totalSaidas > 0 ? ((lucroEstimado / totalSaidas) * 100).toFixed(2).replace('.', ',') + '%' : '0%', lucroEstimado >= 0 ? 'Lucro' : 'Prejuizo'],
       [''],
       
-      // 📋 MOVIMENTAÇÕES DETALHADAS EM TABELA
-      ['📋 MOVIMENTAÇÕES DETALHADAS', '', '', '', '', '', ''],
-      ['ID', 'Tipo', 'Data', 'Produto', 'Quantidade', 'Preço Unit. (R$)', 'Valor Total (R$)', 'Descrição']
+      ['MOVIMENTACOES DETALHADAS'],
+      ['ID', 'Tipo', 'Data', 'Produto', 'Quantidade', 'Preco Unit.', 'Valor Total', 'Descricao']
     ];
 
     // 📝 Adicionar detalhes das movimentações com formatação de tabela
     periodMovements.forEach((movement, index) => {
       const product = products.find(p => p.id === movement.productId);
-      const movementDate = new Date(movement.date);
-      const formattedDate = movementDate.toLocaleDateString('pt-BR', {
-        day: '2-digit',
-        month: '2-digit', 
-        year: 'numeric'
-      });
+      const formattedDate = formatDateForExcel(movement.date);
       
       csvRows.push([
-        `#${index + 1}`,
-        movement.type === 'entrada' ? '📥 ENTRADA' : '📤 SAÍDA',
+        (index + 1).toString(),
+        movement.type === 'entrada' ? 'ENTRADA' : 'SAIDA',
         formattedDate,
-        product ? product.name : '❌ PRODUTO NÃO ENCONTRADO',
-        `${movement.quantity} unidades`,
-        `R$ ${movement.unitPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
-        `R$ ${movement.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
-        movement.description || '📝 Sem observações'
+        product ? product.name : 'PRODUTO NAO ENCONTRADO',
+        movement.quantity.toString(),
+        movement.unitPrice.toFixed(2).replace('.', ','),
+        movement.total.toFixed(2).replace('.', ','),
+        movement.description || 'Sem observacoes'
       ]);
     });
 
-    // 📦 PRODUTOS COM ESTOQUE BAIXO EM TABELA
-    csvRows.push([''], ['⚠️ PRODUTOS COM ESTOQUE BAIXO', '', '', '', '', '', '']);
-    csvRows.push(['ID', 'Nome do Produto', 'Estoque Atual', 'Estoque Mínimo', 'Preço Unit. (R$)', 'Valor Total (R$)', 'Status', 'Ação Necessária']);
+    // PRODUTOS COM ESTOQUE BAIXO EM TABELA
+    csvRows.push(['']);
+    csvRows.push(['PRODUTOS COM ESTOQUE BAIXO']);
+    csvRows.push(['ID', 'Produto', 'Estoque Atual', 'Estoque Min.', 'Preco Unit.', 'Valor Total', 'Status']);
     
     lowStockProducts.forEach((p, index) => {
       csvRows.push([
-        `#${index + 1}`,
+        (index + 1).toString(),
         p.name,
-        `${p.stock} unidades`,
-        `${p.minStock} unidades`,
-        `R$ ${p.price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
-        `R$ ${(p.price * p.stock).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
-        p.stock === 0 ? '🔴 SEM ESTOQUE' : '🟡 ESTOQUE BAIXO',
-        p.stock === 0 ? 'URGENTE: Reposição' : 'Monitorar'
+        p.stock.toString(),
+        p.minStock.toString(),
+        p.price.toFixed(2).replace('.', ','),
+        (p.price * p.stock).toFixed(2).replace('.', ','),
+        p.stock === 0 ? 'SEM ESTOQUE' : 'ESTOQUE BAIXO'
       ]);
     });
 

@@ -47,37 +47,18 @@ const Login = () => {
       });
       return;
     }
-
-    console.log('🔐 Tentando login com:', loginData.email);
     
     try {
       const success = await login(loginData.email, loginData.password);
       
       if (success) {
-        toast({
-          title: "✅ Login Realizado!",
-          description: `Bem-vindo ao Flexi Gestor!`,
-          variant: "default",
-        });
-        
-        // Aguardar um pouco para garantir que o Firebase Auth atualize
+        // Aguardar um pouco para garantir que o Supabase Auth atualize
         setTimeout(() => {
           navigate("/");
         }, 1000);
-      } else {
-        toast({
-          title: "❌ Login Falhou",
-          description: "Usuário ou senha incorretos. Tente novamente.",
-          variant: "destructive",
-        });
       }
     } catch (error) {
       console.error('❌ Erro no login:', error);
-      toast({
-        title: "❌ Erro no Login",
-        description: "Ocorreu um erro inesperado. Tente novamente.",
-        variant: "destructive",
-      });
     }
   };
 
@@ -111,43 +92,22 @@ const Login = () => {
       });
       return;
     }
-
-    console.log('📝 Tentando criar conta:', registerData.email);
     
     try {
-      const success = await register({
-        username: registerData.username,
-        email: registerData.email,
-        name: registerData.name,
-        password: registerData.password,
-        role: 'user'
-      });
+      const success = await register(
+        registerData.email,
+        registerData.password,
+        registerData.name
+      );
       
       if (success) {
-        toast({
-          title: "✅ Registro Realizado!",
-          description: `Bem-vindo ao Flexi Gestor, ${registerData.name}!`,
-          variant: "default",
-        });
-        
-        // Aguardar um pouco para garantir que o Firebase Auth atualize
+        // Aguardar um pouco para garantir que o Supabase Auth atualize
         setTimeout(() => {
           navigate("/");
         }, 1000);
-      } else {
-        toast({
-          title: "❌ Registro Falhou",
-          description: "Erro ao criar conta. Tente novamente.",
-          variant: "destructive",
-        });
       }
     } catch (error) {
-      console.error('❌ Erro no registro:', error);
-      toast({
-        title: "❌ Erro no Registro",
-        description: "Ocorreu um erro inesperado. Tente novamente.",
-        variant: "destructive",
-      });
+      // Erro já tratado pelo contexto
     }
   };
 

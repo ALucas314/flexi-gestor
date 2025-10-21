@@ -169,22 +169,20 @@ const Perfil = () => {
         {/* Card Principal - Informações */}
         <Card className="md:col-span-2">
           <CardHeader className="px-3 sm:px-6">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0">
-              <CardTitle className="flex items-center space-x-1 sm:space-x-2 text-base sm:text-lg">
-                <User className="h-4 w-4 sm:h-5 sm:w-5" />
-                <span>Informações Pessoais</span>
-              </CardTitle>
-              <Button
-                variant={isEditing ? "default" : "outline"}
-                size="sm"
-                onClick={() => setIsEditing(!isEditing)}
-                disabled={isLoading}
-                className={`text-xs sm:text-sm ${isEditing ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white shadow-xl hover:shadow-2xl transition-all duration-200' : ''}`}
-              >
-                {isEditing ? <Save className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" /> : <Edit className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />}
-                {isEditing ? 'Salvar' : 'Editar'}
-              </Button>
-            </div>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0">
+          <CardTitle className="flex items-center space-x-1 sm:space-x-2 text-base sm:text-lg">
+            <User className="h-4 w-4 sm:h-5 sm:w-5" />
+            <span>Informações Pessoais</span>
+          </CardTitle>
+          <Button
+            size="sm"
+            onClick={() => setIsEditing(!isEditing)}
+            className="text-xs sm:text-sm bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white shadow-lg hover:shadow-xl transition-all duration-200"
+          >
+            <Edit className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+            Editar
+          </Button>
+        </div>
           </CardHeader>
           <CardContent className="space-y-3 sm:space-y-4 px-3 sm:px-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
@@ -228,20 +226,32 @@ const Perfil = () => {
               </div>
             </div>
 
+            {/* Botões de Ação - Aparecem apenas quando está editando */}
             {isEditing && (
-              <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 pt-3 sm:pt-4">
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 pt-3 sm:pt-4 border-t">
                 <Button 
                   onClick={handleSaveProfile} 
                   disabled={isLoading} 
                   className="text-sm bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white shadow-xl hover:shadow-2xl transition-all duration-200"
                 >
-                  {isLoading ? 'Salvando...' : 'Salvar Alterações'}
+                  {isLoading ? (
+                    <>
+                      <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                      Salvando...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-2" />
+                      Salvar Alterações
+                    </>
+                  )}
                 </Button>
                 <Button variant="outline" onClick={() => setIsEditing(false)} className="text-sm">
                   Cancelar
                 </Button>
               </div>
             )}
+
           </CardContent>
         </Card>
 
@@ -376,7 +386,11 @@ const Perfil = () => {
             </div>
 
             <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 pt-3 sm:pt-4">
-              <Button onClick={handleChangePassword} disabled={isLoading} className="text-sm">
+              <Button 
+                onClick={handleChangePassword} 
+                disabled={isLoading} 
+                className="bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white shadow-xl hover:shadow-2xl transition-all duration-200 text-sm"
+              >
                 {isLoading ? 'Alterando...' : 'Alterar Senha'}
               </Button>
               <Button variant="outline" onClick={() => setIsChangingPassword(false)} className="text-sm">

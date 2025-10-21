@@ -13,7 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useForm } from "react-hook-form";
 import { useToast } from "@/hooks/use-toast";
 import { useData } from "@/contexts/DataContext";
-import { batchesAPI } from "@/lib/api";
+import { getBatchesByProduct, updateBatchQuantity } from "@/lib/batches";
+import { useAuth } from "@/contexts/AuthContext";
 
 // Interface da saída de estoque
 interface StockExit {
@@ -35,7 +36,6 @@ type StockExitFormData = Omit<StockExit, 'id' | 'productName' | 'productSku' | '
 
 const Saidas = () => {
   // Estados
-  const [exits, setExits] = useState<StockExit[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -44,10 +44,32 @@ const Saidas = () => {
   const [selectedProductId, setSelectedProductId] = useState<string>("");
   const [showReceipt, setShowReceipt] = useState(false);
   const [selectedExit, setSelectedExit] = useState<StockExit | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [exitToDelete, setExitToDelete] = useState<StockExit | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Hooks
   const { toast } = useToast();
-  const { products, addMovement, addNotification } = useData();
+  const { products, movements, addMovement, deleteMovement, addNotification } = useData();
+  const { user } = useAuth();
+
+  // Filtrar apenas as saídas dos movements
+  const exits = movements
+    .filter(m => m.type === 'saida')
+    .map(m => ({
+      id: m.id,
+      productId: m.productId,
+      productName: m.productName || m.product?.name || 'Desconhecido',
+      productSku: m.product?.sku || '',
+      quantity: m.quantity,
+      unitPrice: m.unitPrice,
+      totalPrice: m.total,
+      customer: m.description.includes(' - ') ? m.description.split(' - ')[1] : 'Cliente',
+      exitDate: m.date,
+      notes: m.description,
+      status: 'confirmado' as const,
+      receiptNumber: m.receiptNumber
+    }));
 
   // Formulário
   const form = useForm<StockExitFormData>({
@@ -65,15 +87,14 @@ const Saidas = () => {
   // Carregar lotes quando selecionar um produto
   const loadBatchesForProduct = async (productId: string) => {
     try {
+      if (!user?.id) return;
+      
       setSelectedProductId(productId);
       setSelectedBatches([]);
       
-      const data = await batchesAPI.getByProduct(productId);
-      setAvailableBatches(data.batches || []);
-      
-      console.log(`📦 ${data.batches?.length || 0} lotes carregados para o produto`);
+      const batches = await getBatchesByProduct(productId, user.id);
+      setAvailableBatches(batches || []);
     } catch (error) {
-      console.error('Erro ao carregar lotes:', error);
       setAvailableBatches([]);
     }
   };
@@ -162,7 +183,7 @@ Obrigado pela preferência!
       navigator.share({
         title: 'Receita de Saída - Flexi Gestor',
         text: receiptText,
-      }).catch((error) => console.log('Erro ao compartilhar:', error));
+      }).catch(() => {});
     } else {
       // Fallback: baixar como arquivo
       const blob = new Blob([receiptText], { type: 'text/plain' });
@@ -252,16 +273,14 @@ Obrigado pela preferência!
     }
 
     // Atualizar lotes selecionados no backend
-    if (selectedBatches.length > 0) {
+    if (selectedBatches.length > 0 && user?.id) {
       try {
         const batchUpdates = selectedBatches.map(async (selectedBatch) => {
           const batch = availableBatches.find(b => b.id === selectedBatch.batchId);
           if (batch) {
             const newQuantity = batch.quantity - selectedBatch.quantity;
             // Garantir que nunca fique negativo
-            return batchesAPI.update(batch.id, {
-              quantity: Math.max(0, newQuantity)
-            });
+            return updateBatchQuantity(batch.id, Math.max(0, newQuantity), user.id);
           }
         });
         
@@ -276,12 +295,7 @@ Obrigado pela preferência!
       }
     }
 
-    // Adicionar saída local
-    const updatedExits = [newExit, ...exits];
-    setExits(updatedExits);
-    localStorage.setItem('flexi-gestor-exits', JSON.stringify(updatedExits));
-
-    // Adicionar movimentação no contexto global (isso atualiza o estoque automaticamente)
+    // Adicionar movimentação no contexto global (isso atualiza o estoque automaticamente e salva no Supabase)
     addMovement({
       type: 'saida',
       productId: data.productId,
@@ -311,42 +325,45 @@ Obrigado pela preferência!
     );
   };
 
-  const handleDeleteExit = (exitId: string) => {
-    const exit = exits.find(e => e.id === exitId);
-    if (!exit) return;
-    
-    const updatedExits = exits.filter(e => e.id !== exitId);
-    setExits(updatedExits);
-    localStorage.setItem('flexi-gestor-exits', JSON.stringify(updatedExits));
-
-    // Adicionar notificação
-    addNotification(
-      '🗑️ Saída Removida',
-      `Produto: ${exit.productName}\nQuantidade: ${exit.quantity} unidades\nCliente: ${exit.customer}\nPreço: R$ ${exit.unitPrice.toFixed(2)}\nTotal: R$ ${exit.totalPrice.toFixed(2)}`,
-      'warning'
-    );
-
-    toast({
-      title: "🗑️ Saída Removida!",
-      description: `Saída de ${exit.productName} foi removida com sucesso.`,
-      variant: "default",
-    });
+  const handleDeleteExit = (exit: StockExit) => {
+    setExitToDelete(exit);
+    setIsDeleteDialogOpen(true);
   };
 
-  // Carregar dados do localStorage
+  const confirmDelete = async () => {
+    if (!exitToDelete || isDeleting) return;
+
+    try {
+      setIsDeleting(true);
+      
+      await deleteMovement(exitToDelete.id);
+      
+      toast({
+        title: "✅ Saída Removida!",
+        description: `Saída de ${exitToDelete.quantity} unidades foi removida e o estoque foi ajustado.`,
+        variant: "default",
+      });
+
+      // Fechar dialog após sucesso
+      setIsDeleteDialogOpen(false);
+      setExitToDelete(null);
+    } catch (error: any) {
+      toast({
+        title: "❌ Erro ao Remover",
+        description: error.message || "Não foi possível remover a saída.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Carregar dados do Supabase
   useEffect(() => {
     // Simular carregamento inicial
     const timer = setTimeout(() => {
       setIsLoading(false);
     }, 500);
-    
-    const savedExits = localStorage.getItem('flexi-gestor-exits');
-    if (savedExits) {
-      setExits(JSON.parse(savedExits).map((exit: StockExit) => ({
-        ...exit,
-        exitDate: new Date(exit.exitDate)
-      })));
-    }
     
     return () => clearTimeout(timer);
   }, []);
@@ -457,7 +474,7 @@ Obrigado pela preferência!
                       </div>
 
                       {/* Seletor de Lotes Múltiplos */}
-                      {selectedProductId && availableBatches.length > 0 && (
+                      {selectedProductId && (
                         <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-300 rounded-xl p-5">
                           <div className="flex items-center justify-between mb-4">
                             <div className="flex items-center space-x-2">
@@ -475,7 +492,18 @@ Obrigado pela preferência!
                             </Button>
                           </div>
 
-                          {selectedBatches.length === 0 ? (
+                          {availableBatches.length === 0 ? (
+                            <div className="text-center py-4 bg-yellow-50 rounded-lg border-2 border-dashed border-yellow-300">
+                              <Package className="h-10 w-10 mx-auto mb-2 text-yellow-600" />
+                              <p className="text-sm text-yellow-800 font-medium">⚠️ Este produto não tem lotes cadastrados</p>
+                              <p className="text-xs text-yellow-700 mt-1">
+                                💡 A saída será registrada normalmente sem rastreio por lote
+                              </p>
+                              <p className="text-xs text-yellow-700 mt-1">
+                                Para usar lotes, vá em Produtos → Lotes e cadastre primeiro
+                              </p>
+                            </div>
+                          ) : selectedBatches.length === 0 ? (
                             <div className="text-center py-4 bg-white/60 rounded-lg border-2 border-dashed border-indigo-300">
                               <Package className="h-10 w-10 mx-auto mb-2 text-indigo-400" />
                               <p className="text-sm text-indigo-700 font-medium">Nenhum lote selecionado</p>
@@ -866,7 +894,7 @@ Obrigado pela preferência!
                                 <Button 
                                   variant="ghost" 
                                   size="sm"
-                                  onClick={() => handleDeleteExit(exit.id)}
+                                  onClick={() => handleDeleteExit(exit)}
                                   className="hover:bg-red-50 hover:text-red-600 transition-colors"
                                   title="Excluir saída"
                                 >
@@ -882,6 +910,69 @@ Obrigado pela preferência!
                 </div>
               </CardContent>
             </Card>
+
+      {/* Modal de Confirmação de Exclusão */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <Trash2 className="h-5 w-5 text-red-600" />
+              Confirmar Exclusão
+            </DialogTitle>
+            <DialogDescription>
+              Esta ação não pode ser desfeita. A saída será removida e o estoque será ajustado.
+            </DialogDescription>
+          </DialogHeader>
+
+          {exitToDelete && (
+            <div className="py-4">
+              <div className="bg-red-50 rounded-lg p-4 border border-red-200">
+                <h4 className="font-semibold text-sm mb-2 text-red-900">Saída a ser excluída:</h4>
+                <div className="space-y-1 text-sm">
+                  <p><strong>Produto:</strong> {exitToDelete.productName}</p>
+                  <p><strong>Quantidade:</strong> {exitToDelete.quantity} unidades</p>
+                  <p><strong>Cliente:</strong> {exitToDelete.customer}</p>
+                  <p><strong>Total:</strong> R$ {exitToDelete.totalPrice.toFixed(2)}</p>
+                  <p className="text-xs text-red-700 mt-2">
+                    ⚠️ O estoque será <strong>aumentado</strong> em {exitToDelete.quantity} unidades
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setIsDeleteDialogOpen(false);
+                setExitToDelete(null);
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting ? (
+                <>
+                  <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                  Excluindo...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Excluir Saída
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Modal de Receita */}
       <Dialog open={showReceipt} onOpenChange={setShowReceipt}>

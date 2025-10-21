@@ -12,9 +12,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { ResponsiveTable, TableColumn, TableAction, ResponsiveBadge } from "@/components/ui/responsive-table";
 import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
 import { useToast } from "@/hooks/use-toast";
 import { useData } from "@/contexts/DataContext";
 import { useResponsive } from "@/hooks/use-responsive";
+
+// Schema de validação
+const productSchema = z.object({
+  name: z.string().min(1, "Nome do produto é obrigatório").min(3, "Nome deve ter pelo menos 3 caracteres"),
+  description: z.string().optional(),
+  category: z.string().min(1, "Categoria é obrigatória"),
+  price: z.number().min(0, "Preço deve ser maior ou igual a zero"),
+  stock: z.number().int().min(0, "Estoque deve ser maior ou igual a zero"),
+  minStock: z.number().int().min(0, "Estoque mínimo deve ser maior ou igual a zero"),
+  sku: z.string().min(1, "SKU é obrigatório"),
+  status: z.enum(["ativo", "inativo"]),
+});
 
 // Interface do produto
 interface Product {
@@ -42,6 +56,7 @@ const Produtos = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isBatchDialogOpen, setIsBatchDialogOpen] = useState(false);
   const [selectedProductForBatch, setSelectedProductForBatch] = useState<Product | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Hooks
   const { toast } = useToast();
@@ -79,6 +94,7 @@ const Produtos = () => {
 
   // Formulário
   const form = useForm<ProductFormData>({
+    resolver: zodResolver(productSchema),
     defaultValues: {
       name: "",
       description: "",
@@ -269,37 +285,33 @@ const Produtos = () => {
   };
 
   const confirmDelete = async () => {
-    if (!productToDelete) return;
+    if (!productToDelete || isDeleting) return;
 
     try {
+      setIsDeleting(true);
+      
       await deleteProductContext(productToDelete.id);
-      setIsDeleteDialogOpen(false);
-      setProductToDelete(null);
 
       toast({
         title: "🗑️ Produto Removido!",
         description: `${productToDelete.name} foi removido do catálogo.`,
         variant: "default",
       });
-    } catch (error) {
-      console.error('❌ Erro ao deletar produto:', error);
+
+      // Fechar dialog após sucesso
+      setIsDeleteDialogOpen(false);
+      setProductToDelete(null);
+    } catch (error: any) {
       toast({
         title: "❌ Erro ao Remover Produto",
-        description: "Não foi possível remover o produto. Tente novamente.",
+        description: error.message || "Não foi possível remover o produto. Tente novamente.",
         variant: "destructive",
       });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
-  // Debug: Log do estado atual
-  console.log('🔍 Estado da página Produtos:', {
-    productsCount: products.length,
-    searchTerm,
-    filteredProductsCount: filteredProducts.length,
-    isAddDialogOpen,
-    isEditDialogOpen,
-    isLoading
-  });
 
   // Tela de carregamento
   if (isLoading) {
@@ -872,10 +884,20 @@ const Produtos = () => {
                     type="button"
                     variant="destructive"
                     onClick={confirmDelete}
+                    disabled={isDeleting}
                     className="w-full sm:w-auto"
                   >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    🗑️ Excluir Produto
+                    {isDeleting ? (
+                      <>
+                        <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                        Excluindo...
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        🗑️ Excluir Produto
+                      </>
+                    )}
                   </Button>
                 </DialogFooter>
               </DialogContent>

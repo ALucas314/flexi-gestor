@@ -33,14 +33,8 @@ const Index = () => {
 
   // Atualizar estatísticas em tempo real quando products ou movements mudarem
   React.useEffect(() => {
-    console.log('🔄 Dashboard atualizando estatísticas...');
-    console.log('  - Produtos:', products.length);
-    console.log('  - Movimentações:', movements.length);
-    
     const newStats = getDashboardStats();
     setStats(newStats);
-    
-    console.log('📊 Novas estatísticas:', newStats);
   }, [products, movements, getDashboardStats]);
 
   return (

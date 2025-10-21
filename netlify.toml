@@ -1,0 +1,77 @@
+# ========================================
+# CONFIGURAÇÃO DO NETLIFY - FLEXI GESTOR
+# ========================================
+
+[build]
+  # Comando para fazer o build da aplicação
+  command = "npm run build"
+  
+  # Pasta onde os arquivos buildados ficam
+  publish = "dist"
+  
+  # Usar Node.js versão 18
+  environment = { NODE_VERSION = "18" }
+
+# ========================================
+# REDIRECTS E REWRITES (SPA)
+# ========================================
+# Redirecionar todas as rotas para index.html (necessário para React Router)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# ========================================
+# HEADERS DE SEGURANÇA
+# ========================================
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # Segurança básica
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    X-XSS-Protection = "1; mode=block"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    
+    # Permitir conexão com Supabase
+    Content-Security-Policy = "default-src 'self'; connect-src 'self' https://ujohzrebqzeochsozmac.supabase.co https://*.supabase.co; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:;"
+
+# ========================================
+# CACHE E PERFORMANCE
+# ========================================
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    # Cache de 1 ano para assets (JS, CSS, imagens)
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/*.js"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/*.css"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# ========================================
+# CONFIGURAÇÕES ADICIONAIS
+# ========================================
+[build.processing]
+  skip_processing = false
+
+[build.processing.css]
+  bundle = true
+  minify = true
+
+[build.processing.js]
+  bundle = true
+  minify = true
+
+[build.processing.html]
+  pretty_urls = true
+
+[build.processing.images]
+  compress = true
+
