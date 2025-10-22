@@ -259,9 +259,9 @@ const Perfil = () => {
                 </Badge>
               </div>
               
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-1">
                 <span className="text-xs sm:text-sm text-muted-foreground">Email</span>
-                <span className="text-xs sm:text-sm font-medium">
+                <span className="text-xs sm:text-sm font-medium break-all">
                   {user.email}
                 </span>
               </div>

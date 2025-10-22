@@ -340,6 +340,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // 🔐 Função para trocar senha
   const changePassword = async (newPassword: string): Promise<boolean> => {
     try {
+      // Verificar sessão ANTES de tentar trocar senha
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        toast({
+          title: "❌ Sessão Expirada",
+          description: "Faça login novamente para trocar sua senha.",
+          variant: "destructive"
+        });
+        return false;
+      }
+      
       if (!user) {
         throw new Error('Usuário não autenticado');
       }
@@ -349,10 +361,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
 
       if (error) {
+        console.error('Erro ao alterar senha:', error);
         
         toast({
           title: "❌ Erro ao alterar senha",
-          description: error.message,
+          description: error.message === 'Auth session missing!' 
+            ? 'Sessão expirada. Faça login novamente.'
+            : error.message,
           variant: "destructive"
         });
         
@@ -366,6 +381,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       
       return true;
     } catch (error: any) {
+      console.error('Erro ao alterar senha:', error);
       
       toast({
         title: "❌ Erro ao alterar senha",

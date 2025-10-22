@@ -21,10 +21,7 @@ export const WorkspaceSelector = () => {
 
   return (
     <Button
-      onClick={() => {
-        console.log('🔄 Trocando para workspace:', outroWorkspace.nome);
-        trocarWorkspace(outroWorkspace.id);
-      }}
+      onClick={() => trocarWorkspace(outroWorkspace.id)}
       className={`px-3 py-2 rounded-lg shadow-lg font-semibold text-xs sm:text-sm flex items-center gap-2 transition-all ${
         outroWorkspace.tipo === 'compartilhado'
           ? 'bg-purple-600 hover:bg-purple-700 text-white'
