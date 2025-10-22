@@ -203,7 +203,7 @@ const ResetPassword = () => {
             <div className="mx-auto w-16 h-16 bg-white/20 rounded-full flex items-center justify-center">
               <Lock className="h-8 w-8" />
             </div>
-            <CardTitle className="text-2xl font-bold">
+            <CardTitle className="text-2xl font-bold text-white">
               Redefinir Senha
             </CardTitle>
             <CardDescription className="text-white/90">
