@@ -5,17 +5,19 @@
 /* Evitar flash branco durante reload/transições */
 html {
   background-color: #f8fafc; /* Cor suave de fundo */
-  transition: background-color 0.3s ease;
+  /* Remover transição para ser instantâneo */
 }
 
 body {
   background-color: #f8fafc;
-  transition: opacity 0.2s ease;
+  /* Remover transição - reload será instantâneo */
 }
 
-/* Smooth transition durante reloads */
-body.reloading {
-  opacity: 0.98; /* Quase imperceptível */
+/* Cache de recursos para reload instantâneo */
+@media (prefers-reduced-motion: no-preference) {
+  * {
+    will-change: auto;
+  }
 }
 
 /* Esconder scrollbar em todos os elementos */
