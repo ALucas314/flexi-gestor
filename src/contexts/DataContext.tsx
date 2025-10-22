@@ -8,6 +8,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from './AuthContext';
+import { useWorkspace } from './WorkspaceContext';
 
 // Interfaces dos dados
 interface Product {
@@ -85,10 +86,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [isLoading, setIsLoading] = useState(false);
 
   const { isAuthenticated, user } = useAuth();
+  const { workspaceAtivo } = useWorkspace();
 
-  // 🔄 Carregar dados do Supabase quando o usuário estiver autenticado
+  // 🔄 Carregar dados do Supabase quando o usuário estiver autenticado OU mudar workspace
   useEffect(() => {
-    if (isAuthenticated && user) {
+    if (isAuthenticated && user && workspaceAtivo) {
+      console.log('🔄 [DataContext] Carregando dados do workspace:', workspaceAtivo.nome);
       refreshData();
       loadNotificationsFromLocalStorage();
     } else if (!isAuthenticated || !user) {
@@ -97,7 +100,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       setMovements([]);
       setNotifications([]);
     }
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, user, workspaceAtivo?.id]); // Recarregar quando mudar workspace
 
   // 📦 Carregar notificações do localStorage
   const loadNotificationsFromLocalStorage = () => {
@@ -148,17 +151,22 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
   // 🔄 Função para recarregar apenas os produtos
   const refreshProducts = async () => {
-    if (!user?.id) return;
+    if (!user?.id || !workspaceAtivo?.id) return;
 
+    console.log('🔄 [DataContext] Carregando produtos do workspace:', workspaceAtivo.nome);
+    
     try {
-      // Buscar TODOS os produtos que o usuário tem acesso
-      // O RLS já filtra automaticamente (próprios + compartilhados)
+      // Filtrar produtos APENAS do workspace ativo
       const { data, error } = await supabase
         .from('produtos')
         .select('*')
+        .eq('usuario_id', workspaceAtivo.id) // Filtro explícito por workspace
         .order('criado_em', { ascending: false });
 
+      console.log('📦 [DataContext] Produtos retornados:', data?.length || 0, data);
+
       if (error) {
+        console.error('❌ [DataContext] Erro ao carregar produtos:', error);
         throw error;
       }
 
@@ -185,20 +193,25 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
   // 🔄 Função para recarregar apenas as movimentações
   const refreshMovements = async () => {
-    if (!user?.id) return;
+    if (!user?.id || !workspaceAtivo?.id) return;
+
+    console.log('🔄 [DataContext] Carregando movimentações do workspace:', workspaceAtivo.nome);
 
     try {
-      // Buscar TODAS as movimentações que o usuário tem acesso
-      // O RLS já filtra automaticamente (próprias + compartilhadas)
+      // Filtrar movimentações APENAS do workspace ativo
       const { data, error } = await supabase
         .from('movimentacoes')
         .select(`
           *,
           product:produtos(id, nome, sku)
         `)
+        .eq('usuario_id', workspaceAtivo.id) // Filtro explícito por workspace
         .order('criado_em', { ascending: false });
 
+      console.log('📋 [DataContext] Movimentações retornadas:', data?.length || 0, data);
+
       if (error) {
+        console.error('❌ [DataContext] Erro ao carregar movimentações:', error);
         throw error;
       }
 

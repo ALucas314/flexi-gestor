@@ -18,12 +18,14 @@ export interface Batch {
 // Buscar todos os lotes de um produto
 export const getBatchesByProduct = async (productId: string, userId: string): Promise<Batch[]> => {
   try {
+    // Remover filtro por usuario_id - RLS automático faz isso!
     const { data, error } = await supabase
       .from('lotes')
       .select('*')
       .eq('produto_id', productId)
-      .eq('usuario_id', userId)
       .order('criado_em', { ascending: false });
+
+    console.log('📦 [Batches] Lotes retornados para produto', productId, ':', data?.length || 0);
 
     if (error) {
       console.error('❌ Erro ao buscar lotes:', error);
@@ -98,11 +100,11 @@ export const updateBatchQuantity = async (
   userId: string
 ): Promise<boolean> => {
   try {
+    // Remover filtro por usuario_id - RLS garante segurança
     const { error } = await supabase
       .from('lotes')
       .update({ quantidade: newQuantity })
-      .eq('id', batchId)
-      .eq('usuario_id', userId);
+      .eq('id', batchId);
 
     if (error) {
       console.error('❌ Erro ao atualizar lote:', error);
@@ -119,11 +121,11 @@ export const updateBatchQuantity = async (
 // Deletar lote
 export const deleteBatch = async (batchId: string, userId: string): Promise<boolean> => {
   try {
+    // Remover filtro por usuario_id - RLS garante segurança
     const { error } = await supabase
       .from('lotes')
       .delete()
-      .eq('id', batchId)
-      .eq('usuario_id', userId);
+      .eq('id', batchId);
 
     if (error) {
       console.error('❌ Erro ao deletar lote:', error);
@@ -144,12 +146,11 @@ export const adjustBatchQuantity = async (
   userId: string
 ): Promise<boolean> => {
   try {
-    // Buscar lote atual
+    // Buscar lote atual (RLS filtra automaticamente)
     const { data: batch, error: fetchError } = await supabase
       .from('lotes')
       .select('quantidade')
       .eq('id', batchId)
-      .eq('usuario_id', userId)
       .single();
 
     if (fetchError || !batch) {
