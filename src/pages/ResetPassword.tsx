@@ -25,36 +25,48 @@ const ResetPassword = () => {
 
   // Validar token ao carregar a página
   useEffect(() => {
-    const validateToken = () => {
+    const validateToken = async () => {
       console.log('🔍 [ResetPassword] Verificando URL...');
       
       try {
         // O Supabase redireciona com #access_token=...&type=recovery
         const hashParams = new URLSearchParams(window.location.hash.substring(1));
         const accessToken = hashParams.get('access_token');
+        const refreshToken = hashParams.get('refresh_token');
         const type = hashParams.get('type');
 
-        console.log('🔍 Type:', type, 'Token presente:', !!accessToken);
+        console.log('🔍 Type:', type, 'Access Token presente:', !!accessToken, 'Refresh Token presente:', !!refreshToken);
 
-        if (type === 'recovery' && accessToken) {
+        if (type === 'recovery' && accessToken && refreshToken) {
           console.log('✅ Token de recovery válido detectado');
           
-          // Decodificar o JWT para obter o email (sem fazer request ao servidor)
-          try {
-            const payload = JSON.parse(atob(accessToken.split('.')[1]));
-            const email = payload.email || '';
-            
-            console.log('✅ Token válido para:', email);
-            
-            // 🔑 IMPORTANTE: Salvar token em memória!
-            setAccessToken(accessToken);
-            setTokenValid(true);
-            setUserEmail(email);
-          } catch (decodeError) {
-            console.error('❌ Erro ao decodificar token:', decodeError);
-            setMessage({ type: 'error', text: 'Token inválido' });
+          // Importar supabase client
+          const { supabase } = await import('@/lib/supabase');
+          
+          // Restaurar sessão automaticamente
+          const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+
+          if (sessionError) {
+            console.error('❌ Erro ao restaurar sessão:', sessionError);
+            setMessage({ type: 'error', text: 'Link expirado ou inválido' });
             setTokenValid(false);
+            setIsValidating(false);
+            return;
           }
+
+          console.log('✅ Sessão restaurada com sucesso');
+          
+          // Obter email do usuário
+          const email = sessionData.user?.email || '';
+          console.log('✅ Token válido para:', email);
+          
+          // 🔑 IMPORTANTE: Salvar token em memória!
+          setAccessToken(accessToken);
+          setTokenValid(true);
+          setUserEmail(email);
         } else {
           console.error('❌ URL não contém token de recovery válido');
           setMessage({ type: 'error', text: 'Link de recuperação inválido' });
@@ -104,25 +116,9 @@ const ResetPassword = () => {
       // Importar supabase client
       const { supabase } = await import('@/lib/supabase');
 
-      // Primeiro, restaurar a sessão usando o token de recovery
-      const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
-        access_token: accessToken,
-        refresh_token: accessToken, // Em recovery, usamos o mesmo token
-      });
-
-      if (sessionError) {
-        console.error('❌ Erro ao restaurar sessão:', sessionError);
-        setMessage({ 
-          type: 'error', 
-          text: 'Link expirado ou inválido. Solicite um novo link de recuperação.' 
-        });
-        setIsLoading(false);
-        return;
-      }
-
-      console.log('✅ Sessão restaurada com sucesso');
-
-      // Agora atualizar a senha do usuário
+      // A sessão já foi restaurada no useEffect, apenas atualizar a senha
+      console.log('🔄 Atualizando senha do usuário...');
+      
       const { data, error } = await supabase.auth.updateUser({
         password: newPassword
       });
@@ -130,15 +126,15 @@ const ResetPassword = () => {
       if (error) {
         console.error('❌ Erro ao atualizar senha:', error);
         
-        if (error.message.includes('expired') || error.message.includes('invalid')) {
+        if (error.message.includes('expired') || error.message.includes('invalid') || error.message.includes('session')) {
           setMessage({ 
             type: 'error', 
-            text: 'Link expirado. Solicite um novo link de recuperação.' 
+            text: 'Sessão expirada. Por favor, solicite um novo link de recuperação.' 
           });
         } else {
           setMessage({ 
             type: 'error', 
-            text: 'Erro ao alterar senha. Tente novamente.' 
+            text: `Erro ao alterar senha: ${error.message}` 
           });
         }
         setIsLoading(false);
