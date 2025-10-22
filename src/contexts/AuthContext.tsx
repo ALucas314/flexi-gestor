@@ -340,37 +340,44 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // 🔐 Função para trocar senha
   const changePassword = async (newPassword: string): Promise<boolean> => {
     try {
-      // Verificar sessão ANTES de tentar trocar senha
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
+      if (!user) {
         toast({
-          title: "❌ Sessão Expirada",
-          description: "Faça login novamente para trocar sua senha.",
+          title: "❌ Não Autenticado",
+          description: "Faça login novamente.",
           variant: "destructive"
         });
         return false;
       }
+
+      // Tentar renovar a sessão primeiro
+      const { data: { session }, error: sessionError } = await supabase.auth.refreshSession();
       
-      if (!user) {
-        throw new Error('Usuário não autenticado');
+      if (sessionError || !session) {
+        toast({
+          title: "❌ Sessão Expirada",
+          description: "Sua sessão expirou. Faça login novamente.",
+          variant: "destructive"
+        });
+        
+        // Fazer logout para limpar dados
+        setTimeout(() => {
+          logout();
+        }, 2000);
+        
+        return false;
       }
       
+      // Agora sim, tentar trocar a senha
       const { error } = await supabase.auth.updateUser({
         password: newPassword
       });
 
       if (error) {
-        console.error('Erro ao alterar senha:', error);
-        
         toast({
           title: "❌ Erro ao alterar senha",
-          description: error.message === 'Auth session missing!' 
-            ? 'Sessão expirada. Faça login novamente.'
-            : error.message,
+          description: error.message,
           variant: "destructive"
         });
-        
         return false;
       }
       
