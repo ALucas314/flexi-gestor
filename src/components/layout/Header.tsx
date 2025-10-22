@@ -18,6 +18,7 @@ import {
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sidebar } from "./Sidebar";
+import { WorkspaceSelector } from "@/components/WorkspaceSelector";
 import { useState, useEffect } from "react";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -92,6 +93,9 @@ export const Header = () => {
 
         {/* Ações do Usuário */}
         <div className={`flex items-center ${isMobile ? 'space-x-2' : 'space-x-2 md:space-x-3'}`}>
+          {/* Seletor de Workspace */}
+          <WorkspaceSelector />
+          
           {/* Notificações */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

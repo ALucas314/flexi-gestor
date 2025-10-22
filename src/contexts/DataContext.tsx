@@ -8,6 +8,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from './AuthContext';
+import { useWorkspace } from './WorkspaceContext';
 
 // Interfaces dos dados
 interface Product {
@@ -85,19 +86,20 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [isLoading, setIsLoading] = useState(false);
 
   const { isAuthenticated, user } = useAuth();
+  const { workspaceAtivo } = useWorkspace();
 
-  // 🔄 Carregar dados do Supabase quando o usuário estiver autenticado
+  // 🔄 Carregar dados do Supabase quando o usuário estiver autenticado OU workspace mudar
   useEffect(() => {
-    if (isAuthenticated && user) {
+    if (isAuthenticated && user && workspaceAtivo) {
       refreshData();
       loadNotificationsFromLocalStorage();
-    } else {
+    } else if (!isAuthenticated || !user) {
       // Limpar dados quando não autenticado
       setProducts([]);
       setMovements([]);
       setNotifications([]);
     }
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, user, workspaceAtivo]);
 
   // 📦 Carregar notificações do localStorage
   const loadNotificationsFromLocalStorage = () => {
@@ -148,13 +150,16 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
   // 🔄 Função para recarregar apenas os produtos
   const refreshProducts = async () => {
-    if (!user?.id) return;
+    if (!user?.id || !workspaceAtivo?.id) return;
 
     try {
+      // Usar workspace ativo ao invés de user.id
+      const usuarioId = workspaceAtivo.id;
+      
       const { data, error } = await supabase
         .from('produtos')
         .select('*')
-        .eq('usuario_id', user.id)
+        .eq('usuario_id', usuarioId)
         .order('criado_em', { ascending: false });
 
       if (error) {
@@ -184,16 +189,19 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
   // 🔄 Função para recarregar apenas as movimentações
   const refreshMovements = async () => {
-    if (!user?.id) return;
+    if (!user?.id || !workspaceAtivo?.id) return;
 
     try {
+      // Usar workspace ativo ao invés de user.id
+      const usuarioId = workspaceAtivo.id;
+      
       const { data, error } = await supabase
         .from('movimentacoes')
         .select(`
           *,
           product:produtos(id, nome, sku)
         `)
-        .eq('usuario_id', user.id)
+        .eq('usuario_id', usuarioId)
         .order('criado_em', { ascending: false });
 
       if (error) {
@@ -227,11 +235,13 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
   // ➕ Adicionar produto
   const addProduct = async (product: Omit<Product, 'id'>) => {
-    if (!user?.id) {
-      throw new Error('Usuário não autenticado');
+    if (!user?.id || !workspaceAtivo?.id) {
+      throw new Error('Usuário não autenticado ou workspace não selecionado');
     }
 
     try {
+      // Usar workspace ativo para criar o produto
+      const usuarioId = workspaceAtivo.id;
       const { data, error } = await supabase
         .from('produtos')
         .insert([{
@@ -244,7 +254,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           unidade_medida: 'UN',
           fornecedor: 'Fornecedor Padrão',
           descricao: product.description,
-          usuario_id: user.id
+          usuario_id: usuarioId
         }])
         .select()
         .single();
@@ -284,11 +294,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       if (updates.description !== undefined) updateData.descricao = updates.description;
       updateData.atualizado_em = new Date().toISOString();
 
+      // Não precisa filtrar por usuario_id aqui pois o RLS já garante
+      // que só pode atualizar produtos que tem acesso
       const { error} = await supabase
         .from('produtos')
         .update(updateData)
-        .eq('id', id)
-        .eq('usuario_id', user.id);
+        .eq('id', id);
 
       if (error) {
         throw new Error(error.message);
@@ -317,11 +328,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     try {
       const productToDelete = products.find(p => p.id === id);
       
+      // Não precisa filtrar por usuario_id - RLS garante segurança
       const { error } = await supabase
         .from('produtos')
         .delete()
-        .eq('id', id)
-        .eq('usuario_id', user.id);
+        .eq('id', id);
 
       if (error) {
         throw new Error(error.message);
@@ -381,7 +392,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           metodo_pagamento: null,
           observacoes: movement.description,
           numero_recibo: receiptNumber,
-          usuario_id: user.id
+          usuario_id: workspaceAtivo?.id || user.id
         }])
         .select(`
           *,
@@ -436,12 +447,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         throw new Error('Movimentação não encontrada');
       }
 
-      // Deletar do Supabase
+      // Deletar do Supabase - RLS garante segurança
       const { error } = await supabase
         .from('movimentacoes')
         .delete()
-        .eq('id', id)
-        .eq('usuario_id', user.id);
+        .eq('id', id);
 
       if (error) {
         throw new Error(error.message);
