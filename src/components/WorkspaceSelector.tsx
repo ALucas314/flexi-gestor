@@ -36,7 +36,7 @@ export const WorkspaceSelector = () => {
       <span className="hidden sm:inline">
         {outroWorkspace.tipo === 'compartilhado' 
           ? `Ver: ${outroWorkspace.nome}` 
-          : 'Meu Workspace'}
+          : 'Ver Meu Workspace'}
       </span>
       <span className="sm:hidden">
         {outroWorkspace.tipo === 'compartilhado' ? 'Compartilhado' : 'Meu'}
