@@ -242,12 +242,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
   // ➕ Adicionar produto
   const addProduct = async (product: Omit<Product, 'id'>) => {
-    if (!user?.id) {
+    if (!user?.id || !workspaceAtivo?.id) {
       throw new Error('Usuário não autenticado');
     }
 
     try {
-      // Sempre criar no ID do usuário logado (não no workspace)
+      // Criar no workspace ATIVO (não no usuário logado)
       const { data, error } = await supabase
         .from('produtos')
         .insert([{
@@ -260,7 +260,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           unidade_medida: 'UN',
           fornecedor: 'Fornecedor Padrão',
           descricao: product.description,
-          usuario_id: user.id
+          usuario_id: workspaceAtivo.id // Usar ID do workspace ativo!
         }])
         .select()
         .single();
@@ -362,7 +362,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
   // 📊 Adicionar movimentação
   const addMovement = async (movement: Omit<Movement, 'id' | 'total'>) => {
-    if (!user?.id) {
+    if (!user?.id || !workspaceAtivo?.id) {
       throw new Error('Usuário não autenticado');
     }
 
@@ -398,7 +398,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           metodo_pagamento: null,
           observacoes: movement.description,
           numero_recibo: receiptNumber,
-          usuario_id: user.id
+          usuario_id: workspaceAtivo.id // Usar ID do workspace ativo!
         }])
         .select(`
           *,

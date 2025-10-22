@@ -204,6 +204,9 @@ export const Header = () => {
             </DropdownMenuContent>
           </DropdownMenu>
 
+          {/* 🏢 Seletor de Workspace */}
+          <WorkspaceSelector />
+
           {/* Menu do Usuário */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

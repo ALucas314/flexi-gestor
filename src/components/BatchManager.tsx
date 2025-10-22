@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { getBatchesByProduct, createBatch, deleteBatch } from '@/lib/batches';
 import { useAuth } from '@/contexts/AuthContext';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useToast } from '@/hooks/use-toast';
 
 interface Batch {
@@ -49,6 +50,7 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
 }) => {
   const { toast } = useToast();
   const { user } = useAuth();
+  const { workspaceAtivo } = useWorkspace();
   const [batches, setBatches] = useState<Batch[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -158,7 +160,7 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
         formData.batchNumber,
         quantity,
         0, // unitCost - pode ser zero aqui
-        user.id,
+        workspaceAtivo?.id || user.id, // Usar workspace ativo!
         formData.manufactureDate ? new Date(formData.manufactureDate) : undefined,
         formData.expiryDate ? new Date(formData.expiryDate) : undefined
       );
@@ -197,7 +199,7 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
 
     try {
       setIsLoading(true);
-      await deleteBatch(batchId, user.id);
+      await deleteBatch(batchId, workspaceAtivo?.id || user.id);
 
       toast({
         title: '✅ Lote Deletado!',

@@ -11,6 +11,8 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 
@@ -39,6 +41,8 @@ const PAGINAS_DISPONIVEIS = [
 
 const Compartilhar = () => {
   const { user } = useAuth();
+  const { workspaceAtivo } = useWorkspace();
+  const navigate = useNavigate();
   const [emailCompartilhar, setEmailCompartilhar] = useState('');
   const [permissoesSelecionadas, setPermissoesSelecionadas] = useState<string[]>([
     'produtos', 'entradas', 'saidas', 'relatorios', 'financeiro', 'pdv'
@@ -47,6 +51,14 @@ const Compartilhar = () => {
   const [compartilhadosComigo, setCompartilhadosComigo] = useState<Compartilhamento[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
+
+  // 🚫 Redirecionar se estiver em workspace compartilhado
+  useEffect(() => {
+    if (workspaceAtivo && workspaceAtivo.tipo === 'compartilhado') {
+      toast.error('Esta página não está disponível em workspaces compartilhados');
+      navigate('/');
+    }
+  }, [workspaceAtivo, navigate]);
 
   const togglePermissao = (paginaId: string) => {
     setPermissoesSelecionadas(prev => 
