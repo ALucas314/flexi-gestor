@@ -179,10 +179,10 @@ const Compartilhar = () => {
 
       console.log('🔍 [Compartilhar] Verificando se já existe compartilhamento...');
       
-      // Verificar se já existe compartilhamento
+      // Verificar se já existe compartilhamento (ativo OU inativo)
       const { data: existente, error: checkError } = await supabase
         .from('compartilhamentos')
-        .select('id')
+        .select('id, status')
         .eq('dono_id', user.id)
         .eq('usuario_compartilhado_id', usuarioData.id)
         .maybeSingle();
@@ -196,33 +196,57 @@ const Compartilhar = () => {
         return;
       }
 
+      // Se já existe compartilhamento
       if (existente) {
-        toast.error('Você já compartilhou acesso com este usuário');
-        setIsAdding(false);
-        return;
+        // Se está ATIVO, avisar
+        if (existente.status === 'ativo') {
+          toast.error('Você já compartilhou acesso com este usuário');
+          setIsAdding(false);
+          return;
+        }
+        
+        // Se está INATIVO, REATIVAR
+        console.log('🔄 [Compartilhar] Reativando compartilhamento existente...');
+        
+        const { error: updateError } = await supabase
+          .from('compartilhamentos')
+          .update({ 
+            status: 'ativo',
+            atualizado_em: new Date().toISOString()
+          })
+          .eq('id', existente.id);
+
+        if (updateError) {
+          console.error('❌ [Compartilhar] Erro ao reativar:', updateError);
+          throw updateError;
+        }
+
+        console.log('✅ [Compartilhar] Compartilhamento reativado!');
+        toast.success(`Acesso reativado para ${emailCompartilhar}`);
+      } else {
+        // Não existe, criar novo
+        console.log('🔍 [Compartilhar] Criando novo compartilhamento...');
+        
+        const { data: insertData, error: insertError } = await supabase
+          .from('compartilhamentos')
+          .insert([{
+            dono_id: user.id,
+            usuario_compartilhado_id: usuarioData.id,
+            status: 'ativo'
+          }])
+          .select();
+
+        console.log('🔍 [Compartilhar] Resultado criação:', { insertData, insertError });
+
+        if (insertError) {
+          console.error('❌ [Compartilhar] Erro ao criar:', insertError);
+          throw insertError;
+        }
+
+        console.log('✅ [Compartilhar] Novo compartilhamento criado!');
+        toast.success(`Acesso compartilhado com ${emailCompartilhar}`);
       }
 
-      console.log('🔍 [Compartilhar] Criando compartilhamento...');
-      
-      // Criar compartilhamento
-      const { data: insertData, error: insertError } = await supabase
-        .from('compartilhamentos')
-        .insert([{
-          dono_id: user.id,
-          usuario_compartilhado_id: usuarioData.id,
-          status: 'ativo'
-        }])
-        .select();
-
-      console.log('🔍 [Compartilhar] Resultado criação:', { insertData, insertError });
-
-      if (insertError) {
-        console.error('❌ [Compartilhar] Erro ao criar:', insertError);
-        throw insertError;
-      }
-
-      console.log('✅ [Compartilhar] Sucesso!');
-      toast.success(`Acesso compartilhado com ${emailCompartilhar}`);
       setEmailCompartilhar('');
       carregarCompartilhamentos();
     } catch (error) {
