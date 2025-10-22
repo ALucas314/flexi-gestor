@@ -97,9 +97,14 @@ export const Sidebar = ({ className, variant = 'overlay', onNavigate }: SidebarP
     const permissoes = workspaceAtivo.permissoes || [];
     
     return navigationItems.filter(item => {
-      // Dashboard e Compartilhar sempre disponíveis
-      if (item.path === '/' || item.path === '/compartilhar') {
+      // Dashboard sempre disponível
+      if (item.path === '/') {
         return true;
+      }
+      
+      // Compartilhar NUNCA disponível em workspace compartilhado
+      if (item.path === '/compartilhar') {
+        return false;
       }
       
       // Verificar se tem permissão
