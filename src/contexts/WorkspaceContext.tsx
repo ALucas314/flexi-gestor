@@ -11,6 +11,7 @@ interface Workspace {
   email: string;
   tipo: 'proprio' | 'compartilhado';
   compartilhamentoId?: string;
+  permissoes?: string[];
 }
 
 interface WorkspaceContextType {
@@ -31,6 +32,8 @@ export const WorkspaceProvider = ({ children }: { children: ReactNode }) => {
 
   // Carregar workspaces disponíveis
   const recarregarWorkspaces = async () => {
+    console.log('🏢 [WorkspaceContext] Recarregando workspaces...', { user });
+    
     if (!user) {
       setWorkspacesDisponiveis([]);
       setWorkspaceAtivo(null);
@@ -49,16 +52,23 @@ export const WorkspaceProvider = ({ children }: { children: ReactNode }) => {
         tipo: 'proprio'
       });
 
+      console.log('🏢 [WorkspaceContext] Workspace próprio adicionado:', workspaces[0]);
+
       // 2️⃣ Buscar compartilhamentos ATIVOS que outros fizeram COMIGO
+      console.log('🏢 [WorkspaceContext] Buscando compartilhamentos para usuário:', user.id);
+      
       const { data: compartilhados, error } = await supabase
         .from('compartilhamentos')
-        .select('id, dono_id, status')
+        .select('id, dono_id, status, permissoes')
         .eq('usuario_compartilhado_id', user.id)
         .eq('status', 'ativo');
 
+      console.log('🏢 [WorkspaceContext] Compartilhamentos encontrados:', { compartilhados, error });
+
       if (error) {
-        console.error('Erro ao carregar compartilhamentos:', error);
+        console.error('❌ [WorkspaceContext] Erro ao carregar compartilhamentos:', error);
       } else if (compartilhados && compartilhados.length > 0) {
+        console.log('✅ [WorkspaceContext] Encontrados', compartilhados.length, 'compartilhamentos');
         // Buscar dados dos donos
         const donosIds = compartilhados.map((c: any) => c.dono_id);
         const { data: donos } = await supabase
@@ -75,7 +85,8 @@ export const WorkspaceProvider = ({ children }: { children: ReactNode }) => {
               nome: dono.nome || dono.email,
               email: dono.email,
               tipo: 'compartilhado',
-              compartilhamentoId: comp.id
+              compartilhamentoId: comp.id,
+              permissoes: comp.permissoes || []
             });
           }
         });
@@ -106,13 +117,32 @@ export const WorkspaceProvider = ({ children }: { children: ReactNode }) => {
 
   // Trocar workspace
   const trocarWorkspace = (workspaceId: string) => {
+    console.log('🔄 [WorkspaceContext] Tentando trocar workspace para:', workspaceId);
+    console.log('🔄 [WorkspaceContext] Workspaces disponíveis:', workspacesDisponiveis);
+    
     const workspace = workspacesDisponiveis.find(w => w.id === workspaceId);
+    
+    console.log('🔄 [WorkspaceContext] Workspace encontrado:', workspace);
+    
     if (workspace) {
+      console.log('✅ [WorkspaceContext] Trocando para workspace:', workspace.nome);
       setWorkspaceAtivo(workspace);
+      
+      // Salvar no localStorage
       localStorage.setItem('flexi_workspace_ativo', workspaceId);
       
-      // Recarregar página para limpar caches
-      window.location.reload();
+      // Verificar se foi salvo
+      const verificar = localStorage.getItem('flexi_workspace_ativo');
+      console.log('💾 [WorkspaceContext] Verificando localStorage após salvar:', verificar);
+      
+      // Aguardar um pouco para garantir que o localStorage foi persistido
+      console.log('🔄 [WorkspaceContext] Aguardando 100ms antes de recarregar...');
+      setTimeout(() => {
+        console.log('🔄 [WorkspaceContext] Recarregando página AGORA!');
+        window.location.reload();
+      }, 100);
+    } else {
+      console.error('❌ [WorkspaceContext] Workspace não encontrado!');
     }
   };
 
@@ -126,11 +156,21 @@ export const WorkspaceProvider = ({ children }: { children: ReactNode }) => {
   // Restaurar workspace do localStorage
   useEffect(() => {
     const savedWorkspaceId = localStorage.getItem('flexi_workspace_ativo');
+    console.log('💾 [WorkspaceContext] localStorage workspace_ativo:', savedWorkspaceId);
+    console.log('💾 [WorkspaceContext] Workspaces disponíveis:', workspacesDisponiveis.length);
+    
     if (savedWorkspaceId && workspacesDisponiveis.length > 0) {
       const workspace = workspacesDisponiveis.find(w => w.id === savedWorkspaceId);
+      console.log('💾 [WorkspaceContext] Workspace encontrado no localStorage:', workspace);
+      
       if (workspace) {
+        console.log('✅ [WorkspaceContext] Restaurando workspace:', workspace.nome);
         setWorkspaceAtivo(workspace);
+      } else {
+        console.log('⚠️ [WorkspaceContext] Workspace salvo não encontrado na lista');
       }
+    } else {
+      console.log('ℹ️ [WorkspaceContext] Sem workspace salvo ou lista vazia');
     }
   }, [workspacesDisponiveis]);
 
