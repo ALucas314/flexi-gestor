@@ -25,9 +25,8 @@ export const HMRReloader = () => {
     let checkInterval: NodeJS.Timeout;
 
     const silentReload = () => {
-      console.log('🔄 [Auto-Reload] Recarregando silenciosamente...');
-      
-      // Usar replace para não adicionar histórico
+      // Completamente silencioso - sem logs
+      // Usar replace para não adicionar histórico e ser instantâneo
       window.location.replace(window.location.href);
     };
 
@@ -35,17 +34,14 @@ export const HMRReloader = () => {
     if (import.meta.hot) {
       // Detectar conexão/desconexão do WebSocket
       import.meta.hot.on('vite:ws:connect', () => {
-        console.log('✅ [HMR] Conectado ao servidor Vite');
         isConnected = true;
         reconnectAttempts = 0;
         lastHeartbeat = Date.now();
         setIsReconnecting(false);
-        
         clearTimeout(reloadTimeout);
       });
 
       import.meta.hot.on('vite:ws:disconnect', () => {
-        console.log('⚠️ [HMR] Desconectado do servidor Vite');
         isConnected = false;
         setIsReconnecting(true);
         
@@ -68,9 +64,7 @@ export const HMRReloader = () => {
       });
 
       // Erro no HMR - aguardar e recarregar
-      import.meta.hot.on('vite:error', (err) => {
-        console.log('❌ [HMR] Erro detectado:', err);
-        
+      import.meta.hot.on('vite:error', () => {
         // Aguardar 2 segundos (tempo para resolver) e recarregar
         reloadTimeout = setTimeout(() => {
           silentReload();
@@ -89,18 +83,14 @@ export const HMRReloader = () => {
       
       // Se passou mais de 30 segundos sem sinal do servidor
       if (isConnected && timeSinceHeartbeat > 30000) {
-        console.log('💀 [HMR] Servidor não responde há 30s, verificando...');
-        
         // Fazer um ping no servidor
         fetch(window.location.origin)
           .then(() => {
-            // Servidor está online mas HMR morreu - recarregar
-            console.log('🔄 [HMR] Servidor online, mas HMR morto - recarregando...');
+            // Servidor está online mas HMR morreu - recarregar silenciosamente
             silentReload();
           })
           .catch(() => {
-            // Servidor realmente está offline
-            console.log('⏳ [HMR] Servidor offline, aguardando...');
+            // Servidor offline, não fazer nada
           });
       }
     }, 10000); // Verifica a cada 10 segundos
