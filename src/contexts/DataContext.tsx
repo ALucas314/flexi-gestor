@@ -8,7 +8,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from './AuthContext';
-import { useWorkspace } from './WorkspaceContext';
 
 // Interfaces dos dados
 interface Product {
@@ -86,11 +85,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [isLoading, setIsLoading] = useState(false);
 
   const { isAuthenticated, user } = useAuth();
-  const { workspaceAtivo } = useWorkspace();
 
-  // 🔄 Carregar dados do Supabase quando o usuário estiver autenticado OU workspace mudar
+  // 🔄 Carregar dados do Supabase quando o usuário estiver autenticado
   useEffect(() => {
-    if (isAuthenticated && user && workspaceAtivo) {
+    if (isAuthenticated && user) {
       refreshData();
       loadNotificationsFromLocalStorage();
     } else if (!isAuthenticated || !user) {
@@ -99,7 +97,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       setMovements([]);
       setNotifications([]);
     }
-  }, [isAuthenticated, user, workspaceAtivo]);
+  }, [isAuthenticated, user]);
 
   // 📦 Carregar notificações do localStorage
   const loadNotificationsFromLocalStorage = () => {
@@ -150,16 +148,14 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
   // 🔄 Função para recarregar apenas os produtos
   const refreshProducts = async () => {
-    if (!user?.id || !workspaceAtivo?.id) return;
+    if (!user?.id) return;
 
     try {
-      // Usar workspace ativo ao invés de user.id
-      const usuarioId = workspaceAtivo.id;
-      
+      // Buscar TODOS os produtos que o usuário tem acesso
+      // O RLS já filtra automaticamente (próprios + compartilhados)
       const { data, error } = await supabase
         .from('produtos')
         .select('*')
-        .eq('usuario_id', usuarioId)
         .order('criado_em', { ascending: false });
 
       if (error) {
@@ -189,19 +185,17 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
   // 🔄 Função para recarregar apenas as movimentações
   const refreshMovements = async () => {
-    if (!user?.id || !workspaceAtivo?.id) return;
+    if (!user?.id) return;
 
     try {
-      // Usar workspace ativo ao invés de user.id
-      const usuarioId = workspaceAtivo.id;
-      
+      // Buscar TODAS as movimentações que o usuário tem acesso
+      // O RLS já filtra automaticamente (próprias + compartilhadas)
       const { data, error } = await supabase
         .from('movimentacoes')
         .select(`
           *,
           product:produtos(id, nome, sku)
         `)
-        .eq('usuario_id', usuarioId)
         .order('criado_em', { ascending: false });
 
       if (error) {
@@ -235,13 +229,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
   // ➕ Adicionar produto
   const addProduct = async (product: Omit<Product, 'id'>) => {
-    if (!user?.id || !workspaceAtivo?.id) {
-      throw new Error('Usuário não autenticado ou workspace não selecionado');
+    if (!user?.id) {
+      throw new Error('Usuário não autenticado');
     }
 
     try {
-      // Usar workspace ativo para criar o produto
-      const usuarioId = workspaceAtivo.id;
+      // Sempre criar no ID do usuário logado (não no workspace)
       const { data, error } = await supabase
         .from('produtos')
         .insert([{
@@ -254,7 +247,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           unidade_medida: 'UN',
           fornecedor: 'Fornecedor Padrão',
           descricao: product.description,
-          usuario_id: usuarioId
+          usuario_id: user.id
         }])
         .select()
         .single();
@@ -392,7 +385,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           metodo_pagamento: null,
           observacoes: movement.description,
           numero_recibo: receiptNumber,
-          usuario_id: workspaceAtivo?.id || user.id
+          usuario_id: user.id
         }])
         .select(`
           *,

@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
 import { useResponsive } from "@/hooks/use-responsive";
 import { useSidebar } from "@/contexts/SidebarContext";
+import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { Button } from "@/components/ui/button";
 
 interface SidebarProps {
@@ -78,11 +79,36 @@ export const Sidebar = ({ className, variant = 'overlay', onNavigate }: SidebarP
   const location = useLocation();
   const { isMobile, isTablet, screenWidth } = useResponsive();
   const { isPinned, togglePin } = useSidebar();
+  const { workspaceAtivo } = useWorkspace();
   const [customColors, setCustomColors] = useState({
     primary: '#1E40AF',
     secondary: '#374151',
     accent: '#059669'
   });
+
+  // Filtrar itens de navegação baseado nas permissões do workspace
+  const getNavigationItems = () => {
+    // Se é workspace próprio, mostrar tudo
+    if (!workspaceAtivo || workspaceAtivo.tipo === 'proprio') {
+      return navigationItems;
+    }
+
+    // Se é workspace compartilhado, filtrar por permissões
+    const permissoes = workspaceAtivo.permissoes || [];
+    
+    return navigationItems.filter(item => {
+      // Dashboard e Compartilhar sempre disponíveis
+      if (item.path === '/' || item.path === '/compartilhar') {
+        return true;
+      }
+      
+      // Verificar se tem permissão
+      const itemKey = item.path.substring(1); // Remove o /
+      return permissoes.includes(itemKey);
+    });
+  };
+
+  const filteredNavigationItems = getNavigationItems();
 
   // Aplicar cores personalizadas
   useEffect(() => {
@@ -154,7 +180,7 @@ export const Sidebar = ({ className, variant = 'overlay', onNavigate }: SidebarP
           )}
         </div>
         
-        {navigationItems.map((item) => {
+        {filteredNavigationItems.map((item) => {
           const isActive = location.pathname === item.path;
           
           return (

@@ -17,14 +17,53 @@ import { Badge } from '@/components/ui/badge';
 export const WorkspaceSelector = () => {
   const { workspaceAtivo, workspacesDisponiveis, trocarWorkspace, isLoading } = useWorkspace();
 
+  console.log('🏢 [WorkspaceSelector]', {
+    isLoading,
+    workspaceAtivo,
+    workspacesDisponiveis,
+    total: workspacesDisponiveis.length
+  });
+
   if (isLoading || !workspaceAtivo) {
+    console.log('⏳ [WorkspaceSelector] Aguardando carregar...');
     return null;
   }
 
   // Se só tem um workspace (o próprio), não mostrar seletor
   if (workspacesDisponiveis.length <= 1) {
+    console.log('ℹ️ [WorkspaceSelector] Apenas 1 workspace, não mostrando seletor');
     return null;
   }
+
+  console.log('✅ [WorkspaceSelector] Mostrando seletor com', workspacesDisponiveis.length, 'workspaces');
+
+  // Encontrar workspace compartilhado (para teste)
+  const workspaceCompartilhado = workspacesDisponiveis.find(w => w.tipo === 'compartilhado');
+
+  console.log('🔍 [WorkspaceSelector] Workspace compartilhado:', workspaceCompartilhado);
+  console.log('🔍 [WorkspaceSelector] Workspace ativo tipo:', workspaceAtivo.tipo);
+  console.log('🔍 [WorkspaceSelector] Vai mostrar botão teste?', !!workspaceCompartilhado && workspaceAtivo.tipo === 'proprio');
+
+  // BOTÃO DE TESTE - remover depois
+  if (workspaceCompartilhado && workspaceAtivo.tipo === 'proprio') {
+    console.log('✅ [WorkspaceSelector] RENDERIZANDO BOTÃO ROXO DE TESTE');
+    return (
+      <div className="flex gap-2">
+        <Button
+          onClick={() => {
+            console.log('🧪 [TESTE] CLICOU NO BOTÃO ROXO!');
+            console.log('🧪 [TESTE] Trocando diretamente para workspace compartilhado:', workspaceCompartilhado);
+            trocarWorkspace(workspaceCompartilhado.id);
+          }}
+          className="bg-purple-600 hover:bg-purple-700 text-white text-xs sm:text-sm px-3 py-2"
+        >
+          🧪 Testar: Trocar para {workspaceCompartilhado.nome}
+        </Button>
+      </div>
+    );
+  }
+  
+  console.log('⚠️ [WorkspaceSelector] NÃO vai mostrar botão de teste');
 
   return (
     <DropdownMenu>
@@ -55,9 +94,16 @@ export const WorkspaceSelector = () => {
         {workspacesDisponiveis.map((workspace) => (
           <DropdownMenuItem
             key={workspace.id}
-            onClick={() => {
+            onSelect={(e) => {
+              console.log('🖱️ [WorkspaceSelector] Clicou em workspace:', workspace);
+              console.log('🖱️ [WorkspaceSelector] Workspace ativo:', workspaceAtivo);
+              
               if (workspace.id !== workspaceAtivo.id) {
+                console.log('✅ [WorkspaceSelector] Workspace diferente, trocando...');
+                e.preventDefault(); // Prevenir fechamento imediato
                 trocarWorkspace(workspace.id);
+              } else {
+                console.log('ℹ️ [WorkspaceSelector] Já está neste workspace');
               }
             }}
             className="cursor-pointer"

@@ -93,9 +93,6 @@ export const Header = () => {
 
         {/* Ações do Usuário */}
         <div className={`flex items-center ${isMobile ? 'space-x-2' : 'space-x-2 md:space-x-3'}`}>
-          {/* Seletor de Workspace */}
-          <WorkspaceSelector />
-          
           {/* Notificações */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

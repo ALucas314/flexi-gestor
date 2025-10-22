@@ -2,12 +2,14 @@
 // Permite compartilhar dados com outros usuários
 
 import React, { useState, useEffect } from 'react';
-import { Users, UserPlus, Trash2, Mail, Clock, CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import { Users, UserPlus, Trash2, Mail, Clock, CheckCircle, XCircle, Loader2, Settings, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
@@ -18,6 +20,7 @@ interface Compartilhamento {
   usuario_compartilhado_id: string;
   status: string;
   criado_em: string;
+  permissoes: string[];
   usuario: {
     id: string;
     email: string;
@@ -25,13 +28,33 @@ interface Compartilhamento {
   };
 }
 
+const PAGINAS_DISPONIVEIS = [
+  { id: 'produtos', label: 'Produtos', icon: '📦' },
+  { id: 'entradas', label: 'Entradas', icon: '📥' },
+  { id: 'saidas', label: 'Saídas', icon: '📤' },
+  { id: 'relatorios', label: 'Relatórios', icon: '📊' },
+  { id: 'financeiro', label: 'Financeiro', icon: '💰' },
+  { id: 'pdv', label: 'PDV', icon: '🛒' }
+];
+
 const Compartilhar = () => {
   const { user } = useAuth();
   const [emailCompartilhar, setEmailCompartilhar] = useState('');
+  const [permissoesSelecionadas, setPermissoesSelecionadas] = useState<string[]>([
+    'produtos', 'entradas', 'saidas', 'relatorios', 'financeiro', 'pdv'
+  ]);
   const [compartilhamentos, setCompartilhamentos] = useState<Compartilhamento[]>([]);
   const [compartilhadosComigo, setCompartilhadosComigo] = useState<Compartilhamento[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
+
+  const togglePermissao = (paginaId: string) => {
+    setPermissoesSelecionadas(prev => 
+      prev.includes(paginaId)
+        ? prev.filter(p => p !== paginaId)
+        : [...prev, paginaId]
+    );
+  };
 
   // Carregar compartilhamentos
   useEffect(() => {
@@ -148,6 +171,11 @@ const Compartilhar = () => {
       return;
     }
 
+    if (permissoesSelecionadas.length === 0) {
+      toast.error('Selecione pelo menos uma permissão');
+      return;
+    }
+
     setIsAdding(true);
     try {
       console.log('🔍 [Compartilhar] Buscando usuário no banco...');
@@ -212,6 +240,7 @@ const Compartilhar = () => {
           .from('compartilhamentos')
           .update({ 
             status: 'ativo',
+            permissoes: permissoesSelecionadas,
             atualizado_em: new Date().toISOString()
           })
           .eq('id', existente.id);
@@ -232,7 +261,8 @@ const Compartilhar = () => {
           .insert([{
             dono_id: user.id,
             usuario_compartilhado_id: usuarioData.id,
-            status: 'ativo'
+            status: 'ativo',
+            permissoes: permissoesSelecionadas
           }])
           .select();
 
@@ -347,11 +377,53 @@ const Compartilhar = () => {
             </Button>
           </div>
 
+          {/* Seletor de Permissões */}
+          <div className="border-2 border-indigo-100 rounded-lg p-4 bg-gradient-to-r from-indigo-50/50 to-purple-50/50">
+            <div className="flex items-center gap-2 mb-3">
+              <Shield className="h-5 w-5 text-indigo-600" />
+              <Label className="text-sm font-semibold text-gray-900">
+                Permissões de Acesso
+              </Label>
+            </div>
+            <p className="text-xs text-gray-600 mb-4">
+              Selecione quais páginas o usuário poderá acessar:
+            </p>
+            
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {PAGINAS_DISPONIVEIS.map((pagina) => (
+                <div key={pagina.id} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`perm-${pagina.id}`}
+                    checked={permissoesSelecionadas.includes(pagina.id)}
+                    onCheckedChange={() => togglePermissao(pagina.id)}
+                    className="border-indigo-300"
+                  />
+                  <Label
+                    htmlFor={`perm-${pagina.id}`}
+                    className="text-sm cursor-pointer flex items-center gap-1"
+                  >
+                    <span>{pagina.icon}</span>
+                    <span>{pagina.label}</span>
+                  </Label>
+                </div>
+              ))}
+            </div>
+            
+            {permissoesSelecionadas.length === 0 && (
+              <Alert variant="destructive" className="mt-3">
+                <XCircle className="h-4 w-4" />
+                <AlertDescription className="text-sm">
+                  Selecione pelo menos uma permissão
+                </AlertDescription>
+              </Alert>
+            )}
+          </div>
+
           <Alert className="bg-blue-50 border-blue-200">
             <CheckCircle className="h-4 w-4 text-blue-600" />
             <AlertDescription className="text-sm text-blue-800">
-              <strong>Atenção:</strong> O usuário poderá ver e editar todos os seus produtos, movimentos e lotes.
-              Você pode remover o acesso a qualquer momento.
+              <strong>Atenção:</strong> O usuário poderá ver e editar apenas as páginas selecionadas acima.
+              Você pode alterar as permissões ou remover o acesso a qualquer momento.
             </AlertDescription>
           </Alert>
         </CardContent>
@@ -407,6 +479,21 @@ const Compartilhar = () => {
                         <Clock className="h-3 w-3" />
                         Desde {new Date(comp.criado_em).toLocaleDateString('pt-BR')}
                       </p>
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {comp.permissoes?.map((perm: string) => {
+                          const pagina = PAGINAS_DISPONIVEIS.find(p => p.id === perm);
+                          return pagina ? (
+                            <Badge key={perm} variant="secondary" className="text-xs bg-green-100 text-green-700">
+                              {pagina.icon} {pagina.label}
+                            </Badge>
+                          ) : null;
+                        })}
+                        {(!comp.permissoes || comp.permissoes.length === 0) && (
+                          <Badge variant="destructive" className="text-xs">
+                            Sem permissões
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <Button
