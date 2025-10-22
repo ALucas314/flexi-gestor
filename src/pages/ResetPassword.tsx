@@ -8,12 +8,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/lib/supabase';
 
 const ResetPassword = () => {
   const navigate = useNavigate();
-  const { changePassword } = useAuth();
 
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -23,65 +20,60 @@ const ResetPassword = () => {
   const [isValidating, setIsValidating] = useState(true);
   const [tokenValid, setTokenValid] = useState(false);
   const [userEmail, setUserEmail] = useState('');
+  const [accessToken, setAccessToken] = useState<string>('');
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
   // Validar token ao carregar a página
   useEffect(() => {
-    const validateSession = async () => {
+    const validateToken = () => {
+      console.log('🔍 [ResetPassword] Verificando URL...');
+      
       try {
         // O Supabase redireciona com #access_token=...&type=recovery
         const hashParams = new URLSearchParams(window.location.hash.substring(1));
         const accessToken = hashParams.get('access_token');
         const type = hashParams.get('type');
 
+        console.log('🔍 Type:', type, 'Token presente:', !!accessToken);
+
         if (type === 'recovery' && accessToken) {
-          // Definir a sessão com o token de recuperação
-          const { data, error } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: hashParams.get('refresh_token') || ''
-          });
-
-          if (error) {
-            setMessage({ type: 'error', text: 'Link inválido ou expirado' });
-            setTokenValid(false);
-          } else if (data.user) {
-            // Verificar se o perfil existe, senão criar
-            const { data: profile, error: profileError } = await supabase
-              .from('perfis')
-              .select('*')
-              .eq('id', data.user.id)
-              .single();
-
-            if (profileError && profileError.code === 'PGRST116') {
-              // Perfil não existe, criar
-              await supabase.from('perfis').insert([{
-                id: data.user.id,
-                email: data.user.email,
-                nome: data.user.user_metadata?.name || null,
-                criado_em: new Date().toISOString(),
-                atualizado_em: new Date().toISOString()
-              }]);
-            }
+          console.log('✅ Token de recovery válido detectado');
+          
+          // Decodificar o JWT para obter o email (sem fazer request ao servidor)
+          try {
+            const payload = JSON.parse(atob(accessToken.split('.')[1]));
+            const email = payload.email || '';
             
+            console.log('✅ Token válido para:', email);
+            
+            // 🔑 IMPORTANTE: Salvar token em memória!
+            setAccessToken(accessToken);
             setTokenValid(true);
-            setUserEmail(data.user.email || '');
-          } else {
+            setUserEmail(email);
+          } catch (decodeError) {
+            console.error('❌ Erro ao decodificar token:', decodeError);
             setMessage({ type: 'error', text: 'Token inválido' });
             setTokenValid(false);
           }
         } else {
+          console.error('❌ URL não contém token de recovery válido');
           setMessage({ type: 'error', text: 'Link de recuperação inválido' });
           setTokenValid(false);
         }
       } catch (error) {
+        console.error('❌ Erro ao validar:', error);
         setMessage({ type: 'error', text: 'Erro ao validar link de recuperação' });
         setTokenValid(false);
       } finally {
+        console.log('🏁 Validação concluída');
         setIsValidating(false);
       }
     };
 
-    validateSession();
+    // Aguardar um pouco para garantir que o hash foi carregado
+    const timer = setTimeout(validateToken, 100);
+    
+    return () => clearTimeout(timer);
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -107,29 +99,69 @@ const ResetPassword = () => {
     setMessage(null);
 
     try {
-      const success = await changePassword(newPassword);
+      console.log('🔐 Iniciando redefinição de senha...');
+      console.log('🔍 Token em memória:', accessToken ? `${accessToken.substring(0, 20)}...` : 'NULO');
 
-      if (success) {
-        setMessage({ 
-          type: 'success', 
-          text: 'Senha alterada com sucesso! Redirecionando para login...' 
-        });
-        
-        // Fazer logout para limpar a sessão de recuperação
-        await supabase.auth.signOut();
-        
-        // Redirecionar para login após 3 segundos
-        setTimeout(() => {
-          navigate('/login');
-        }, 3000);
+      if (!accessToken) {
+        console.error('❌ Token não encontrado em memória!');
+        setMessage({ type: 'error', text: 'Sessão expirada. Por favor, solicite um novo link.' });
+        setIsLoading(false);
+        return;
       }
+
+      console.log('🔑 Usando API REST direta do Supabase...');
+
+      // Usar API REST diretamente (sem setSession que trava)
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      console.log('🔍 Supabase URL:', supabaseUrl);
+      console.log('🔍 Fazendo PUT request para atualizar senha...');
+      
+      const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY
+        },
+        body: JSON.stringify({
+          password: newPassword
+        })
+      });
+
+      console.log('🔍 Resposta API recebida, status:', response.status);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('❌ Erro da API:', errorData);
+        
+        if (response.status === 401 || response.status === 403) {
+          setMessage({ type: 'error', text: 'Link expirado. Solicite um novo link de recuperação.' });
+        } else {
+          setMessage({ type: 'error', text: 'Erro ao alterar senha. Tente novamente.' });
+        }
+        setIsLoading(false);
+        return;
+      }
+
+      const data = await response.json();
+      console.log('✅ Senha alterada com sucesso!', data);
+
+      setMessage({ 
+        type: 'success', 
+        text: 'Senha alterada com sucesso! Redirecionando para login...' 
+      });
+      
+      // Redirecionar para login após 2 segundos
+      setTimeout(() => {
+        navigate('/login');
+      }, 2000);
+
     } catch (error) {
-      console.error('Erro:', error);
+      console.error('❌ Erro ao redefinir senha:', error);
       setMessage({ 
         type: 'error', 
-        text: 'Erro ao alterar senha. Tente novamente.' 
+        text: 'Erro ao alterar senha. Verifique sua conexão e tente novamente.' 
       });
-    } finally {
       setIsLoading(false);
     }
   };
