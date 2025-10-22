@@ -14,6 +14,7 @@ import Financeiro from "./pages/Financeiro";
 import PDV from "./pages/PDV";
 import Perfil from "./pages/Perfil";
 import AlterarSenha from "./pages/AlterarSenha";
+import Compartilhar from "./pages/Compartilhar";
 import Login from "./pages/Login";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
@@ -71,6 +72,7 @@ const App = () => (
                           <Route path="/pdv" element={<PDV />} />
                           <Route path="/perfil" element={<Perfil />} />
                           <Route path="/alterar-senha" element={<AlterarSenha />} />
+                          <Route path="/compartilhar" element={<Compartilhar />} />
                           <Route path="*" element={<NotFound />} />
                         </Routes>
                   </LayoutWithSidebar>

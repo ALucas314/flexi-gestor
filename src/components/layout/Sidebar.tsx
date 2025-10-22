@@ -6,6 +6,7 @@ import {
   FileText, 
   DollarSign,
   ShoppingCart,
+  Users,
   Pin,
   PinOff
 } from "lucide-react";
@@ -64,6 +65,12 @@ const navigationItems = [
     label: "PDV", 
     path: "/pdv",
     description: "Ponto de Venda"
+  },
+  { 
+    icon: Users, 
+    label: "Compartilhar", 
+    path: "/compartilhar",
+    description: "Gerenciar acesso"
   }
 ];
 
