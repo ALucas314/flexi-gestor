@@ -43,6 +43,7 @@ const Compartilhar = () => {
   const carregarCompartilhamentos = async () => {
     if (!user) return;
 
+    console.log('🔍 [Compartilhar] Carregando compartilhamentos...');
     setIsLoading(true);
     try {
       // Compartilhamentos que EU criei (pessoas com acesso aos MEUS dados)
@@ -53,9 +54,20 @@ const Compartilhar = () => {
         .eq('status', 'ativo')
         .order('criado_em', { ascending: false });
 
+      console.log('🔍 [Compartilhar] Meus compartilhamentos:', { meusCompartilhamentos, error1 });
+
       if (error1) {
-        console.error('Erro ao carregar meus compartilhamentos:', error1);
-        throw error1;
+        console.error('❌ [Compartilhar] Erro ao carregar:', error1);
+        
+        // Verificar se é erro de tabela não existir
+        if (error1.code === '42P01') {
+          toast.error('⚠️ Tabela "compartilhamentos" não existe! Execute o SQL primeiro.');
+        } else {
+          toast.error(`Erro: ${error1.message}`);
+        }
+        
+        setIsLoading(false);
+        return;
       }
 
       // Buscar dados dos usuários compartilhados
@@ -118,7 +130,13 @@ const Compartilhar = () => {
   };
 
   const adicionarCompartilhamento = async () => {
-    if (!user) return;
+    console.log('🔍 [Compartilhar] Iniciando...', { user, emailCompartilhar });
+    
+    if (!user) {
+      console.error('❌ [Compartilhar] Usuário não autenticado!');
+      toast.error('Você precisa estar logado');
+      return;
+    }
 
     if (!emailCompartilhar.trim()) {
       toast.error('Digite um email válido');
@@ -132,6 +150,8 @@ const Compartilhar = () => {
 
     setIsAdding(true);
     try {
+      console.log('🔍 [Compartilhar] Buscando usuário no banco...');
+      
       // Buscar usuário pelo email
       const { data: usuarioData, error: usuarioError } = await supabase
         .from('perfis')
@@ -139,26 +159,42 @@ const Compartilhar = () => {
         .eq('email', emailCompartilhar.trim())
         .maybeSingle();
 
+      console.log('🔍 [Compartilhar] Resultado busca:', { usuarioData, usuarioError });
+
       if (usuarioError) {
-        console.error('Erro ao buscar usuário:', usuarioError);
-        toast.error('Erro ao buscar usuário');
+        console.error('❌ [Compartilhar] Erro ao buscar usuário:', usuarioError);
+        toast.error(`Erro ao buscar usuário: ${usuarioError.message}`);
         setIsAdding(false);
         return;
       }
 
       if (!usuarioData) {
-        toast.error('Usuário não encontrado. Verifique o email.');
+        console.error('❌ [Compartilhar] Usuário não encontrado no banco');
+        toast.error('Usuário não encontrado. Ele precisa estar registrado no sistema.');
         setIsAdding(false);
         return;
       }
 
+      console.log('✅ [Compartilhar] Usuário encontrado:', usuarioData);
+
+      console.log('🔍 [Compartilhar] Verificando se já existe compartilhamento...');
+      
       // Verificar se já existe compartilhamento
-      const { data: existente } = await supabase
+      const { data: existente, error: checkError } = await supabase
         .from('compartilhamentos')
         .select('id')
         .eq('dono_id', user.id)
         .eq('usuario_compartilhado_id', usuarioData.id)
         .maybeSingle();
+
+      console.log('🔍 [Compartilhar] Resultado verificação:', { existente, checkError });
+
+      if (checkError) {
+        console.error('❌ [Compartilhar] Erro ao verificar:', checkError);
+        toast.error(`Erro: ${checkError.message}. A tabela 'compartilhamentos' existe?`);
+        setIsAdding(false);
+        return;
+      }
 
       if (existente) {
         toast.error('Você já compartilhou acesso com este usuário');
@@ -166,17 +202,26 @@ const Compartilhar = () => {
         return;
       }
 
+      console.log('🔍 [Compartilhar] Criando compartilhamento...');
+      
       // Criar compartilhamento
-      const { error: insertError } = await supabase
+      const { data: insertData, error: insertError } = await supabase
         .from('compartilhamentos')
         .insert([{
           dono_id: user.id,
           usuario_compartilhado_id: usuarioData.id,
           status: 'ativo'
-        }]);
+        }])
+        .select();
 
-      if (insertError) throw insertError;
+      console.log('🔍 [Compartilhar] Resultado criação:', { insertData, insertError });
 
+      if (insertError) {
+        console.error('❌ [Compartilhar] Erro ao criar:', insertError);
+        throw insertError;
+      }
+
+      console.log('✅ [Compartilhar] Sucesso!');
       toast.success(`Acesso compartilhado com ${emailCompartilhar}`);
       setEmailCompartilhar('');
       carregarCompartilhamentos();
