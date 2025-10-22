@@ -23,6 +23,7 @@ import NotFound from "./pages/NotFound";
 
 // 📊 Importar contextos com Prisma
 import { AuthProvider } from "./contexts/AuthContext";
+import { WorkspaceProvider } from "./contexts/WorkspaceContext";
 import { DataProvider } from "./contexts/DataContext";
 import { SidebarProvider } from "./contexts/SidebarContext";
 
@@ -36,10 +37,12 @@ const App = () => (
     <TooltipProvider>
       {/* 🔐 Auth Provider - Gerencia autenticação com JWT */}
       <AuthProvider>
-        {/* 🗄️ Data Provider - Gerencia dados com Prisma API */}
-        <DataProvider>
-          {/* 📌 Sidebar Provider - Gerencia estado da sidebar (pinada/overlay) */}
-          <SidebarProvider>
+        {/* 🏢 Workspace Provider - Gerencia qual workspace está ativo */}
+        <WorkspaceProvider>
+          {/* 🗄️ Data Provider - Gerencia dados com Prisma API */}
+          <DataProvider>
+            {/* 📌 Sidebar Provider - Gerencia estado da sidebar (pinada/overlay) */}
+            <SidebarProvider>
             {/* 🔄 Auto-reload quando HMR desconecta */}
             <HMRReloader />
             <Toaster />
@@ -80,8 +83,9 @@ const App = () => (
               } />
             </Routes>
           </BrowserRouter>
-          </SidebarProvider>
-        </DataProvider>
+            </SidebarProvider>
+          </DataProvider>
+        </WorkspaceProvider>
       </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>
