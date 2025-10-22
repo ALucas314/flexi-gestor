@@ -91,7 +91,6 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   // 🔄 Carregar dados do Supabase quando o usuário estiver autenticado OU mudar workspace
   useEffect(() => {
     if (isAuthenticated && user && workspaceAtivo) {
-      console.log('🔄 [DataContext] Carregando dados do workspace:', workspaceAtivo.nome);
       refreshData();
       loadNotificationsFromLocalStorage();
     } else if (!isAuthenticated || !user) {
@@ -152,8 +151,6 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   // 🔄 Função para recarregar apenas os produtos
   const refreshProducts = async () => {
     if (!user?.id || !workspaceAtivo?.id) return;
-
-    console.log('🔄 [DataContext] Carregando produtos do workspace:', workspaceAtivo.nome);
     
     try {
       // Filtrar produtos APENAS do workspace ativo
@@ -163,10 +160,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         .eq('usuario_id', workspaceAtivo.id) // Filtro explícito por workspace
         .order('criado_em', { ascending: false });
 
-      console.log('📦 [DataContext] Produtos retornados:', data?.length || 0, data);
-
       if (error) {
-        console.error('❌ [DataContext] Erro ao carregar produtos:', error);
         throw error;
       }
 
@@ -195,8 +189,6 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const refreshMovements = async () => {
     if (!user?.id || !workspaceAtivo?.id) return;
 
-    console.log('🔄 [DataContext] Carregando movimentações do workspace:', workspaceAtivo.nome);
-
     try {
       // Filtrar movimentações APENAS do workspace ativo
       const { data, error } = await supabase
@@ -208,10 +200,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         .eq('usuario_id', workspaceAtivo.id) // Filtro explícito por workspace
         .order('criado_em', { ascending: false });
 
-      console.log('📋 [DataContext] Movimentações retornadas:', data?.length || 0, data);
-
       if (error) {
-        console.error('❌ [DataContext] Erro ao carregar movimentações:', error);
         throw error;
       }
 
