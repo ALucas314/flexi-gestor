@@ -100,51 +100,55 @@ const ResetPassword = () => {
 
     try {
       console.log('🔐 Iniciando redefinição de senha...');
-      console.log('🔍 Token em memória:', accessToken ? `${accessToken.substring(0, 20)}...` : 'NULO');
 
-      if (!accessToken) {
-        console.error('❌ Token não encontrado em memória!');
-        setMessage({ type: 'error', text: 'Sessão expirada. Por favor, solicite um novo link.' });
+      // Importar supabase client
+      const { supabase } = await import('@/lib/supabase');
+
+      // Primeiro, restaurar a sessão usando o token de recovery
+      const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: accessToken, // Em recovery, usamos o mesmo token
+      });
+
+      if (sessionError) {
+        console.error('❌ Erro ao restaurar sessão:', sessionError);
+        setMessage({ 
+          type: 'error', 
+          text: 'Link expirado ou inválido. Solicite um novo link de recuperação.' 
+        });
         setIsLoading(false);
         return;
       }
 
-      console.log('🔑 Usando API REST direta do Supabase...');
+      console.log('✅ Sessão restaurada com sucesso');
 
-      // Usar API REST diretamente (sem setSession que trava)
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      console.log('🔍 Supabase URL:', supabaseUrl);
-      console.log('🔍 Fazendo PUT request para atualizar senha...');
-      
-      const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY
-        },
-        body: JSON.stringify({
-          password: newPassword
-        })
+      // Agora atualizar a senha do usuário
+      const { data, error } = await supabase.auth.updateUser({
+        password: newPassword
       });
 
-      console.log('🔍 Resposta API recebida, status:', response.status);
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error('❌ Erro da API:', errorData);
+      if (error) {
+        console.error('❌ Erro ao atualizar senha:', error);
         
-        if (response.status === 401 || response.status === 403) {
-          setMessage({ type: 'error', text: 'Link expirado. Solicite um novo link de recuperação.' });
+        if (error.message.includes('expired') || error.message.includes('invalid')) {
+          setMessage({ 
+            type: 'error', 
+            text: 'Link expirado. Solicite um novo link de recuperação.' 
+          });
         } else {
-          setMessage({ type: 'error', text: 'Erro ao alterar senha. Tente novamente.' });
+          setMessage({ 
+            type: 'error', 
+            text: 'Erro ao alterar senha. Tente novamente.' 
+          });
         }
         setIsLoading(false);
         return;
       }
 
-      const data = await response.json();
       console.log('✅ Senha alterada com sucesso!', data);
+
+      // Fazer logout para forçar novo login
+      await supabase.auth.signOut();
 
       setMessage({ 
         type: 'success', 
