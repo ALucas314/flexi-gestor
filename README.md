@@ -272,11 +272,7 @@ VITE_SUPABASE_ANON_KEY=sua_chave_aqui
 
 </div>
 
-### 🆘 **Canais de Suporte**
-- **📧 Email**: suporte@flexigestor.com
-- **📱 WhatsApp**: +55 11 99999-9999
-- **💼 LinkedIn**: [Flexi Gestor](https://linkedin.com/company/flexigestor)
-- **📚 Documentação**: [docs.flexigestor.com](https://docs.flexigestor.com)
+
 
 ---
 
