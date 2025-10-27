@@ -48,32 +48,43 @@ export const WorkspaceProvider = ({ children }: { children: ReactNode }) => {
         });
 
         // 2️⃣ Workspaces compartilhados COMIGO
-        const { data: compartilhados } = await supabase
-          .from('compartilhamentos')
-          .select('id, dono_id, permissoes')
-          .eq('usuario_compartilhado_id', user.id)
-          .eq('status', 'ativo');
+        try {
+          const { data: compartilhados, error: compartilhadosError } = await supabase
+            .from('compartilhamentos')
+            .select('id, dono_id, permissoes')
+            .eq('usuario_compartilhado_id', user.id)
+            .eq('status', 'ativo');
 
-        if (compartilhados && compartilhados.length > 0) {
-          const donosIds = compartilhados.map(c => c.dono_id);
-          const { data: donos } = await supabase
-            .from('perfis')
-            .select('id, email, nome')
-            .in('id', donosIds);
+          if (compartilhadosError) {
+            console.error('Erro ao carregar compartilhamentos:', compartilhadosError);
+          } else if (compartilhados && compartilhados.length > 0) {
+            const donosIds = compartilhados.map(c => c.dono_id);
+            const { data: donos, error: donosError } = await supabase
+              .from('perfis')
+              .select('id, email, nome')
+              .in('id', donosIds);
 
-          compartilhados.forEach((comp: any) => {
-            const dono = donos?.find((d: any) => d.id === comp.dono_id);
-            if (dono) {
-              workspaces.push({
-                id: comp.dono_id,
-                nome: dono.nome || dono.email,
-                email: dono.email,
-                tipo: 'compartilhado',
-                compartilhamentoId: comp.id,
-                permissoes: comp.permissoes || []
+            if (donosError) {
+              console.error('Erro ao carregar donos:', donosError);
+            } else if (donos) {
+              compartilhados.forEach((comp: any) => {
+                const dono = donos.find((d: any) => d.id === comp.dono_id);
+                if (dono) {
+                  workspaces.push({
+                    id: comp.dono_id,
+                    nome: dono.nome || dono.email,
+                    email: dono.email,
+                    tipo: 'compartilhado',
+                    compartilhamentoId: comp.id,
+                    permissoes: comp.permissoes || []
+                  });
+                }
               });
             }
-          });
+          }
+        } catch (error) {
+          console.error('Erro ao carregar compartilhamentos:', error);
+          // Continuar mesmo com erro
         }
 
         setWorkspacesDisponiveis(workspaces);
@@ -82,11 +93,25 @@ export const WorkspaceProvider = ({ children }: { children: ReactNode }) => {
         const savedId = localStorage.getItem('flexi_workspace_ativo');
         const workspace = workspaces.find(w => w.id === savedId) || workspaces[0];
         
-        setWorkspaceAtivo(workspace);
-        localStorage.setItem('flexi_workspace_ativo', workspace.id);
+        if (workspace) {
+          setWorkspaceAtivo(workspace);
+          localStorage.setItem('flexi_workspace_ativo', workspace.id);
+        } else {
+          console.error('❌ Nenhum workspace disponível');
+        }
 
       } catch (error) {
-        console.error('Erro ao carregar workspaces:', error);
+        console.error('❌ Erro crítico ao carregar workspaces:', error);
+        // Garantir que sempre há um workspace padrão
+        const defaultWorkspace: Workspace = {
+          id: user.id,
+          nome: user.name || 'Meus Dados',
+          email: user.email,
+          tipo: 'proprio'
+        };
+        setWorkspaceAtivo(defaultWorkspace);
+        setWorkspacesDisponiveis([defaultWorkspace]);
+        localStorage.setItem('flexi_workspace_ativo', defaultWorkspace.id);
       } finally {
         setIsLoading(false);
       }

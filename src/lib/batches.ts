@@ -25,10 +25,7 @@ export const getBatchesByProduct = async (productId: string, userId: string): Pr
       .eq('produto_id', productId)
       .order('criado_em', { ascending: false });
 
-    console.log('📦 [Batches] Lotes retornados para produto', productId, ':', data?.length || 0);
-
     if (error) {
-      console.error('❌ Erro ao buscar lotes:', error);
       throw error;
     }
 
@@ -43,7 +40,6 @@ export const getBatchesByProduct = async (productId: string, userId: string): Pr
       createdAt: new Date(b.criado_em)
     }));
   } catch (error) {
-    console.error('❌ Erro ao buscar lotes:', error);
     return [];
   }
 };
@@ -59,6 +55,23 @@ export const createBatch = async (
   expiryDate?: Date
 ): Promise<Batch | null> => {
   try {
+    // Buscar o produto para pegar o usuario_id correto (pode ser do usuário compartilhado)
+    const { data: produto, error: produtoError } = await supabase
+      .from('produtos')
+      .select('usuario_id')
+      .eq('id', productId)
+      .single();
+
+    if (produtoError) {
+      throw produtoError;
+    }
+
+    const productOwnerId = produto?.usuario_id;
+    
+    if (!productOwnerId) {
+      throw new Error('Produto não encontrado');
+    }
+
     const { data, error } = await supabase
       .from('lotes')
       .insert([{
@@ -67,13 +80,12 @@ export const createBatch = async (
         quantidade: quantity,
         custo_unitario: unitCost,
         data_validade: expiryDate?.toISOString(),
-        usuario_id: userId
+        usuario_id: productOwnerId // Usar o dono do produto, não o usuário atual
       }])
       .select()
       .single();
 
     if (error) {
-      console.error('❌ Erro ao criar lote:', error);
       throw error;
     }
 
@@ -88,7 +100,6 @@ export const createBatch = async (
       createdAt: new Date(data.criado_em)
     };
   } catch (error) {
-    console.error('❌ Erro ao criar lote:', error);
     return null;
   }
 };
@@ -107,13 +118,11 @@ export const updateBatchQuantity = async (
       .eq('id', batchId);
 
     if (error) {
-      console.error('❌ Erro ao atualizar lote:', error);
       throw error;
     }
 
     return true;
   } catch (error) {
-    console.error('❌ Erro ao atualizar lote:', error);
     return false;
   }
 };
@@ -128,13 +137,11 @@ export const deleteBatch = async (batchId: string, userId: string): Promise<bool
       .eq('id', batchId);
 
     if (error) {
-      console.error('❌ Erro ao deletar lote:', error);
       throw error;
     }
 
     return true;
   } catch (error) {
-    console.error('❌ Erro ao deletar lote:', error);
     return false;
   }
 };
@@ -154,7 +161,6 @@ export const adjustBatchQuantity = async (
       .single();
 
     if (fetchError || !batch) {
-      console.error('❌ Lote não encontrado');
       return false;
     }
 
@@ -164,7 +170,6 @@ export const adjustBatchQuantity = async (
     // Atualizar
     return await updateBatchQuantity(batchId, newQuantity, userId);
   } catch (error) {
-    console.error('❌ Erro ao ajustar quantidade do lote:', error);
     return false;
   }
 };

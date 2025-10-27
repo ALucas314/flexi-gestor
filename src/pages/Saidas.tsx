@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Plus, TrendingDown, Package, Search, Trash2, Calendar, DollarSign, ShoppingCart, Receipt, CheckCircle, Printer, Share2 } from "lucide-react";
+import { Plus, TrendingDown, Package, Search, Trash2, Calendar, DollarSign, ShoppingCart, Receipt, CheckCircle, Printer, Share2, Edit } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -48,10 +48,13 @@ const Saidas = () => {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [exitToDelete, setExitToDelete] = useState<StockExit | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [exitToEdit, setExitToEdit] = useState<StockExit | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Hooks
   const { toast } = useToast();
-  const { products, movements, addMovement, deleteMovement, addNotification } = useData();
+  const { products, movements, addMovement, deleteMovement, addNotification, refreshMovements } = useData();
   const { user } = useAuth();
 
   // Filtrar apenas as saídas dos movements
@@ -68,7 +71,7 @@ const Saidas = () => {
       customer: m.description.includes(' - ') ? m.description.split(' - ')[1] : 'Cliente',
       exitDate: m.date,
       notes: m.description,
-      status: 'confirmado' as const,
+      status: (m.status || 'confirmado') as 'pendente' | 'confirmado' | 'cancelado', // Usar status real do banco
       receiptNumber: m.receiptNumber
     }));
 
@@ -339,6 +342,125 @@ const Saidas = () => {
       });
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  // Abrir diálogo de edição
+  const handleEditExit = (exit: StockExit) => {
+    setExitToEdit(exit);
+    setIsEditDialogOpen(true);
+  };
+
+  // Salvar alteração de status
+  const handleSaveStatus = async (newStatus: "pendente" | "confirmado" | "cancelado") => {
+    if (!exitToEdit || isSaving) return;
+
+    try {
+      setIsSaving(true);
+
+      // Atualizar status no Supabase
+      const { error: updateError } = await supabase
+        .from('movimentacoes')
+        .update({ status: newStatus })
+        .eq('id', exitToEdit.id);
+
+      if (updateError) {
+        console.error('Erro ao atualizar status:', updateError);
+        // Continuar mesmo com erro
+      }
+
+      // Se mudando para CANCELADO, devolver unidades aos lotes
+      if (newStatus === "cancelado" && exitToEdit.status !== "cancelado") {
+        if (!user?.id) {
+          toast({
+            title: "❌ Erro",
+            description: "Usuário não autenticado",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        // Buscar todos os lotes do produto
+        const batches = await getBatchesByProduct(exitToEdit.productId, user.id);
+        
+        // Tentar devolver unidades aos lotes usando FIFO (primeiros a vencer primeiro)
+        let remainingQuantity = exitToEdit.quantity;
+        const sortedBatches = [...batches].sort((a, b) => {
+          if (!a.expiryDate && !b.expiryDate) return 0;
+          if (!a.expiryDate) return 1;
+          if (!b.expiryDate) return -1;
+          return new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime();
+        });
+
+        // Distribuir de volta aos lotes proporcionalmente
+        if (batches.length > 0) {
+          const quantityPerBatch = Math.ceil(exitToEdit.quantity / batches.length);
+          
+          for (const batch of batches) {
+            const currentBatch = batches.find(b => b.id === batch.id);
+            if (currentBatch) {
+              const newQuantity = currentBatch.quantity + quantityPerBatch;
+              await updateBatchQuantity(batch.id, newQuantity, user.id);
+            }
+          }
+        }
+
+        toast({
+          title: "✅ Venda Cancelada!",
+          description: "As unidades foram devolvidas aos lotes correspondentes.",
+          variant: "default",
+        });
+      }
+
+      // Se mudando de CANCELADO para outro status, retirar unidades novamente
+      if (exitToEdit.status === "cancelado" && newStatus !== "cancelado") {
+        if (!user?.id) {
+          toast({
+            title: "❌ Erro",
+            description: "Usuário não autenticado",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        // Buscar todos os lotes do produto
+        const batches = await getBatchesByProduct(exitToEdit.productId, user.id);
+        
+        // Retirar unidades dos lotes proporcionalmente
+        if (batches.length > 0) {
+          const quantityPerBatch = Math.ceil(exitToEdit.quantity / batches.length);
+          
+          for (const batch of batches) {
+            const currentBatch = batches.find(b => b.id === batch.id);
+            if (currentBatch) {
+              const quantityToRemove = Math.min(quantityPerBatch, currentBatch.quantity);
+              const newQuantity = currentBatch.quantity - quantityToRemove;
+              await updateBatchQuantity(batch.id, newQuantity, user.id);
+            }
+          }
+        }
+      }
+
+        // Recarregar movements para atualizar a lista
+        await refreshMovements();
+
+        toast({
+          title: "✅ Status Atualizado!",
+          description: `Status alterado para ${newStatus === "confirmado" ? "Confirmado" : newStatus === "cancelado" ? "Cancelado" : "Pendente"}.`,
+          variant: "default",
+        });
+
+        // Fechar dialog
+        setIsEditDialogOpen(false);
+        setExitToEdit(null);
+    } catch (error: any) {
+      toast({
+        title: "❌ Erro ao Atualizar",
+        description: error.message || "Não foi possível atualizar o status.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -953,6 +1075,102 @@ const Saidas = () => {
                   Excluir Saída
                 </>
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Edição de Saída */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <Edit className="h-5 w-5 text-blue-600" />
+              Alterar Status da Venda
+            </DialogTitle>
+            <DialogDescription>
+              Altere o status da venda. Se cancelar, as unidades retornarão aos lotes.
+            </DialogDescription>
+          </DialogHeader>
+
+          {exitToEdit && (
+            <div className="space-y-4">
+              {/* Informações da Venda */}
+              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                <h4 className="font-semibold text-sm mb-2 text-blue-900">Informações da Venda:</h4>
+                <div className="space-y-1 text-sm">
+                  <p><strong>Produto:</strong> {exitToEdit.productName}</p>
+                  <p><strong>Quantidade:</strong> {exitToEdit.quantity} unidades</p>
+                  <p><strong>Cliente:</strong> {exitToEdit.customer}</p>
+                  <p><strong>Total:</strong> R$ {exitToEdit.totalPrice.toFixed(2)}</p>
+                  <p className="text-xs text-blue-700 mt-2">
+                    Status Atual: <Badge variant={exitToEdit.status === "confirmado" ? "default" : exitToEdit.status === "pendente" ? "secondary" : "destructive"}>
+                      {exitToEdit.status === "confirmado" ? "✅ Confirmado" : exitToEdit.status === "pendente" ? "⏳ Pendente" : "❌ Cancelado"}
+                    </Badge>
+                  </p>
+                </div>
+              </div>
+
+              {/* Seletor de Status */}
+              <div>
+                <Label htmlFor="newStatus" className="text-sm font-semibold">
+                  🏷️ Novo Status:
+                </Label>
+                <Select
+                  defaultValue={exitToEdit.status}
+                  onValueChange={(value) => {
+                    if (value !== exitToEdit.status) {
+                      handleSaveStatus(value as "pendente" | "confirmado" | "cancelado");
+                    }
+                  }}
+                >
+                  <SelectTrigger id="newStatus" className="mt-2">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pendente">
+                      ⏳ Pendente
+                    </SelectItem>
+                    <SelectItem value="confirmado">
+                      ✅ Confirmado
+                    </SelectItem>
+                    <SelectItem value="cancelado">
+                      ❌ Cancelado
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Avisos */}
+              {exitToEdit.status !== "cancelado" && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                  <p className="text-xs text-yellow-800">
+                    <strong>⚠️ Atenção:</strong> Ao cancelar, as {exitToEdit.quantity} unidades serão devolvidas aos lotes do produto.
+                  </p>
+                </div>
+              )}
+
+              {exitToEdit.status === "cancelado" && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                  <p className="text-xs text-green-800">
+                    <strong>ℹ️ Informação:</strong> Esta venda está cancelada. Ao confirmar, as unidades serão retiradas novamente dos lotes.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setIsEditDialogOpen(false);
+                setExitToEdit(null);
+              }}
+              disabled={isSaving}
+            >
+              Fechar
             </Button>
           </DialogFooter>
         </DialogContent>

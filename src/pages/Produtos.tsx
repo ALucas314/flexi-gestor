@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -20,13 +21,29 @@ import { useResponsive } from "@/hooks/use-responsive";
 
 // Schema de validação
 const productSchema = z.object({
-  name: z.string().min(1, "Nome do produto é obrigatório").min(3, "Nome deve ter pelo menos 3 caracteres"),
-  description: z.string().optional(),
-  category: z.string().min(1, "Categoria é obrigatória"),
-  price: z.number().min(0, "Preço deve ser maior ou igual a zero"),
-  stock: z.number().int().min(0, "Estoque deve ser maior ou igual a zero"),
-  minStock: z.number().int().min(0, "Estoque mínimo deve ser maior ou igual a zero"),
-  sku: z.string().min(1, "SKU é obrigatório"),
+  name: z.string()
+    .min(1, "❌ Nome do produto é obrigatório")
+    .min(3, "❌ Nome deve ter pelo menos 3 caracteres")
+    .max(200, "❌ Nome deve ter no máximo 200 caracteres"),
+  description: z.string()
+    .max(500, "❌ Descrição deve ter no máximo 500 caracteres")
+    .optional()
+    .nullable(),
+  category: z.string()
+    .min(1, "❌ Categoria é obrigatória"),
+  price: z.number()
+    .min(0, "❌ Preço não pode ser negativo")
+    .max(999999.99, "❌ Preço muito alto"),
+  stock: z.number()
+    .int("❌ Estoque deve ser um número inteiro")
+    .min(0, "❌ Estoque não pode ser negativo"),
+  minStock: z.number()
+    .int("❌ Estoque mínimo deve ser um número inteiro")
+    .min(0, "❌ Estoque mínimo não pode ser negativo"),
+  sku: z.string()
+    .min(1, "❌ SKU é obrigatório")
+    .max(50, "❌ SKU deve ter no máximo 50 caracteres")
+    .regex(/^[a-zA-Z0-9_-]+$/, "❌ SKU deve conter apenas letras, números, traços e underscores"),
   status: z.enum(["ativo", "inativo"]),
 });
 
@@ -57,11 +74,48 @@ const Produtos = () => {
   const [isBatchDialogOpen, setIsBatchDialogOpen] = useState(false);
   const [selectedProductForBatch, setSelectedProductForBatch] = useState<Product | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [skuDuplicateError, setSkuDuplicateError] = useState<string>("");
+  
+  // Categorias (declarado antes dos useEffect que o usam)
+  const [categories, setCategories] = useState<string[]>([]);
+  
+  // Estados para controlar criação de nova categoria
+  const [isCreatingNewCategory, setIsCreatingNewCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [newCategory, setNewCategory] = useState("");
+  const [isManagingCategories, setIsManagingCategories] = useState(false);
+  
+  // Carregar categorias do localStorage com categorias padrão
+  useEffect(() => {
+    const saved = localStorage.getItem('flexi-categories');
+    if (saved) {
+      setCategories(JSON.parse(saved));
+    } else {
+      // Adicionar categorias padrão se não houver nenhuma
+      const defaultCategories = [
+        "Alimentos",
+        "Bebidas",
+        "Eletrônicos",
+        "Roupas",
+        "Acessórios",
+        "Complementos",
+        "Embalagens",
+        "Outros"
+      ];
+      setCategories(defaultCategories);
+    }
+  }, []);
+  
+  // Salvar categorias no localStorage
+  useEffect(() => {
+    localStorage.setItem('flexi-categories', JSON.stringify(categories));
+  }, [categories]);
 
   // Hooks
   const { toast } = useToast();
   const { isMobile } = useResponsive();
-  const { products, addProduct: addProductContext, updateProduct, deleteProduct: deleteProductContext } = useData();
+  const { products, addProduct: addProductContext, updateProduct, deleteProduct: deleteProductContext, refreshProducts } = useData();
 
   // Controlar estado de carregamento
   useEffect(() => {
@@ -107,14 +161,52 @@ const Produtos = () => {
     },
   });
 
+  // Verificar SKU duplicado em tempo real
+  const currentSku = form.watch('sku');
+  useEffect(() => {
+    // Só verificar quando o diálogo estiver aberto
+    if (!isAddDialogOpen && !isEditDialogOpen) {
+      setSkuDuplicateError("");
+      return;
+    }
+    
+    // Verificar se products existe e tem itens
+    if (!products || products.length === 0) {
+      setSkuDuplicateError("");
+      return;
+    }
+    
+    if (currentSku && currentSku.length > 0) {
+      // Verificar se existe produto com esse SKU
+      const isDuplicated = products.some(p => p && p.sku && p.sku.toLowerCase() === currentSku.toLowerCase());
+      
+      // Se estiver editando, ignorar o próprio produto
+      const isEditingCurrentSku = editingProduct && editingProduct.sku && editingProduct.sku.toLowerCase() === currentSku.toLowerCase();
+      
+      if (isDuplicated && !isEditingCurrentSku) {
+        setSkuDuplicateError("❌ Este SKU já foi adicionado. Escolha outro código.");
+      } else {
+        setSkuDuplicateError("");
+      }
+    } else {
+      setSkuDuplicateError("");
+    }
+  }, [currentSku, products, editingProduct, isAddDialogOpen, isEditDialogOpen]);
+
   // Filtros
   const filteredProducts = products.filter(product =>
     product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     product.sku.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Categorias únicas
-  const categories = [...new Set(products.map(product => product.category))];
+  // Atualizar lista de categorias com categorias existentes nos produtos (sem duplicar)
+  useEffect(() => {
+    const productCategories = [...new Set(products.map(product => product.category))];
+    setCategories(prev => {
+      const combined = [...new Set([...prev, ...productCategories])];
+      return combined;
+    });
+  }, [products.length]); // Apenas quando o número de produtos mudar
 
   // Definição das colunas da tabela responsiva
   const columns: TableColumn<Product>[] = [
@@ -175,6 +267,29 @@ const Produtos = () => {
       )
     }
   ];
+
+  // Função para deletar categoria
+  const handleDeleteCategory = (categoryToDelete: string) => {
+    // Verificar se há produtos usando essa categoria
+    const productsUsingCategory = products.filter(p => p.category === categoryToDelete);
+    
+    if (productsUsingCategory.length > 0) {
+      toast({
+        title: "⚠️ Não é possível excluir!",
+        description: `Existem ${productsUsingCategory.length} produto(s) usando essa categoria. Altere a categoria dos produtos primeiro.`,
+        variant: "destructive",
+        duration: 6000,
+      });
+      return;
+    }
+    
+    setCategories(categories.filter(cat => cat !== categoryToDelete));
+    toast({
+      title: "✅ Categoria Excluída!",
+      description: `A categoria "${categoryToDelete}" foi removida.`,
+      variant: "default",
+    });
+  };
 
   // Funções CRUD (definidas antes de serem usadas)
   const openEditDialog = (product: Product) => {
@@ -240,22 +355,37 @@ const Produtos = () => {
         variant: "default",
       });
     } catch (error: any) {
-      console.error('❌ Erro ao adicionar produto:', error);
+      console.error('❌ Erro completo:', error);
+      console.error('❌ Tipo do erro:', typeof error);
+      console.error('❌ Error.message:', error?.message);
+      console.error('❌ Error.toString():', error?.toString?.());
       
-      // Mensagem de erro específica
-      let errorTitle = "❌ Erro ao Adicionar Produto";
-      let errorMessage = "Não foi possível adicionar o produto. Tente novamente.";
+      // Extrair mensagem de erro de forma robusta
+      let errorMessage = "Ocorreu um erro ao adicionar o produto.";
       
-      if (error.message?.includes('SKU')) {
-        errorTitle = "⚠️ SKU Duplicado!";
-        errorMessage = `Não é possível inserir devido já existir um item com o código SKU "${data.sku}". Por favor, escolha outro código único.`;
+      // Tenta várias formas de extrair a mensagem
+      if (error?.message) {
+        errorMessage = String(error.message);
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error?.toString) {
+        errorMessage = String(error.toString());
+      } else if (error) {
+        errorMessage = String(error);
       }
       
+      // Mensagem do SKU duplicado
+      if (errorMessage.toLowerCase().includes('sku') || errorMessage.toLowerCase().includes('código') || errorMessage.toLowerCase().includes('duplicado')) {
+        errorMessage = 'O SKU deste produto já foi adicionado. Escolha outro código.';
+      }
+      
+      console.error('❌ MENSAGEM FINAL QUE SERÁ EXIBIDA:', errorMessage);
+      
       toast({
-        title: errorTitle,
+        title: "❌ Erro ao Adicionar Produto",
         description: errorMessage,
         variant: "destructive",
-        duration: 6000,
+        duration: 7000,
       });
     }
   };
@@ -274,12 +404,30 @@ const Produtos = () => {
         description: `${data.name} foi atualizado com sucesso.`,
         variant: "default",
       });
-    } catch (error) {
-      console.error('❌ Erro ao atualizar produto:', error);
+    } catch (error: any) {
+      console.error('❌ Erro completo ao atualizar:', error);
+      
+      // Extrair mensagem de erro de forma robusta
+      let errorMessage = "Ocorreu um erro ao atualizar o produto.";
+      
+      if (error?.message) {
+        errorMessage = error.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error?.toString) {
+        errorMessage = error.toString();
+      }
+      
+      // Mensagem do SKU duplicado é prioridade
+      if (errorMessage.toLowerCase().includes('sku') || errorMessage.toLowerCase().includes('código')) {
+        errorMessage = 'O SKU deste produto já foi adicionado. Escolha outro código.';
+      }
+      
       toast({
         title: "❌ Erro ao Atualizar Produto",
-        description: "Não foi possível atualizar o produto. Tente novamente.",
+        description: errorMessage,
         variant: "destructive",
+        duration: 7000,
       });
     }
   };
@@ -355,6 +503,9 @@ const Produtos = () => {
               sku: generateNextSKU(),
               status: "ativo",
             });
+            setSkuDuplicateError(""); // Limpar erro de SKU
+          } else {
+            setSkuDuplicateError(""); // Limpar erro quando fechar
           }
         }}>
           <DialogTrigger asChild>
@@ -398,12 +549,21 @@ const Produtos = () => {
                           </span>
                         </FormLabel>
                         <FormControl>
-                          <Input placeholder="Gerado automaticamente ou digite seu código" {...field} className="h-8 sm:h-10" />
+                          <Input 
+                            placeholder="Gerado automaticamente ou digite seu código" 
+                            {...field} 
+                            className={`h-8 sm:h-10 ${skuDuplicateError ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}`}
+                          />
                         </FormControl>
                         <FormDescription className="text-xs">
                           💡 O código é gerado automaticamente, mas você pode editá-lo
                         </FormDescription>
                         <FormMessage />
+                        {skuDuplicateError && (
+                          <p className="text-sm font-medium text-red-600 bg-red-50 p-2 rounded-md border border-red-200">
+                            {skuDuplicateError}
+                          </p>
+                        )}
                       </FormItem>
                     )}
                   />
@@ -414,14 +574,19 @@ const Produtos = () => {
                   name="description"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-sm sm:text-base">Descrição do Produto</FormLabel>
+                      <FormLabel className="text-sm sm:text-base">
+                        Descrição do Produto <span className="text-xs text-gray-500 font-normal">(Opcional)</span>
+                      </FormLabel>
                       <FormControl>
                         <Textarea
-                          placeholder="Descreva o produto, ingredientes, benefícios, tamanho, etc..."
+                          placeholder="Descreva o produto, ingredientes, benefícios, tamanho, etc. (Opcional)"
                           className="min-h-[80px] text-sm sm:text-base"
                           {...field}
                         />
                       </FormControl>
+                      <FormDescription className="text-xs text-gray-500">
+                        💡 Este campo é opcional. Você pode deixar em branco.
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -434,23 +599,135 @@ const Produtos = () => {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-xs sm:text-sm">Categoria</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger className="h-8 sm:h-10">
-                              <SelectValue placeholder="Selecione uma categoria" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="Alimentos">🍽️ Alimentos</SelectItem>
-                            <SelectItem value="Bebidas">🥤 Bebidas</SelectItem>
-                            <SelectItem value="Eletrônicos">📱 Eletrônicos</SelectItem>
-                            <SelectItem value="Roupas">👕 Roupas</SelectItem>
-                            <SelectItem value="Acessórios">💍 Acessórios</SelectItem>
-                            <SelectItem value="Complementos">🥜 Complementos (Granola, Frutas)</SelectItem>
-                            <SelectItem value="Embalagens">📦 Embalagens e Copos</SelectItem>
-                            <SelectItem value="Outros">🔧 Outros Produtos</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <div className="flex gap-2">
+                          <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isAddingCategory}>
+                            <FormControl>
+                              <SelectTrigger className="h-8 sm:h-10">
+                                <SelectValue placeholder="Selecione uma categoria" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {categories.length === 0 ? (
+                                <div className="p-4 text-center text-sm text-gray-500">
+                                  Nenhuma categoria cadastrada. Clique em ➕ para criar.
+                                </div>
+                              ) : (
+                                <>
+                                  {categories.map(category => (
+                                    <SelectItem key={category} value={category}>
+                                      <div className="flex items-center justify-between w-full">
+                                        <span>{category}</span>
+                                      </div>
+                                    </SelectItem>
+                                  ))}
+                                  <div className="border-t my-1"></div>
+                                  <div className="p-2">
+                                    <Button 
+                                      type="button"
+                                      variant="ghost" 
+                                      size="sm"
+                                      className="w-full justify-start text-xs"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setIsAddingCategory(true);
+                                      }}
+                                    >
+                                      ➕ Adicionar Nova Categoria
+                                    </Button>
+                                  </div>
+                                </>
+                              )}
+                              {categories.length > 0 && (
+                                <div className="border-t my-1"></div>
+                              )}
+                            </SelectContent>
+                          </Select>
+                          {!isAddingCategory && categories.length > 0 && (
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button 
+                                  type="button" 
+                                  size="sm" 
+                                  variant="outline"
+                                  className="h-8 sm:h-10 text-xs"
+                                >
+                                  ⚙️
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-80" align="end">
+                                <div className="space-y-2">
+                                  <h4 className="font-semibold text-sm">Gerenciar Categorias</h4>
+                                  <div className="space-y-1 max-h-60 overflow-y-auto">
+                                    {categories.map(cat => (
+                                      <div key={cat} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded">
+                                        <span className="text-sm">{cat}</span>
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => handleDeleteCategory(cat)}
+                                          className="h-6 w-6 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                        >
+                                          <Trash2 className="h-3 w-3" />
+                                        </Button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+                          )}
+                          {isAddingCategory ? (
+                            <Button 
+                              type="button" 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => {
+                                if (newCategory.trim()) {
+                                  field.onChange(newCategory.trim());
+                                  setCategories([...categories, newCategory.trim()]);
+                                  setNewCategory("");
+                                }
+                                setIsAddingCategory(false);
+                              }}
+                              className="h-8 sm:h-10"
+                            >
+                              ✓
+                            </Button>
+                          ) : (
+                            <Button 
+                              type="button" 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => setIsAddingCategory(true)}
+                              className="h-8 sm:h-10"
+                            >
+                              ➕
+                            </Button>
+                          )}
+                        </div>
+                        {isAddingCategory && (
+                          <Input
+                            type="text"
+                            placeholder="Digite a nova categoria"
+                            value={newCategory}
+                            onChange={(e) => setNewCategory(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && newCategory.trim()) {
+                                field.onChange(newCategory.trim());
+                                setCategories([...categories, newCategory.trim()]);
+                                setNewCategory("");
+                                setIsAddingCategory(false);
+                              }
+                              if (e.key === 'Escape') {
+                                setIsAddingCategory(false);
+                                setNewCategory("");
+                              }
+                            }}
+                            autoFocus
+                            className="h-8 sm:h-10 text-xs sm:text-sm"
+                          />
+                        )}
                         <FormMessage />
                       </FormItem>
                     )}
@@ -543,7 +820,7 @@ const Produtos = () => {
                   <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)} className="w-full sm:w-auto h-8 text-xs">
                     ❌ Cancelar
                   </Button>
-                  <Button type="submit" className="w-full sm:w-auto h-8 text-xs">📦 Adicionar Produto</Button>
+                  <Button type="submit" className="w-full sm:w-auto h-8 text-xs bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white shadow-lg hover:shadow-xl transition-all duration-200">📦 Adicionar Produto</Button>
                 </DialogFooter>
               </form>
             </Form>
@@ -666,7 +943,12 @@ const Produtos = () => {
       </div>
 
             {/* Modal de Edição */}
-            <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+            <Dialog open={isEditDialogOpen} onOpenChange={(open) => {
+              setIsEditDialogOpen(open);
+              if (!open) {
+                setSkuDuplicateError(""); // Limpar erro ao fechar
+              }
+            }}>
               <DialogContent className="max-w-[70vw] sm:max-w-2xl max-h-[70vh] overflow-y-auto mx-auto">
                 <DialogHeader className="space-y-2 pb-3 sm:pb-4">
                   <DialogTitle className="text-base sm:text-lg">✏️ Editar Produto</DialogTitle>
@@ -697,9 +979,18 @@ const Produtos = () => {
                           <FormItem>
                             <FormLabel className="text-xs sm:text-sm">SKU (Código)</FormLabel>
                             <FormControl>
-                              <Input placeholder="Ex: ACAI-500-TRAD" {...field} className="h-8 sm:h-10" />
+                              <Input 
+                                placeholder="Ex: ACAI-500-TRAD" 
+                                {...field} 
+                                className={`h-8 sm:h-10 ${skuDuplicateError ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}`}
+                              />
                             </FormControl>
                             <FormMessage />
+                            {skuDuplicateError && (
+                              <p className="text-sm font-medium text-red-600 bg-red-50 p-2 rounded-md border border-red-200">
+                                {skuDuplicateError}
+                              </p>
+                            )}
                           </FormItem>
                         )}
                       />
@@ -710,14 +1001,19 @@ const Produtos = () => {
                       name="description"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="text-xs sm:text-sm">Descrição do Produto</FormLabel>
+                          <FormLabel className="text-xs sm:text-sm">
+                            Descrição do Produto <span className="text-xs text-gray-500 font-normal">(Opcional)</span>
+                          </FormLabel>
                           <FormControl>
                             <Textarea
-                              placeholder="Descreva o produto, ingredientes, benefícios, tamanho, etc..."
+                              placeholder="Descreva o produto, ingredientes, benefícios, tamanho, etc. (Opcional)"
                               className="min-h-[80px] text-sm sm:text-base"
                               {...field}
                             />
                           </FormControl>
+                          <FormDescription className="text-xs text-gray-500">
+                            💡 Este campo é opcional. Você pode deixar em branco.
+                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -730,21 +1026,76 @@ const Produtos = () => {
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel className="text-xs sm:text-sm">Categoria</FormLabel>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
-                              <FormControl>
-                                <SelectTrigger className="h-8 sm:h-10">
-                                  <SelectValue placeholder="Selecione uma categoria" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                <SelectItem value="Açaí Puro">🍇 Açaí Puro (100% Natural)</SelectItem>
-                                <SelectItem value="Açaí Tradicional">🥤 Açaí Tradicional</SelectItem>
-                                <SelectItem value="Açaí Especial">⭐ Açaí Especial (Gourmet)</SelectItem>
-                                <SelectItem value="Complementos">🥜 Complementos (Granola, Frutas)</SelectItem>
-                                <SelectItem value="Embalagens">📦 Embalagens e Copos</SelectItem>
-                                <SelectItem value="Outros">🔧 Outros Produtos</SelectItem>
-                              </SelectContent>
-                            </Select>
+                            <div className="flex gap-2">
+                              <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isAddingCategory}>
+                                <FormControl>
+                                  <SelectTrigger className="h-8 sm:h-10">
+                                    <SelectValue placeholder="Selecione uma categoria" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  {categories.map(category => (
+                                    <SelectItem key={category} value={category}>{category}</SelectItem>
+                                  ))}
+                                  <SelectItem value="Açaí Puro">🍇 Açaí Puro (100% Natural)</SelectItem>
+                                  <SelectItem value="Açaí Tradicional">🥤 Açaí Tradicional</SelectItem>
+                                  <SelectItem value="Açaí Especial">⭐ Açaí Especial (Gourmet)</SelectItem>
+                                  <SelectItem value="Complementos">🥜 Complementos (Granola, Frutas)</SelectItem>
+                                  <SelectItem value="Embalagens">📦 Embalagens e Copos</SelectItem>
+                                  <SelectItem value="Outros">🔧 Outros Produtos</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              {isAddingCategory ? (
+                                <Button 
+                                  type="button" 
+                                  size="sm" 
+                                  variant="outline"
+                                  onClick={() => {
+                                    if (newCategory.trim()) {
+                                      field.onChange(newCategory.trim());
+                                      setCategories([...categories, newCategory.trim()]);
+                                      setNewCategory("");
+                                    }
+                                    setIsAddingCategory(false);
+                                  }}
+                                  className="h-8 sm:h-10"
+                                >
+                                  ✓
+                                </Button>
+                              ) : (
+                                <Button 
+                                  type="button" 
+                                  size="sm" 
+                                  variant="outline"
+                                  onClick={() => setIsAddingCategory(true)}
+                                  className="h-8 sm:h-10"
+                                >
+                                  ➕
+                                </Button>
+                              )}
+                            </div>
+                            {isAddingCategory && (
+                              <Input
+                                type="text"
+                                placeholder="Digite a nova categoria"
+                                value={newCategory}
+                                onChange={(e) => setNewCategory(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' && newCategory.trim()) {
+                                    field.onChange(newCategory.trim());
+                                    setCategories([...categories, newCategory.trim()]);
+                                    setNewCategory("");
+                                    setIsAddingCategory(false);
+                                  }
+                                  if (e.key === 'Escape') {
+                                    setIsAddingCategory(false);
+                                    setNewCategory("");
+                                  }
+                                }}
+                                autoFocus
+                                className="h-8 sm:h-10 text-xs sm:text-sm"
+                              />
+                            )}
                             <FormMessage />
                           </FormItem>
                         )}
@@ -837,7 +1188,7 @@ const Produtos = () => {
                       <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)} className="w-full sm:w-auto h-8 text-xs">
                         ❌ Cancelar
                       </Button>
-                      <Button type="submit" className="w-full sm:w-auto h-8 text-xs">💾 Salvar Alterações</Button>
+                      <Button type="submit" className="w-full sm:w-auto h-8 text-xs bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white shadow-lg hover:shadow-xl transition-all duration-200">💾 Salvar Alterações</Button>
                     </DialogFooter>
                   </form>
                 </Form>
@@ -920,10 +1271,11 @@ const Produtos = () => {
                   <BatchManager
                     productId={selectedProductForBatch.id}
                     productName={selectedProductForBatch.name}
+                    productSku={selectedProductForBatch.sku}
                     productStock={selectedProductForBatch.stock}
-                    onBatchesChange={() => {
-                      // Recarregar dados quando lotes mudarem
-                      window.location.reload(); // Recarrega a página para atualizar o estoque
+                    onBatchesChange={async () => {
+                      // Atualizar estoque silenciosamente quando lotes mudarem
+                      await refreshProducts();
                     }}
                   />
                 )}

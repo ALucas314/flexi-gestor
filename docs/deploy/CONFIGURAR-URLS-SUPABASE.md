@@ -30,7 +30,7 @@ Authentication → URL Configuration
 Esta é a URL principal da sua aplicação.
 
 ```
-https://flexigestor.netlify.app
+https://flexigestor3.netlify.app
 ```
 
 #### **Redirect URLs:**
@@ -39,12 +39,12 @@ Estas são as URLs permitidas para redirecionamento após ações de autenticaç
 Adicione **TODAS** estas URLs (uma por linha):
 
 ```
-https://flexigestor.netlify.app/**
-https://flexigestor.netlify.app/reset-password
-https://flexigestor.netlify.app/login
-http://localhost:5173/**
-http://localhost:5173/reset-password
-http://localhost:5173/login
+https://flexigestor3.netlify.app/**
+https://flexigestor3.netlify.app/reset-password
+https://flexigestor3.netlify.app/login
+http://localhost:8080/**
+http://localhost:8080/reset-password
+http://localhost:8080/login
 ```
 
 > 💡 **Nota:** O `**` permite qualquer caminho depois da URL base. Isso é útil para rotas dinâmicas.
@@ -63,7 +63,7 @@ Role a página até o final e clique no botão **"Save"** (Salvar).
 
 ### **1. Solicite um novo reset de senha:**
 
-1. Acesse: `https://flexigestor.netlify.app`
+1. Acesse: `https://flexigestor3.netlify.app`
 2. Clique em **"Esqueci minha senha"**
 3. Digite seu email
 4. Clique em **"Enviar link de recuperação"**
@@ -80,12 +80,14 @@ Clique em **"🔐 Redefinir Minha Senha"**
 
 Agora você deve ser redirecionado para:
 ```
-https://flexigestor.netlify.app/reset-password?token=...
+https://flexigestor3.netlify.app/reset-password#access_token=...&type=recovery&...
 ```
+
+⚠️ **IMPORTANTE:** O Supabase usa **hash routing** (`#`) ao invés de query string (`?`)
 
 ✅ **Se funcionou:** A página de redefinição de senha vai aparecer!
 
-❌ **Se ainda não funcionou:** Verifique se salvou as configurações no Supabase.
+❌ **Se ainda não funcionou:** Verifique se salvou as configurações no Supabase e solicite um NOVO email (emails antigos não funcionarão).
 
 ---
 
@@ -94,7 +96,7 @@ https://flexigestor.netlify.app/reset-password?token=...
 ### **O que acontecia antes:**
 
 ```
-Email → Clique no botão → Redirect para: http://localhost:5173/reset-password
+Email → Clique no botão → Redirect para: http://localhost:8080/reset-password
 ```
 
 ❌ Isso não funciona em produção porque `localhost` só existe no seu computador.
@@ -102,7 +104,7 @@ Email → Clique no botão → Redirect para: http://localhost:5173/reset-passwo
 ### **O que acontece agora:**
 
 ```
-Email → Clique no botão → Redirect para: https://flexigestor.netlify.app/reset-password
+Email → Clique no botão → Redirect para: https://flexigestor3.netlify.app/reset-password
 ```
 
 ✅ Funciona em produção porque o Netlify está hospedando sua aplicação nesta URL.
@@ -112,14 +114,14 @@ Email → Clique no botão → Redirect para: https://flexigestor.netlify.app/re
 ## 🌐 URLs Importantes
 
 ### **Produção (Netlify):**
-- Site principal: `https://flexigestor.netlify.app`
-- Login: `https://flexigestor.netlify.app/login`
-- Reset password: `https://flexigestor.netlify.app/reset-password`
+- Site principal: `https://flexigestor3.netlify.app`
+- Login: `https://flexigestor3.netlify.app/login`
+- Reset password: `https://flexigestor3.netlify.app/reset-password`
 
 ### **Desenvolvimento (Local):**
-- Site principal: `http://localhost:5173`
-- Login: `http://localhost:5173/login`
-- Reset password: `http://localhost:5173/reset-password`
+- Site principal: `http://localhost:8080`
+- Login: `http://localhost:8080/login`
+- Reset password: `http://localhost:8080/reset-password`
 
 ---
 
@@ -171,7 +173,7 @@ Você já configurou os templates bonitos em português:
 
 Antes de considerar tudo configurado:
 
-- [ ] Site URL configurada: `https://flexigestor.netlify.app`
+- [ ] Site URL configurada: `https://flexigestor3.netlify.app`
 - [ ] Redirect URLs adicionadas (todas as 6 URLs)
 - [ ] Configurações salvas no Supabase
 - [ ] Testado o fluxo completo de reset de senha
@@ -198,7 +200,7 @@ Agora o fluxo completo de recuperação de senha está funcionando em produção
    ↓
 5. Clica em "Redefinir Minha Senha"
    ↓
-6. É redirecionado para: https://flexigestor.netlify.app/reset-password
+6. É redirecionado para: https://flexigestor3.netlify.app/reset-password
    ↓
 7. Define nova senha
    ↓

@@ -6,7 +6,6 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Badge } from './ui/badge';
 import { 
   Plus, 
@@ -38,6 +37,7 @@ interface Batch {
 interface BatchManagerProps {
   productId: string;
   productName: string;
+  productSku: string; // SKU do produto - usado como base para número do lote
   productStock: number; // Estoque total do produto
   onBatchesChange?: () => void; // Callback quando lotes mudarem
 }
@@ -45,6 +45,7 @@ interface BatchManagerProps {
 export const BatchManager: React.FC<BatchManagerProps> = ({ 
   productId, 
   productName,
+  productSku,
   productStock,
   onBatchesChange 
 }) => {
@@ -56,9 +57,7 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [formData, setFormData] = useState({
     batchNumber: '',
-    quantity: '',
-    manufactureDate: '',
-    expiryDate: ''
+    quantity: ''
   });
 
   // Carregar lotes do produto
@@ -77,11 +76,10 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
         createdAt: b.createdAt.toISOString()
       })));
       
-      // Gerar próximo número de lote automaticamente
-      const nextBatchNumber = batchesData.length + 1;
+      // Gerar número do lote usando apenas o SKU do produto
       setFormData(prev => ({
         ...prev,
-        batchNumber: nextBatchNumber.toString()
+        batchNumber: productSku
       }));
     } catch (error) {
       console.error('Erro ao carregar lotes:', error);
@@ -247,146 +245,100 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
           <p className="text-sm text-gray-600">{productName}</p>
         </div>
         
-        <Dialog 
-          open={isDialogOpen} 
-          onOpenChange={(open) => {
-            setIsDialogOpen(open);
-            if (open) {
-              // Gerar próximo número automaticamente ao abrir
-              const nextBatchNumber = batches.length + 1;
-              setFormData(prev => ({
-                ...prev,
-                batchNumber: nextBatchNumber.toString(),
-                quantity: '',
-                manufactureDate: '',
-                expiryDate: ''
-              }));
-            }
+        <Button 
+          onClick={() => {
+            setIsDialogOpen(!isDialogOpen);
+            // Usar apenas o SKU do produto como número do lote
+            setFormData({
+              batchNumber: productSku,
+              quantity: ''
+            });
           }}
+          className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white"
         >
-          <DialogTrigger asChild>
-            <Button className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white">
-              <Plus className="mr-2 h-4 w-4" />
-              Novo Lote
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle className="flex items-center space-x-2">
-                <Package className="h-5 w-5 text-indigo-600" />
-                <span>Adicionar Novo Lote</span>
-              </DialogTitle>
-            </DialogHeader>
-            
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="batchNumber" className="flex items-center justify-between">
-                  <span>📦 Número do Lote *</span>
-                  <span className="text-xs text-gray-500 font-normal">
-                    Sugestão: {batches.length + 1}
-                  </span>
-                </Label>
-                <Input
-                  id="batchNumber"
-                  placeholder="Gerado automaticamente"
-                  value={formData.batchNumber}
-                  onChange={(e) => setFormData(prev => ({ ...prev, batchNumber: e.target.value }))}
-                  className="font-semibold"
-                />
-                <p className="text-xs text-gray-600">
-                  💡 O número é gerado automaticamente, mas você pode alterá-lo
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="quantity">🔢 Quantidade *</Label>
-                {(() => {
-                  const totalAllocated = batches.reduce((sum, b) => sum + b.quantity, 0);
-                  const availableStock = productStock - totalAllocated;
-                  
-                  return (
-                    <>
-                      <Input
-                        id="quantity"
-                        type="number"
-                        min="1"
-                        max={availableStock}
-                        placeholder={`Máximo: ${availableStock} unidades disponíveis`}
-                        value={formData.quantity}
-                        onChange={(e) => {
-                          const value = parseInt(e.target.value) || 0;
-                          if (value <= availableStock || e.target.value === '') {
-                            setFormData(prev => ({ ...prev, quantity: e.target.value }));
-                          }
-                        }}
-                        className={`text-lg font-semibold ${
-                          parseInt(formData.quantity) > availableStock ? 'border-red-500 focus:ring-red-500' : ''
-                        }`}
-                      />
-                      <div className="text-xs space-y-1">
-                        <p className="text-gray-600">
-                          📦 Estoque total: <span className="font-bold text-gray-900">{productStock} unidades</span>
-                        </p>
-                        <p className="text-gray-600">
-                          ✅ Já alocado: <span className="font-bold text-orange-600">{totalAllocated} unidades</span>
-                        </p>
-                        <p className="text-gray-600">
-                          🎯 Disponível para alocar: <span className="font-bold text-green-600">{availableStock} unidades</span>
-                        </p>
-                        {parseInt(formData.quantity) > availableStock && (
-                          <span className="block text-red-600 font-semibold mt-1">
-                            ⚠️ Quantidade excede o estoque disponível!
-                          </span>
-                        )}
-                      </div>
-                    </>
-                  );
-                })()}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="manufactureDate">🏭 Data de Fabricação (Opcional)</Label>
-                <Input
-                  id="manufactureDate"
-                  type="date"
-                  value={formData.manufactureDate}
-                  onChange={(e) => setFormData(prev => ({ ...prev, manufactureDate: e.target.value }))}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="expiryDate">⏰ Data de Validade (Opcional)</Label>
-                <Input
-                  id="expiryDate"
-                  type="date"
-                  value={formData.expiryDate}
-                  onChange={(e) => setFormData(prev => ({ ...prev, expiryDate: e.target.value }))}
-                />
-                <p className="text-xs text-gray-600">
-                  💡 Sistema alerta automaticamente quando estiver próximo do vencimento
-                </p>
-              </div>
-
-              <div className="flex gap-2 pt-4">
-                <Button 
-                  onClick={handleAddBatch} 
-                  disabled={isLoading}
-                  className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white"
-                >
-                  {isLoading ? 'Adicionando...' : 'Adicionar Lote'}
-                </Button>
-                <Button 
-                  variant="outline" 
-                  onClick={() => setIsDialogOpen(false)}
-                  className="flex-1"
-                >
-                  Cancelar
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+          <Plus className="mr-2 h-4 w-4" />
+          Novo Lote
+        </Button>
       </div>
+
+      {/* Formulário inline para adicionar lote */}
+      {isDialogOpen && (
+        <Card className="bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200">
+          <CardContent className="p-4 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="batchNumber" className="flex items-center justify-between">
+                <span>📦 Número do Lote *</span>
+                <span className="text-xs text-gray-500 font-normal">
+                  SKU: {productSku}
+                </span>
+              </Label>
+              <Input
+                id="batchNumber"
+                placeholder="Gerado automaticamente"
+                value={formData.batchNumber}
+                onChange={(e) => setFormData(prev => ({ ...prev, batchNumber: e.target.value }))}
+                className="font-semibold"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="quantity">🔢 Quantidade *</Label>
+              {(() => {
+                const totalAllocated = batches.reduce((sum, b) => sum + b.quantity, 0);
+                const availableStock = productStock - totalAllocated;
+                
+                return (
+                  <>
+                    <Input
+                      id="quantity"
+                      type="number"
+                      min="1"
+                      max={availableStock}
+                      placeholder={`Máximo: ${availableStock} unidades`}
+                      value={formData.quantity}
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value) || 0;
+                        if (value <= availableStock || e.target.value === '') {
+                          setFormData(prev => ({ ...prev, quantity: e.target.value }));
+                        }
+                      }}
+                      className={`text-lg font-semibold ${
+                        parseInt(formData.quantity) > availableStock ? 'border-red-500' : ''
+                      }`}
+                    />
+                    <div className="text-xs space-y-1">
+                      <p className="text-gray-600">
+                        📦 Disponível: <span className="font-bold text-green-600">{availableStock} unidades</span>
+                      </p>
+                      {parseInt(formData.quantity) > availableStock && (
+                        <span className="block text-red-600 font-semibold">
+                          ⚠️ Quantidade excede o estoque disponível!
+                        </span>
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+
+            <div className="flex gap-2">
+              <Button 
+                onClick={handleAddBatch} 
+                disabled={isLoading}
+                className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white"
+              >
+                {isLoading ? 'Adicionando...' : 'Adicionar Lote'}
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => setIsDialogOpen(false)}
+              >
+                Cancelar
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Lista de lotes */}
       <div className="grid gap-3">
@@ -405,60 +357,25 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
           </Card>
         ) : (
           batches.map((batch) => {
-            const status = getBatchStatus(batch.expiryDate);
-            const StatusIcon = status.icon;
-
             return (
               <Card 
                 key={batch.id} 
-                className={`hover:shadow-md transition-all ${
-                  status.color === 'red' ? 'border-red-300 bg-red-50/50' :
-                  status.color === 'yellow' ? 'border-yellow-300 bg-yellow-50/50' :
-                  'border-gray-200'
-                }`}
+                className="hover:shadow-md transition-all border-gray-200"
               >
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between">
                     <div className="flex-1 space-y-2">
                       <div className="flex items-center space-x-2">
                         <Badge variant="outline" className="font-mono font-bold text-sm">
-                          {batch.batchNumber}
-                        </Badge>
-                        <Badge 
-                          className={`${
-                            status.color === 'red' ? 'bg-red-500' :
-                            status.color === 'yellow' ? 'bg-yellow-500' :
-                            'bg-green-500'
-                          } text-white`}
-                        >
-                          <StatusIcon className="h-3 w-3 mr-1" />
-                          {status.label}
+                          📦 {batch.batchNumber}
                         </Badge>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div className="grid grid-cols-1 gap-2 text-sm">
                         <div>
                           <p className="text-gray-600">📦 Quantidade:</p>
                           <p className="font-semibold text-gray-900">{batch.quantity} unidades</p>
                         </div>
-
-                        {batch.manufactureDate && (
-                          <div>
-                            <p className="text-gray-600">🏭 Fabricação:</p>
-                            <p className="font-semibold text-gray-900">
-                              {new Date(batch.manufactureDate).toLocaleDateString('pt-BR')}
-                            </p>
-                          </div>
-                        )}
-
-                        {batch.expiryDate && (
-                          <div>
-                            <p className="text-gray-600">⏰ Validade:</p>
-                            <p className="font-semibold text-gray-900">
-                              {new Date(batch.expiryDate).toLocaleDateString('pt-BR')}
-                            </p>
-                          </div>
-                        )}
                       </div>
                     </div>
 

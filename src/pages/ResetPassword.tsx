@@ -26,8 +26,6 @@ const ResetPassword = () => {
   // Validar token ao carregar a página
   useEffect(() => {
     const validateToken = async () => {
-      console.log('🔍 [ResetPassword] Verificando URL...');
-      
       try {
         // O Supabase redireciona com #access_token=...&type=recovery
         const hashParams = new URLSearchParams(window.location.hash.substring(1));
@@ -35,11 +33,7 @@ const ResetPassword = () => {
         const refreshToken = hashParams.get('refresh_token');
         const type = hashParams.get('type');
 
-        console.log('🔍 Type:', type, 'Access Token presente:', !!accessToken, 'Refresh Token presente:', !!refreshToken);
-
         if (type === 'recovery' && accessToken && refreshToken) {
-          console.log('✅ Token de recovery válido detectado');
-          
           // Importar supabase client
           const { supabase } = await import('@/lib/supabase');
           
@@ -50,34 +44,36 @@ const ResetPassword = () => {
           });
 
           if (sessionError) {
-            console.error('❌ Erro ao restaurar sessão:', sessionError);
             setMessage({ type: 'error', text: 'Link expirado ou inválido' });
             setTokenValid(false);
             setIsValidating(false);
             return;
           }
-
-          console.log('✅ Sessão restaurada com sucesso');
           
           // Obter email do usuário
           const email = sessionData.user?.email || '';
-          console.log('✅ Token válido para:', email);
           
           // 🔑 IMPORTANTE: Salvar token em memória!
           setAccessToken(accessToken);
           setTokenValid(true);
           setUserEmail(email);
         } else {
-          console.error('❌ URL não contém token de recovery válido');
-          setMessage({ type: 'error', text: 'Link de recuperação inválido' });
+          // Se chegou na página sem os parâmetros necessários
+          if (!accessToken && !refreshToken && !type) {
+            setMessage({ type: 'error', text: 'Acesse o link de recuperação enviado por email' });
+            // Opcional: redirecionar para /forgot-password após alguns segundos
+            setTimeout(() => {
+              window.location.href = '/forgot-password';
+            }, 3000);
+          } else {
+            setMessage({ type: 'error', text: 'Link de recuperação inválido ou expirado' });
+          }
           setTokenValid(false);
         }
       } catch (error) {
-        console.error('❌ Erro ao validar:', error);
         setMessage({ type: 'error', text: 'Erro ao validar link de recuperação' });
         setTokenValid(false);
       } finally {
-        console.log('🏁 Validação concluída');
         setIsValidating(false);
       }
     };

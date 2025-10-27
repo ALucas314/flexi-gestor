@@ -47,6 +47,8 @@ const Entradas = () => {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [entryToDelete, setEntryToDelete] = useState<StockEntry | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  // Estado para armazenar valores parciais de datas enquanto digita
+  const [dateTextValues, setDateTextValues] = useState<{[key: string]: {manu: string, exp: string}}>({});
 
   // Hooks
   const { toast } = useToast();
@@ -127,6 +129,30 @@ const Entradas = () => {
   // Calcular total de unidades nos lotes
   const getTotalBatchQuantity = () => {
     return selectedBatches.reduce((sum, batch) => sum + (batch.quantity || 0), 0);
+  };
+
+  // Gerar próximo número de lote disponível automaticamente
+  const generateNextBatchNumber = () => {
+    // Buscar todos os números de lote já usados (da lista e dos lotes selecionados)
+    const usedBatchNumbers = new Set<string>();
+    
+    // Adicionar lotes disponíveis
+    availableBatches.forEach(b => {
+      if (b.batchNumber) usedBatchNumbers.add(b.batchNumber);
+    });
+    
+    // Adicionar lotes selecionados
+    selectedBatches.forEach(b => {
+      if (b.batchNumber) usedBatchNumbers.add(b.batchNumber);
+    });
+    
+    // Encontrar o próximo número disponível
+    let nextNumber = 1;
+    while (usedBatchNumbers.has(`Lote ${nextNumber}`)) {
+      nextNumber++;
+    }
+    
+    return `Lote ${nextNumber}`;
   };
 
   // Controlar carregamento inicial
@@ -696,47 +722,91 @@ const Entradas = () => {
                                 <div className="space-y-3">
                                   <div className="grid grid-cols-2 gap-3">
                                     <div>
-                                      <Label className="text-xs text-gray-600">Lote</Label>
-                                      <Select
-                                        value={batch.batchNumber}
-                                        onValueChange={(value) => {
-                                          const selectedBatch = availableBatches.find(b => b.batchNumber === value);
-                                          if (selectedBatch) {
-                                            updateBatchData(index, 'batchNumber', value);
-                                            updateBatchData(index, 'manufactureDate', selectedBatch.manufactureDate ? new Date(selectedBatch.manufactureDate) : undefined);
-                                            updateBatchData(index, 'expiryDate', selectedBatch.expiryDate ? new Date(selectedBatch.expiryDate) : undefined);
-                                          } else {
-                                            updateBatchData(index, 'batchNumber', value);
-                                          }
-                                        }}
-                                      >
-                                        <SelectTrigger className="h-9">
-                                          <SelectValue placeholder="Selecione um lote" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          {availableBatches.map(b => {
-                                            const expiryDate = b.expiryDate ? new Date(b.expiryDate) : null;
-                                            const daysUntilExpiry = expiryDate 
-                                              ? Math.ceil((expiryDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
-                                              : null;
-                                            
-                                            const status = daysUntilExpiry !== null
-                                              ? daysUntilExpiry < 0 
-                                                ? '🔴'
-                                                : daysUntilExpiry <= 30
-                                                  ? '🟡'
-                                                  : '🟢'
-                                              : '⚪';
-
-                                            return (
-                                              <SelectItem key={b.id} value={b.batchNumber}>
-                                                {status} Lote {b.batchNumber} - {b.quantity} un.
-                                                {b.expiryDate && ` (${new Date(b.expiryDate).toLocaleDateString('pt-BR')})`}
-                                              </SelectItem>
-                                            );
-                                          })}
-                                        </SelectContent>
-                                      </Select>
+                                      <Label className="text-xs text-gray-600">📦 Selecionar Lote</Label>
+                                      <div className="space-y-2">
+                                        <Select
+                                          value={availableBatches.find(b => b.batchNumber === batch.batchNumber) ? batch.batchNumber : "custom"}
+                                          onValueChange={(value) => {
+                                            if (value === "custom") {
+                                              // Gerar o próximo número de lote automaticamente
+                                              const nextBatchNumber = generateNextBatchNumber();
+                                              updateBatchData(index, 'batchNumber', nextBatchNumber);
+                                            } else if (value !== "custom") {
+                                              updateBatchData(index, 'batchNumber', value);
+                                              
+                                              // Se for um lote existente, carregar suas datas
+                                              const selectedBatch = availableBatches.find(b => b.batchNumber === value);
+                                              if (selectedBatch) {
+                                                updateBatchData(index, 'manufactureDate', selectedBatch.manufactureDate ? new Date(selectedBatch.manufactureDate) : undefined);
+                                                updateBatchData(index, 'expiryDate', selectedBatch.expiryDate ? new Date(selectedBatch.expiryDate) : undefined);
+                                                updateBatchData(index, 'unitCost', selectedBatch.quantity > 0 ? (selectedBatch.unitCost || 0) : batch.unitCost);
+                                              }
+                                            }
+                                          }}
+                                        >
+                                          <SelectTrigger className="h-9">
+                                            <SelectValue placeholder="Escolha um lote da lista" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {availableBatches.length > 0 ? (
+                                              availableBatches.map(b => (
+                                                <SelectItem key={b.id} value={b.batchNumber}>
+                                                  📦 {b.batchNumber} 
+                                                  {b.quantity > 0 && ` (${b.quantity} un.)`}
+                                                </SelectItem>
+                                              ))
+                                            ) : (
+                                              <div className="p-2 text-xs text-gray-500">
+                                                Nenhum lote cadastrado
+                                              </div>
+                                            )}
+                                            <div className="border-t my-1"></div>
+                                            <SelectItem value="custom">
+                                              ➕ Criar {generateNextBatchNumber()} (Automatico)
+                                            </SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                        
+                                        {(!availableBatches.find(b => b.batchNumber === batch.batchNumber) && batch.batchNumber) && (
+                                          <div className="p-2 bg-green-50 border border-green-200 rounded">
+                                            <Label className="text-xs text-gray-600 mb-1 block">
+                                              ✅ Código do lote gerado automaticamente
+                                            </Label>
+                                            <Input
+                                              type="text"
+                                              value={batch.batchNumber}
+                                              onChange={(e) => {
+                                                const newBatchNumber = e.target.value.trim();
+                                                
+                                                // Verificar duplicata nos lotes disponíveis
+                                                const isDuplicatedInAvailable = availableBatches.some(b => b.batchNumber === newBatchNumber);
+                                                
+                                                // Verificar duplicata nos lotes selecionados (exceto o atual)
+                                                const isDuplicatedInSelected = selectedBatches.some((b, i) => 
+                                                  i !== index && b.batchNumber === newBatchNumber
+                                                );
+                                                
+                                                if (isDuplicatedInAvailable || isDuplicatedInSelected) {
+                                                  toast({
+                                                    title: "⚠️ Lote Duplicado!",
+                                                    description: `O número "${newBatchNumber}" já está em uso. Escolha outro número.`,
+                                                    variant: "destructive",
+                                                    duration: 3000,
+                                                  });
+                                                  return;
+                                                }
+                                                
+                                                updateBatchData(index, 'batchNumber', newBatchNumber);
+                                              }}
+                                              placeholder="Edite o código se necessário"
+                                              className="h-8 text-xs bg-white border-green-300"
+                                            />
+                                            <p className="text-xs text-gray-500 mt-1">
+                                              💡 Você pode editar o código se necessário. Evite duplicatas!
+                                            </p>
+                                          </div>
+                                        )}
+                                      </div>
                                     </div>
                                     <div>
                                       <Label className="text-xs text-gray-600">Quantidade</Label>
@@ -750,9 +820,9 @@ const Entradas = () => {
                                       />
                                     </div>
                                   </div>
-                                  <div className="grid grid-cols-3 gap-3">
+                                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                     <div>
-                                      <Label className="text-xs text-gray-600">Custo Unitário (R$)</Label>
+                                      <Label className="text-xs text-gray-600">💰 Custo Unitário (R$)</Label>
                                       <Input
                                         type="number"
                                         step="0.01"
@@ -764,24 +834,122 @@ const Entradas = () => {
                                       />
                                     </div>
                                     <div>
-                                      <Label className="text-xs text-gray-600">Data de Fabricação</Label>
+                                      <Label className="text-xs text-gray-600">🏭 Data de Fabricação {existingBatch ? '(Carregada do lote)' : '(DD/MM/AAAA)'}</Label>
                                       <Input
-                                        type="date"
-                                        value={batch.manufactureDate ? (batch.manufactureDate instanceof Date ? batch.manufactureDate.toISOString().split('T')[0] : batch.manufactureDate) : ''}
-                                        onChange={(e) => updateBatchData(index, 'manufactureDate', e.target.value ? new Date(e.target.value) : undefined)}
+                                        type="text"
+                                        placeholder="DD/MM/AAAA"
+                                        value={dateTextValues[`manu-${index}`] || (batch.manufactureDate ? (
+                                          batch.manufactureDate instanceof Date 
+                                            ? batch.manufactureDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                                            : batch.manufactureDate
+                                        ) : '')}
+                                        onChange={(e) => {
+                                          let value = e.target.value;
+                                          
+                                          // Remove caracteres que não são dígitos ou /
+                                          value = value.replace(/[^0-9\/]/g, '');
+                                          
+                                          // Limita a 8 dígitos
+                                          const numbers = value.replace(/\D/g, '');
+                                          if (numbers.length <= 2) {
+                                            value = numbers;
+                                          } else if (numbers.length <= 4) {
+                                            value = numbers.slice(0, 2) + '/' + numbers.slice(2);
+                                          } else {
+                                            value = numbers.slice(0, 2) + '/' + numbers.slice(2, 4) + '/' + numbers.slice(4, 8);
+                                          }
+                                          
+                                          // Atualiza o estado de texto
+                                          setDateTextValues(prev => ({ ...prev, [`manu-${index}`]: value }));
+                                          
+                                          // Se vazio, limpa a data
+                                          if (value.length === 0) {
+                                            updateBatchData(index, 'manufactureDate', undefined);
+                                            return;
+                                          }
+                                          
+                                          // Converte para Date quando estiver completo (DD/MM/YYYY = 10 caracteres)
+                                          if (value.length === 10) {
+                                            const [day, month, year] = value.split('/');
+                                            if (day && month && year && day.length === 2 && month.length === 2 && year.length === 4) {
+                                              const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+                                              if (!isNaN(date.getTime())) {
+                                                updateBatchData(index, 'manufactureDate', date);
+                                                // Limpa o valor de texto quando converte com sucesso
+                                                setTimeout(() => setDateTextValues(prev => {
+                                                  const newVal = {...prev};
+                                                  delete newVal[`manu-${index}`];
+                                                  return newVal;
+                                                }), 100);
+                                              }
+                                            }
+                                          }
+                                        }}
                                         className="h-9"
-                                        disabled={!!existingBatch}
+                                        maxLength={10}
                                       />
+                                      <p className="text-xs text-gray-500 mt-1">
+                                        {existingBatch ? '✅ Data do lote existente' : '💡 Formato: DD/MM/AAAA (ex: 25/12/2024)'}
+                                      </p>
                                     </div>
                                     <div>
-                                      <Label className="text-xs text-gray-600">Data de Validade</Label>
+                                      <Label className="text-xs text-gray-600">⏰ Data de Validade {existingBatch ? '(Carregada do lote)' : '(DD/MM/AAAA)'}</Label>
                                       <Input
-                                        type="date"
-                                        value={batch.expiryDate ? (batch.expiryDate instanceof Date ? batch.expiryDate.toISOString().split('T')[0] : batch.expiryDate) : ''}
-                                        onChange={(e) => updateBatchData(index, 'expiryDate', e.target.value ? new Date(e.target.value) : undefined)}
+                                        type="text"
+                                        placeholder="DD/MM/AAAA"
+                                        value={dateTextValues[`exp-${index}`] || (batch.expiryDate ? (
+                                          batch.expiryDate instanceof Date 
+                                            ? batch.expiryDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                                            : batch.expiryDate
+                                        ) : '')}
+                                        onChange={(e) => {
+                                          let value = e.target.value;
+                                          
+                                          // Remove caracteres que não são dígitos ou /
+                                          value = value.replace(/[^0-9\/]/g, '');
+                                          
+                                          // Limita a 8 dígitos
+                                          const numbers = value.replace(/\D/g, '');
+                                          if (numbers.length <= 2) {
+                                            value = numbers;
+                                          } else if (numbers.length <= 4) {
+                                            value = numbers.slice(0, 2) + '/' + numbers.slice(2);
+                                          } else {
+                                            value = numbers.slice(0, 2) + '/' + numbers.slice(2, 4) + '/' + numbers.slice(4, 8);
+                                          }
+                                          
+                                          // Atualiza o estado de texto
+                                          setDateTextValues(prev => ({ ...prev, [`exp-${index}`]: value }));
+                                          
+                                          // Se vazio, limpa a data
+                                          if (value.length === 0) {
+                                            updateBatchData(index, 'expiryDate', undefined);
+                                            return;
+                                          }
+                                          
+                                          // Converte para Date quando estiver completo (DD/MM/YYYY = 10 caracteres)
+                                          if (value.length === 10) {
+                                            const [day, month, year] = value.split('/');
+                                            if (day && month && year && day.length === 2 && month.length === 2 && year.length === 4) {
+                                              const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+                                              if (!isNaN(date.getTime())) {
+                                                updateBatchData(index, 'expiryDate', date);
+                                                // Limpa o valor de texto quando converte com sucesso
+                                                setTimeout(() => setDateTextValues(prev => {
+                                                  const newVal = {...prev};
+                                                  delete newVal[`exp-${index}`];
+                                                  return newVal;
+                                                }), 100);
+                                              }
+                                            }
+                                          }
+                                        }}
                                         className="h-9"
-                                        disabled={!!existingBatch}
+                                        maxLength={10}
                                       />
+                                      <p className="text-xs text-gray-500 mt-1">
+                                        {existingBatch ? '✅ Data do lote existente' : '💡 Formato: DD/MM/AAAA (ex: 31/12/2024)'}
+                                      </p>
                                     </div>
                                   </div>
                                   <Button
@@ -821,7 +989,13 @@ const Entradas = () => {
                         </div>
                       )}
                       
-                      <p className="text-xs text-indigo-700 mt-3 bg-white/40 p-2 rounded">
+                      <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <p className="text-xs text-blue-800 font-medium">
+                          📅 <strong>Datas de Fabricação e Validade:</strong> Ao adicionar um novo lote, você pode preencher as datas. 
+                          Esses campos aparecem logo abaixo do custo unitário (🏭 e ⏰)
+                        </p>
+                      </div>
+                      <p className="text-xs text-indigo-700 mt-2 bg-white/40 p-2 rounded">
                         💡 <strong>Dica:</strong> Adicione lotes para controlar validades e rastreabilidade do estoque
                       </p>
                     </div>
@@ -1090,14 +1264,6 @@ const Entradas = () => {
                       </TableCell>
                       <TableCell className="py-4 sm:py-6 px-2 sm:px-4 text-right">
                         <div className="flex items-center justify-end space-x-1 sm:space-x-3">
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            onClick={() => openEditDialog(entry)}
-                            className="text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 p-2 sm:p-3 rounded-xl sm:rounded-2xl transition-all duration-150"
-                          >
-                            <Edit className="h-3 w-3 sm:h-4 sm:w-4" />
-                          </Button>
                           <Button 
                             variant="ghost" 
                             size="sm"

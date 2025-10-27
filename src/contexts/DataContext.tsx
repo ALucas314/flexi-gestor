@@ -5,7 +5,7 @@
  * Todos os dados são isolados por usuário usando Row Level Security (RLS).
  */
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from './AuthContext';
 import { useWorkspace } from './WorkspaceContext';
@@ -37,6 +37,7 @@ interface Movement {
   date: Date;
   total: number;
   receiptNumber?: string;
+  status?: 'pendente' | 'confirmado' | 'cancelado'; // Campo para controlar status da movimentação
 }
 
 interface Notification {
@@ -88,68 +89,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const { isAuthenticated, user } = useAuth();
   const { workspaceAtivo } = useWorkspace();
 
-  // 🔄 Carregar dados do Supabase quando o usuário estiver autenticado OU mudar workspace
-  useEffect(() => {
-    if (isAuthenticated && user && workspaceAtivo) {
-      refreshData();
-      loadNotificationsFromLocalStorage();
-    } else if (!isAuthenticated || !user) {
-      // Limpar dados quando não autenticado
-      setProducts([]);
-      setMovements([]);
-      setNotifications([]);
-    }
-  }, [isAuthenticated, user, workspaceAtivo?.id]); // Recarregar quando mudar workspace
-
-  // 📦 Carregar notificações do localStorage
-  const loadNotificationsFromLocalStorage = () => {
-    try {
-      const saved = localStorage.getItem(`flexi-notifications-${user?.id}`);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        const processedNotifications = parsed.map((n: any) => ({
-          ...n,
-          timestamp: new Date(n.timestamp)
-        }));
-        setNotifications(processedNotifications);
-      }
-    } catch (error) {
-      // Silencioso
-    }
-  };
-
-  // 💾 Salvar notificações no localStorage
-  const saveNotificationsToLocalStorage = (notifs: Notification[]) => {
-    try {
-      if (user?.id) {
-        localStorage.setItem(`flexi-notifications-${user.id}`, JSON.stringify(notifs));
-      }
-    } catch (error) {
-      // Silencioso
-    }
-  };
-
-  // 🔄 Função para recarregar todos os dados do Supabase
-  const refreshData = async () => {
-    if (!user?.id) return;
-
-    try {
-      setIsLoading(true);
-
-      // Buscar produtos e movimentações em paralelo
-      await Promise.all([
-        refreshProducts(),
-        refreshMovements()
-      ]);
-    } catch (error) {
-      console.error('Erro ao carregar dados');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // 🔄 Função para recarregar apenas os produtos
-  const refreshProducts = async () => {
+  // 🔄 Função para recarregar apenas os produtos (useCallback para evitar re-criar referência)
+  const refreshProducts = useCallback(async () => {
     if (!user?.id || !workspaceAtivo?.id) return;
     
     try {
@@ -183,10 +124,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     } catch (error) {
       console.error('Erro ao carregar produtos');
     }
-  };
+  }, [user?.id, workspaceAtivo?.id]);
 
-  // 🔄 Função para recarregar apenas as movimentações
-  const refreshMovements = async () => {
+  // 🔄 Função para recarregar apenas as movimentações (useCallback para evitar re-criar referência)
+  const refreshMovements = useCallback(async () => {
     if (!user?.id || !workspaceAtivo?.id) return;
 
     try {
@@ -220,12 +161,169 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         description: m.observacoes || '',
         date: new Date(m.criado_em),
         total: parseFloat(m.preco_total) || 0,
-        receiptNumber: m.numero_recibo
+        receiptNumber: m.numero_recibo,
+        status: (m.status || 'confirmado') as 'pendente' | 'confirmado' | 'cancelado' // Incluir campo status
       }));
 
       setMovements(mappedMovements);
     } catch (error) {
       console.error('Erro ao carregar movimentações');
+    }
+  }, [user?.id, workspaceAtivo?.id]);
+
+  // 🔄 Função para recarregar todos os dados do Supabase
+  const refreshData = useCallback(async () => {
+    if (!user?.id) return;
+
+    try {
+      setIsLoading(true);
+
+      // Buscar produtos e movimentações em paralelo
+      await Promise.all([
+        refreshProducts(),
+        refreshMovements()
+      ]);
+    } catch (error) {
+      console.error('Erro ao carregar dados');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user?.id, refreshProducts, refreshMovements]);
+
+  // 📦 Carregar notificações do localStorage
+  const loadNotificationsFromLocalStorage = useCallback(() => {
+    try {
+      const saved = localStorage.getItem(`flexi-notifications-${user?.id}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const processedNotifications = parsed.map((n: any) => ({
+          ...n,
+          timestamp: new Date(n.timestamp)
+        }));
+        setNotifications(processedNotifications);
+      }
+    } catch (error) {
+      // Silencioso
+    }
+  }, [user?.id]);
+
+  // 🔄 Carregar dados do Supabase quando o usuário estiver autenticado OU mudar workspace
+  useEffect(() => {
+    if (isAuthenticated && user && workspaceAtivo) {
+      // Carregar dados e notificações
+      const loadData = async () => {
+        await refreshData();
+        loadNotificationsFromLocalStorage();
+      };
+      loadData();
+
+      let produtosSubscription: any = null;
+      let movimentacoesSubscription: any = null;
+      let lastSuccessfulConnection = Date.now();
+      let isFirstConnection = true;
+
+      // Função para reconfigurar subscriptions quando desconectam
+      const reconfigureSubscriptions = () => {
+        if (produtosSubscription) {
+          supabase.removeChannel(produtosSubscription);
+        }
+        if (movimentacoesSubscription) {
+          supabase.removeChannel(movimentacoesSubscription);
+        }
+
+        try {
+          produtosSubscription = supabase
+            .channel(`produtos-changes-${workspaceAtivo.id}-${Date.now()}`)
+            .on('postgres_changes', 
+              { 
+                event: '*', 
+                schema: 'public', 
+                table: 'produtos',
+                filter: `usuario_id=eq.${workspaceAtivo.id}`
+              }, 
+              async (payload) => {
+                await refreshProducts();
+              }
+            )
+            .subscribe((status) => {
+              if (status === 'SUBSCRIBED') {
+                lastSuccessfulConnection = Date.now();
+              }
+            });
+
+          movimentacoesSubscription = supabase
+            .channel(`movimentacoes-changes-${workspaceAtivo.id}-${Date.now()}`)
+            .on('postgres_changes', 
+              { 
+                event: '*', 
+                schema: 'public', 
+                table: 'movimentacoes',
+                filter: `usuario_id=eq.${workspaceAtivo.id}`
+              }, 
+              async (payload) => {
+                await refreshMovements();
+                await refreshProducts();
+              }
+            )
+            .subscribe((status) => {
+              if (status === 'SUBSCRIBED') {
+                lastSuccessfulConnection = Date.now();
+              }
+            });
+        } catch (error) {
+          // Silencioso
+        }
+      };
+
+      // Configurar subscriptions inicial
+      reconfigureSubscriptions();
+
+      // 🔄 Health check que detecta desconexão e reconecta
+      // Verifica a cada 30 segundos se a última conexão foi há mais de 2 minutos
+      const healthCheckInterval = setInterval(() => {
+        const timeSinceLastConnection = Date.now() - lastSuccessfulConnection;
+        // Se não houve conexão bem-sucedida nos últimos 2 minutos, fazer reload
+        if (timeSinceLastConnection > 120000) {
+          window.location.reload();
+        }
+      }, 30000); // Verifica a cada 30 segundos
+
+      // 🔄 Refresh periódico silencioso dos dados (a cada 60 segundos)
+      const refreshInterval = setInterval(async () => {
+        await refreshData();
+      }, 60000); // 60 segundos
+
+      // 🧹 Cleanup ao sair
+      return () => {
+        if (healthCheckInterval) {
+          clearInterval(healthCheckInterval);
+        }
+        if (refreshInterval) {
+          clearInterval(refreshInterval);
+        }
+        if (produtosSubscription) {
+          supabase.removeChannel(produtosSubscription);
+        }
+        if (movimentacoesSubscription) {
+          supabase.removeChannel(movimentacoesSubscription);
+        }
+      };
+    } else if (!isAuthenticated || !user) {
+      // Limpar dados quando não autenticado
+      setProducts([]);
+      setMovements([]);
+      setNotifications([]);
+    }
+  }, [isAuthenticated, user?.id, workspaceAtivo?.id]); // Recarregar quando mudar workspace ou usuário
+
+  // 💾 Salvar notificações no localStorage
+  const saveNotificationsToLocalStorage = (notifs: Notification[]) => {
+    try {
+      if (user?.id) {
+        localStorage.setItem(`flexi-notifications-${user.id}`, JSON.stringify(notifs));
+      }
+    } catch (error) {
+      // Silencioso
     }
   };
 
@@ -236,6 +334,17 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     }
 
     try {
+      // 🔍 Verificar no BANCO se já existe produto com o mesmo SKU
+      const { data: existingProducts, error: checkError } = await supabase
+        .from('produtos')
+        .select('id, nome, sku')
+        .eq('sku', product.sku)
+        .limit(1);
+      
+      if (existingProducts && existingProducts.length > 0) {
+        throw new Error(`O SKU deste produto já foi adicionado`);
+      }
+
       // Criar no workspace ATIVO (não no usuário logado)
       const { data, error } = await supabase
         .from('produtos')
@@ -255,6 +364,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         .single();
 
       if (error) {
+        // Verificar se é erro de violação de única
+        if (error.code === '23505' || error.message.includes('unique') || error.message.includes('duplicate') || error.message.includes('SKU')) {
+          throw new Error(`O SKU deste produto já foi adicionado`);
+        }
         throw new Error(error.message);
       }
 
@@ -279,6 +392,20 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     }
 
     try {
+      // 🔍 Se o SKU está sendo alterado, verificar se já existe
+      if (updates.sku !== undefined) {
+        const { data: existingProducts } = await supabase
+          .from('produtos')
+          .select('id, nome, sku')
+          .eq('sku', updates.sku)
+          .neq('id', id)
+          .limit(1);
+        
+        if (existingProducts && existingProducts.length > 0) {
+          throw new Error(`O SKU deste produto já foi adicionado`);
+        }
+      }
+
       const updateData: any = {};
       if (updates.name !== undefined) updateData.nome = updates.name;
       if (updates.sku !== undefined) updateData.sku = updates.sku;
@@ -297,6 +424,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         .eq('id', id);
 
       if (error) {
+        // Verificar se é erro de violação de única
+        if (error.code === '23505' || error.message.includes('unique')) {
+          throw new Error(`O SKU deste produto já foi adicionado`);
+        }
         throw new Error(error.message);
       }
 

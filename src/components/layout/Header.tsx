@@ -15,7 +15,7 @@ import {
   DropdownMenuItem, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sidebar } from "./Sidebar";
 import { WorkspaceSelector } from "@/components/WorkspaceSelector";
@@ -74,6 +74,10 @@ export const Header = () => {
                   setIsSheetOpen(false);
                 }}
               >
+                <SheetHeader className="sr-only">
+                  <SheetTitle>Navegação</SheetTitle>
+                  <SheetDescription>Menu de navegação principal</SheetDescription>
+                </SheetHeader>
                 <Sidebar onNavigate={() => setIsSheetOpen(false)} />
               </SheetContent>
             </Sheet>

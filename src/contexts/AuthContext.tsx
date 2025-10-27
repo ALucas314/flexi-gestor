@@ -101,7 +101,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
         
         if (authError) {
-          setIsLoading(false);
           return;
         }
         
@@ -120,7 +119,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             .single();
 
           if (insertError && insertError.code !== '23505') {
-            console.error('Erro ao criar perfil');
+            // Erro ao criar perfil
           }
           
           // Definir usuário local SEMPRE (mesmo se a criação falhar)
@@ -132,7 +131,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             role: 'user'
           });
         }
-        setIsLoading(false);
         return;
       }
 
@@ -144,11 +142,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         username: profile.email.split('@')[0],
         role: 'user'
       });
-
-      setIsLoading(false);
     } catch (error) {
-      console.error('Erro ao carregar perfil');
-      setIsLoading(false);
       setUser(null);
     }
   };
@@ -246,7 +240,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
 
       if (error) {
-        
         // Traduzir mensagens de erro
         const errorMessages: Record<string, string> = {
           'User already registered': 'Usuário já cadastrado. Por favor, faça login.',
@@ -263,35 +256,41 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           variant: "destructive"
         });
         
+        setIsLoading(false);
         return false;
       }
 
       if (data.user) {
-        toast({
-          title: "✅ Cadastro realizado!",
-          description: "Verifique seu email para confirmar o cadastro.",
-        });
-        
         // Se a confirmação de email estiver desabilitada, carregar perfil
         if (data.session) {
           await loadUserProfile(data.user.id);
+          
+          toast({
+            title: "✅ Bem-vindo ao Flexi Gestor!",
+            description: `Olá ${name}! Seu cadastro foi realizado com sucesso.`,
+          });
+        } else {
+          toast({
+            title: "✅ Cadastro realizado!",
+            description: "Verifique seu email para confirmar o cadastro.",
+          });
         }
         
+        setIsLoading(false);
         return true;
       }
 
+      setIsLoading(false);
       return false;
     } catch (error: any) {
-      
       toast({
         title: "❌ Erro no registro",
         description: "Não foi possível criar a conta. Tente novamente.",
         variant: "destructive"
       });
       
-      return false;
-    } finally {
       setIsLoading(false);
+      return false;
     }
   };
 

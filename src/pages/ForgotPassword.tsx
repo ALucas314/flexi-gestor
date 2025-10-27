@@ -8,47 +8,74 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/lib/supabase';
 
 const ForgotPassword = () => {
   const navigate = useNavigate();
-  const { resetPassword } = useAuth();
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
+  // Validação de email
+  const isValidEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setMessage(null);
     
-    if (!email) {
-      setMessage({ type: 'error', text: 'Por favor, digite seu email' });
+    // Validação
+    if (!email.trim()) {
+      setMessage({ type: 'error', text: '❌ Por favor, digite seu email' });
+      return;
+    }
+
+    if (!isValidEmail(email)) {
+      setMessage({ type: 'error', text: '❌ Por favor, digite um email válido' });
       return;
     }
 
     setIsLoading(true);
-    setMessage(null);
 
     try {
-      const success = await resetPassword(email);
+      // Enviar email de recuperação
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
 
-      if (success) {
-        setMessage({ 
-          type: 'success', 
-          text: 'Email enviado! Verifique sua caixa de entrada e spam.' 
-        });
-        setEmail('');
-      } else {
-        setMessage({ 
-          type: 'error', 
-          text: 'Erro ao enviar email. Verifique se o email está correto.' 
-        });
+      if (error) {
+        // Mensagens de erro traduzidas
+        let errorMessage = 'Não foi possível enviar o email. Tente novamente.';
+        
+        if (error.message.includes('not found') || error.message.includes('does not exist')) {
+          errorMessage = 'Usuário não encontrado. Verifique se o email está correto.';
+        } else if (error.message.includes('Invalid email')) {
+          errorMessage = 'Email inválido. Verifique o formato do email.';
+        } else if (error.message.includes('rate limit') || error.message.includes('too many')) {
+          errorMessage = 'Muitas tentativas. Aguarde alguns minutos e tente novamente.';
+        } else if (error.message.includes('email not confirmed')) {
+          errorMessage = 'Por favor, confirme seu email primeiro.';
+        }
+
+        setMessage({ type: 'error', text: `❌ ${errorMessage}` });
+        setIsLoading(false);
+        return;
       }
-    } catch (error) {
-      console.error('Erro:', error);
+
+      // Sucesso
+      setMessage({ 
+        type: 'success', 
+        text: '✅ Email enviado! Verifique sua caixa de entrada e spam.' 
+      });
+      setEmail('');
+      
+    } catch (error: any) {
       setMessage({ 
         type: 'error', 
-        text: 'Erro ao enviar email. Tente novamente.' 
-        });
+        text: '❌ Ocorreu um erro inesperado. Tente novamente em alguns instantes.' 
+      });
     } finally {
       setIsLoading(false);
     }

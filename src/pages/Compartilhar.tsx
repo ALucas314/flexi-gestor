@@ -2,7 +2,7 @@
 // Permite compartilhar dados com outros usuários
 
 import React, { useState, useEffect } from 'react';
-import { Users, UserPlus, Trash2, Mail, Clock, CheckCircle, XCircle, Loader2, Settings, Shield } from 'lucide-react';
+import { Users, UserPlus, Trash2, Mail, Clock, CheckCircle, XCircle, Loader2, Settings, Shield, Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -66,6 +66,18 @@ const Compartilhar = () => {
         ? prev.filter(p => p !== paginaId)
         : [...prev, paginaId]
     );
+  };
+
+  // Copiar email do próprio usuário
+  const copiarMeuEmail = async () => {
+    if (!user?.email) return;
+    
+    try {
+      await navigator.clipboard.writeText(user.email);
+      toast.success(`Email copiado: ${user.email}`);
+    } catch (error) {
+      toast.error('Não foi possível copiar o email');
+    }
   };
 
   // Carregar compartilhamentos
@@ -165,10 +177,7 @@ const Compartilhar = () => {
   };
 
   const adicionarCompartilhamento = async () => {
-    console.log('🔍 [Compartilhar] Iniciando...', { user, emailCompartilhar });
-    
     if (!user) {
-      console.error('❌ [Compartilhar] Usuário não autenticado!');
       toast.error('Você precisa estar logado');
       return;
     }
@@ -314,8 +323,55 @@ const Compartilhar = () => {
 
       toast.success('Acesso removido com sucesso');
       carregarCompartilhamentos();
+      // Não precisa recarregar a página aqui porque a pessoa que teve o acesso removido vai ver a mudança quando atualizar
     } catch (error) {
       console.error('Erro ao remover compartilhamento:', error);
+      toast.error('Erro ao remover acesso');
+    }
+  };
+
+  const revogarAcessoCompartilhado = async (compartilhamentoId: string, nomeUsuario: string) => {
+    if (!confirm(`Deseja remover seu acesso aos dados de ${nomeUsuario}?\n\nVocê não poderá mais visualizar ou editar esses dados.\n\nIsso também removerá o botão deste workspace no menu superior.`)) {
+      return;
+    }
+
+    try {
+      // Buscar o compartilhamento para pegar o ID do dono
+      const compartilhamento = compartilhadosComigo.find(c => c.id === compartilhamentoId);
+      const donoId = compartilhamento?.dono_id;
+      
+      if (!donoId) {
+        toast.error('Erro ao identificar o compartilhamento');
+        return;
+      }
+
+      // Inativar o compartilhamento no banco
+      const { error } = await supabase
+        .from('compartilhamentos')
+        .update({ status: 'inativo' })
+        .eq('id', compartilhamentoId);
+
+      if (error) throw error;
+
+      toast.success('✅ Seu acesso foi removido com sucesso!');
+
+      // Verificar se o workspace ativo é o que foi removido
+      const workspaceAtivoId = localStorage.getItem('flexi_workspace_ativo');
+      
+      if (workspaceAtivoId === donoId) {
+        // Se está no workspace que foi removido, voltar para o próprio workspace
+        localStorage.setItem('flexi_workspace_ativo', user?.id || '');
+        toast.info('Voltando para seu workspace...');
+      }
+      
+      // Atualizar a lista de compartilhamentos
+      carregarCompartilhamentos();
+      
+      // Recarregar após um momento para atualizar o header
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    } catch (error) {
       toast.error('Erro ao remover acesso');
     }
   };
@@ -357,12 +413,36 @@ const Compartilhar = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-6 space-y-4">
+          {/* Meu Email para Copiar */}
+          {user?.email && (
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-3 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                  <Mail className="h-4 w-4 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-gray-600">Meu Email:</p>
+                  <p className="text-sm font-semibold text-gray-900">{user.email}</p>
+                </div>
+              </div>
+              <Button
+                onClick={copiarMeuEmail}
+                variant="outline"
+                size="sm"
+                className="gap-2 hover:bg-blue-50"
+              >
+                <Copy className="h-4 w-4" />
+                Copiar
+              </Button>
+            </div>
+          )}
+
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="flex-1 relative">
               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
               <Input
                 type="email"
-                placeholder="email@exemplo.com"
+                placeholder="Digite o email da pessoa que receberá acesso"
                 value={emailCompartilhar}
                 onChange={(e) => setEmailCompartilhar(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && adicionarCompartilhamento()}
@@ -536,7 +616,7 @@ const Compartilhar = () => {
               </Badge>
             </CardTitle>
             <CardDescription>
-              Você tem acesso aos dados destes usuários
+              Você tem acesso aos dados destes usuários. Você pode remover seu acesso a qualquer momento usando o botão de deletar.
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-6">
@@ -544,7 +624,7 @@ const Compartilhar = () => {
               {compartilhadosComigo.map((comp) => (
                 <div
                   key={comp.id}
-                  className="flex items-center gap-3 p-4 border rounded-lg bg-purple-50/50"
+                  className="flex items-center gap-3 p-4 border rounded-lg bg-purple-50/50 hover:bg-purple-100/50 transition-colors"
                 >
                   <div className="p-2 bg-purple-100 rounded-full">
                     <Users className="h-5 w-5 text-purple-600" />
@@ -561,10 +641,24 @@ const Compartilhar = () => {
                       <Clock className="h-3 w-3" />
                       Desde {new Date(comp.criado_em).toLocaleDateString('pt-BR')}
                     </p>
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {comp.permissoes?.map((perm: string) => {
+                        const pagina = PAGINAS_DISPONIVEIS.find(p => p.id === perm);
+                        return pagina ? (
+                          <Badge key={perm} variant="secondary" className="text-xs bg-purple-100 text-purple-700">
+                            {pagina.icon} {pagina.label}
+                          </Badge>
+                        ) : null;
+                      })}
+                    </div>
                   </div>
-                  <Badge className="bg-purple-600 text-white">
-                    Acesso Concedido
-                  </Badge>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => revogarAcessoCompartilhado(comp.id, comp.usuario.nome || comp.usuario.email)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
               ))}
             </div>
