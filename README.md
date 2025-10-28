@@ -16,7 +16,7 @@
 
 ## ✨ **Visão Geral**
 
-O **Flexi Gestor** é uma solução empresarial moderna e intuitiva desenvolvida com as mais recentes tecnologias web. Especialmente otimizado para gestão de produtos de açaí e complementos, oferece controle total sobre estoque, movimentações financeiras e relatórios analíticos.
+O **Flexi Gestor** é uma solução empresarial moderna e intuitiva desenvolvida com as mais recentes tecnologias web. Especialmente otimizado para gestão de produtos, oferece controle total sobre estoque, movimentações financeiras e relatórios analíticos.
 
 ### 🎯 **Principais Benefícios**
 - **⚡ Interface Moderna**: Design responsivo e intuitivo
