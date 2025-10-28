@@ -15,6 +15,8 @@ import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { useConfirmDialog } from '@/hooks/use-confirm-dialog';
 
 interface Compartilhamento {
   id: string;
@@ -43,6 +45,7 @@ const Compartilhar = () => {
   const { user } = useAuth();
   const { workspaceAtivo } = useWorkspace();
   const navigate = useNavigate();
+  const { confirm, dialogState, closeDialog, handleConfirm } = useConfirmDialog();
   const [emailCompartilhar, setEmailCompartilhar] = useState('');
   const [permissoesSelecionadas, setPermissoesSelecionadas] = useState<string[]>([
     'produtos', 'entradas', 'saidas', 'relatorios', 'financeiro', 'pdv'
@@ -308,34 +311,41 @@ const Compartilhar = () => {
     }
   };
 
-  const removerCompartilhamento = async (compartilhamentoId: string, nomeUsuario: string) => {
-    if (!confirm(`Deseja remover o acesso de ${nomeUsuario}?\n\nOs dados permanecerão, mas o usuário não poderá mais visualizar ou editar.`)) {
-      return;
-    }
+  const removerCompartilhamento = (compartilhamentoId: string, nomeUsuario: string) => {
+    confirm(
+      'Remover Acesso?',
+      `Deseja remover o acesso de ${nomeUsuario}?\n\nOs dados permanecerão, mas o usuário não poderá mais visualizar ou editar.`,
+      async () => {
+        try {
+          const { error } = await supabase
+            .from('compartilhamentos')
+            .update({ status: 'inativo' })
+            .eq('id', compartilhamentoId);
 
-    try {
-      const { error } = await supabase
-        .from('compartilhamentos')
-        .update({ status: 'inativo' })
-        .eq('id', compartilhamentoId);
+          if (error) throw error;
 
-      if (error) throw error;
-
-      toast.success('Acesso removido com sucesso');
-      carregarCompartilhamentos();
-      // Não precisa recarregar a página aqui porque a pessoa que teve o acesso removido vai ver a mudança quando atualizar
-    } catch (error) {
-      console.error('Erro ao remover compartilhamento:', error);
-      toast.error('Erro ao remover acesso');
-    }
+          toast.success('Acesso removido com sucesso');
+          carregarCompartilhamentos();
+          // Não precisa recarregar a página aqui porque a pessoa que teve o acesso removido vai ver a mudança quando atualizar
+        } catch (error) {
+          console.error('Erro ao remover compartilhamento:', error);
+          toast.error('Erro ao remover acesso');
+        }
+      },
+      {
+        variant: 'destructive',
+        confirmText: 'Remover',
+        cancelText: 'Cancelar',
+      }
+    );
   };
 
-  const revogarAcessoCompartilhado = async (compartilhamentoId: string, nomeUsuario: string) => {
-    if (!confirm(`Deseja remover seu acesso aos dados de ${nomeUsuario}?\n\nVocê não poderá mais visualizar ou editar esses dados.\n\nIsso também removerá o botão deste workspace no menu superior.`)) {
-      return;
-    }
-
-    try {
+  const revogarAcessoCompartilhado = (compartilhamentoId: string, nomeUsuario: string) => {
+    confirm(
+      'Revogar Acesso?',
+      `Deseja remover seu acesso aos dados de ${nomeUsuario}?\n\nVocê não poderá mais visualizar ou editar esses dados.\n\nIsso também removerá o botão deste workspace no menu superior.`,
+      async () => {
+        try {
       // Buscar o compartilhamento para pegar o ID do dono
       const compartilhamento = compartilhadosComigo.find(c => c.id === compartilhamentoId);
       const donoId = compartilhamento?.dono_id;
@@ -371,9 +381,16 @@ const Compartilhar = () => {
       setTimeout(() => {
         window.location.reload();
       }, 1000);
-    } catch (error) {
-      toast.error('Erro ao remover acesso');
-    }
+        } catch (error) {
+          toast.error('Erro ao remover acesso');
+        }
+      },
+      {
+        variant: 'destructive',
+        confirmText: 'Revogar',
+        cancelText: 'Cancelar',
+      }
+    );
   };
 
   if (isLoading) {
@@ -387,11 +404,11 @@ const Compartilhar = () => {
   return (
     <div className="container mx-auto p-4 md:p-6 max-w-7xl space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex flex-col items-center sm:flex-row sm:items-center gap-3 mb-6 mt-4 sm:mt-0">
         <div className="p-3 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl shadow-lg">
           <Users className="h-6 w-6 text-white" />
         </div>
-        <div>
+        <div className="text-center sm:text-left">
           <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
             Compartilhar Acesso
           </h1>
@@ -665,6 +682,18 @@ const Compartilhar = () => {
           </CardContent>
         </Card>
       )}
+      
+      {/* Diálogo de Confirmação */}
+      <ConfirmDialog
+        isOpen={dialogState.isOpen}
+        onClose={closeDialog}
+        onConfirm={handleConfirm}
+        title={dialogState.title}
+        description={dialogState.description}
+        confirmText={dialogState.confirmText}
+        cancelText={dialogState.cancelText}
+        variant={dialogState.variant}
+      />
     </div>
   );
 };

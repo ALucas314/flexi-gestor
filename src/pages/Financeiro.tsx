@@ -291,9 +291,9 @@ Compra registrada com sucesso!
     <main className="flex-1 p-2 sm:p-6 space-y-3 sm:space-y-6">
       {/* Cabeçalho */}
       <div>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent flex items-center gap-2">
+        <div className="flex flex-col items-center sm:flex-row sm:items-center sm:justify-between gap-4 mt-4 sm:mt-0">
+          <div className="text-center sm:text-left">
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent flex items-center gap-2 justify-center sm:justify-start">
               <DollarSign className="w-8 h-8 text-blue-600" />
               Financeiro
             </h1>
@@ -374,52 +374,64 @@ Compra registrada com sucesso!
         {/* ABA 1: MOVIMENTAÇÕES DE ESTOQUE (Padrão) */}
         <TabsContent value="movimentacoes" className="space-y-6">
           {/* Cards de Estatísticas de Movimentações */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200 hover:shadow-lg transition-all">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-blue-800">📊 Total</CardTitle>
-                <RotateCcw className="h-5 w-5 text-blue-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold text-blue-700">{totalMovements}</div>
-                <p className="text-xs text-blue-600">Movimentações</p>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200 hover:shadow-lg transition-all">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-purple-800">💵 Saldo</CardTitle>
-                <Wallet className="h-5 w-5 text-purple-600" />
-              </CardHeader>
-              <CardContent>
-                <div className={`text-3xl font-bold ${saldo >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                  R$ {Math.abs(saldo).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
+            <div className="group bg-gradient-to-br from-blue-100 to-blue-200 rounded-2xl sm:rounded-3xl p-4 sm:p-6 text-blue-800 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 border border-blue-200/50">
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-300/50 rounded-xl sm:rounded-2xl flex items-center justify-center backdrop-blur-sm">
+                  <RotateCcw className="w-5 h-5 sm:w-6 sm:h-6 text-blue-700" />
                 </div>
-                <p className="text-xs text-purple-600">{saldo >= 0 ? 'Lucro' : 'Prejuízo'}</p>
-              </CardContent>
-            </Card>
+                <div className="text-right">
+                  <div className="text-2xl sm:text-3xl font-black">{totalMovements}</div>
+                  <div className="text-xs sm:text-sm opacity-90">Total</div>
+                </div>
+              </div>
+              <h3 className="text-base sm:text-lg font-semibold mb-2">📊 Total Movimentações</h3>
+              <p className="text-xs sm:text-sm opacity-80">Registros no sistema</p>
+            </div>
 
-            <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200 hover:shadow-lg transition-all">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-purple-800">📅 Este Mês</CardTitle>
-                <Calendar className="h-5 w-5 text-purple-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold text-purple-700">{thisMonthMovements.length}</div>
-                <p className="text-xs text-purple-600">Movimentações</p>
-              </CardContent>
-            </Card>
+            <div className={`group ${saldo >= 0 ? 'bg-gradient-to-br from-green-100 to-green-200' : 'bg-gradient-to-br from-red-100 to-red-200'} rounded-2xl sm:rounded-3xl p-4 sm:p-6 ${saldo >= 0 ? 'text-green-800' : 'text-red-800'} shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 border ${saldo >= 0 ? 'border-green-200/50' : 'border-red-200/50'}`}>
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
+                <div className={`w-10 h-10 sm:w-12 sm:h-12 ${saldo >= 0 ? 'bg-green-300/50' : 'bg-red-300/50'} rounded-xl sm:rounded-2xl flex items-center justify-center backdrop-blur-sm`}>
+                  <Wallet className={`w-5 h-5 sm:w-6 sm:h-6 ${saldo >= 0 ? 'text-green-700' : 'text-red-700'}`} />
+                </div>
+                <div className="text-right">
+                  <div className="text-lg sm:text-xl font-black">
+                    R$ {Math.abs(saldo).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </div>
+                  <div className="text-xs sm:text-sm opacity-90">{saldo >= 0 ? 'Lucro' : 'Prejuízo'}</div>
+                </div>
+              </div>
+              <h3 className="text-base sm:text-lg font-semibold mb-2">💵 Saldo</h3>
+              <p className="text-xs sm:text-sm opacity-80">Posição financeira</p>
+            </div>
 
-            <Card className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200 hover:shadow-lg transition-all">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-orange-800">🔄 Produtos</CardTitle>
-                <Package className="h-5 w-5 text-orange-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold text-orange-700">{productosMovimentados}</div>
-                <p className="text-xs text-orange-600">Movimentados</p>
-              </CardContent>
-            </Card>
+            <div className="group bg-gradient-to-br from-purple-100 to-purple-200 rounded-2xl sm:rounded-3xl p-4 sm:p-6 text-purple-800 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 border border-purple-200/50">
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-purple-300/50 rounded-xl sm:rounded-2xl flex items-center justify-center backdrop-blur-sm">
+                  <Calendar className="w-5 h-5 sm:w-6 sm:h-6 text-purple-700" />
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl sm:text-3xl font-black">{thisMonthMovements.length}</div>
+                  <div className="text-xs sm:text-sm opacity-90">Movimentações</div>
+                </div>
+              </div>
+              <h3 className="text-base sm:text-lg font-semibold mb-2">📅 Este Mês</h3>
+              <p className="text-xs sm:text-sm opacity-80">Movimentações do período</p>
+            </div>
+
+            <div className="group bg-gradient-to-br from-orange-100 to-orange-200 rounded-2xl sm:rounded-3xl p-4 sm:p-6 text-orange-800 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 border border-orange-200/50">
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-orange-300/50 rounded-xl sm:rounded-2xl flex items-center justify-center backdrop-blur-sm">
+                  <Package className="w-5 h-5 sm:w-6 sm:h-6 text-orange-700" />
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl sm:text-3xl font-black">{productosMovimentados}</div>
+                  <div className="text-xs sm:text-sm opacity-90">Produtos</div>
+                </div>
+              </div>
+              <h3 className="text-base sm:text-lg font-semibold mb-2">🔄 Produtos</h3>
+              <p className="text-xs sm:text-sm opacity-80">Produtos movimentados</p>
+            </div>
           </div>
 
           {/* Filtros e Busca */}

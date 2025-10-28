@@ -16,10 +16,13 @@ import {
   Trash2,
   Edit
 } from 'lucide-react';
-import { getBatchesByProduct, createBatch, deleteBatch } from '@/lib/batches';
+import { getBatchesByProduct, createBatch, deleteBatch, checkBatchNumberExists, generateNextAvailableBatchNumber } from '@/lib/batches';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useToast } from '@/hooks/use-toast';
+import { daysBetween } from '@/lib/utils';
+import { ConfirmDialog } from './ui/ConfirmDialog';
+import { useConfirmDialog } from '@/hooks/use-confirm-dialog';
 
 interface Batch {
   id: string;
@@ -52,6 +55,7 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
   const { toast } = useToast();
   const { user } = useAuth();
   const { workspaceAtivo } = useWorkspace();
+  const { confirm, dialogState, closeDialog, handleConfirm } = useConfirmDialog();
   const [batches, setBatches] = useState<Batch[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -151,9 +155,21 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
         return;
       }
 
+      // Verificar se o número do lote já existe
+      const existsInDatabase = await checkBatchNumberExists(formData.batchNumber, productId, user.id);
+      
+      if (existsInDatabase) {
+        toast({
+          title: '❌ Número de Lote Duplicado!',
+          description: `O lote "${formData.batchNumber}" já existe para este produto. Escolha outro número.`,
+          variant: 'destructive'
+        });
+        return;
+      }
+
       setIsLoading(true);
 
-      await createBatch(
+      const created = await createBatch(
         productId,
         formData.batchNumber,
         quantity,
@@ -162,6 +178,16 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
         formData.manufactureDate ? new Date(formData.manufactureDate) : undefined,
         formData.expiryDate ? new Date(formData.expiryDate) : undefined
       );
+
+      // Verificar se o lote foi criado com sucesso
+      if (!created) {
+        toast({
+          title: '❌ Erro ao Criar Lote',
+          description: `Não foi possível criar o lote "${formData.batchNumber}". Verifique se o número já existe.`,
+          variant: 'destructive'
+        });
+        return;
+      }
 
       toast({
         title: '✅ Lote Adicionado!',
@@ -191,32 +217,39 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
   const handleDeleteBatch = async (batchId: string, batchNumber: string) => {
     if (!user?.id) return;
     
-    if (!confirm(`Deseja realmente deletar o lote ${batchNumber}?`)) {
-      return;
-    }
+    confirm(
+      'Confirmar Exclusão',
+      `Deseja realmente deletar o lote ${batchNumber}?`,
+      async () => {
+        try {
+          setIsLoading(true);
+          await deleteBatch(batchId, workspaceAtivo?.id || user.id);
 
-    try {
-      setIsLoading(true);
-      await deleteBatch(batchId, workspaceAtivo?.id || user.id);
+          toast({
+            title: '✅ Lote Deletado!',
+            description: `Lote ${batchNumber} foi removido com sucesso`,
+            variant: 'default'
+          });
 
-      toast({
-        title: '✅ Lote Deletado!',
-        description: `Lote ${batchNumber} foi removido com sucesso`,
-        variant: 'default'
-      });
-
-      await loadBatches();
-      onBatchesChange?.();
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Não foi possível deletar o lote';
-      toast({
-        title: '❌ Erro ao Deletar Lote',
-        description: errorMessage,
-        variant: 'destructive'
-      });
-    } finally {
-      setIsLoading(false);
-    }
+          await loadBatches();
+          onBatchesChange?.();
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Não foi possível deletar o lote';
+          toast({
+            title: '❌ Erro ao Deletar Lote',
+            description: errorMessage,
+            variant: 'destructive'
+          });
+        } finally {
+          setIsLoading(false);
+        }
+      },
+      {
+        variant: 'destructive',
+        confirmText: 'Deletar',
+        cancelText: 'Cancelar',
+      }
+    );
   };
 
   // Calcular status do lote (vencido, próximo do vencimento, ok)
@@ -225,7 +258,9 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
 
     const today = new Date();
     const expiry = new Date(expiryDate);
-    const diffDays = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    const diffDays = expiry > today 
+      ? daysBetween(today, expiry)  // Dias até vencer
+      : -daysBetween(expiry, today); // Dias que já passou (negativo)
 
     if (diffDays < 0) {
       return { label: 'Vencido', color: 'red', icon: AlertTriangle };
@@ -237,6 +272,7 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
   };
 
   return (
+    <>
     <div className="space-y-4">
       {/* Cabeçalho com botão de adicionar */}
       <div className="flex items-center justify-between">
@@ -246,13 +282,32 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
         </div>
         
         <Button 
-          onClick={() => {
+          onClick={async () => {
             setIsDialogOpen(!isDialogOpen);
-            // Usar apenas o SKU do produto como número do lote
-            setFormData({
-              batchNumber: productSku,
-              quantity: ''
-            });
+            
+            // Gerar automaticamente o próximo número de lote disponível
+            if (user?.id && productId) {
+              try {
+                const nextBatchNumber = await generateNextAvailableBatchNumber(productId, user.id, batches);
+                setFormData({
+                  batchNumber: nextBatchNumber,
+                  quantity: ''
+                });
+              } catch (error) {
+                console.error('Erro ao gerar número do lote:', error);
+                // Fallback: usar SKU do produto
+                setFormData({
+                  batchNumber: productSku,
+                  quantity: ''
+                });
+              }
+            } else {
+              // Fallback: usar SKU do produto
+              setFormData({
+                batchNumber: productSku,
+                quantity: ''
+              });
+            }
           }}
           className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white"
         >
@@ -274,7 +329,7 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
               </Label>
               <Input
                 id="batchNumber"
-                placeholder="Gerado automaticamente"
+                placeholder={formData.batchNumber || "Gerado automaticamente"}
                 value={formData.batchNumber}
                 onChange={(e) => setFormData(prev => ({ ...prev, batchNumber: e.target.value }))}
                 className="font-semibold"
@@ -474,6 +529,19 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
         </CardContent>
       </Card>
     </div>
+
+    {/* Diálogo de Confirmação */}
+    <ConfirmDialog
+      isOpen={dialogState.isOpen}
+      onClose={closeDialog}
+      onConfirm={handleConfirm}
+      title={dialogState.title}
+      description={dialogState.description}
+      confirmText={dialogState.confirmText}
+      cancelText={dialogState.cancelText}
+      variant={dialogState.variant}
+    />
+  </>
   );
 };
 

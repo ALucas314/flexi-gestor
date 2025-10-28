@@ -481,9 +481,9 @@ const Produtos = () => {
   return (
     <main className="flex-1 p-2 sm:p-6 space-y-3 sm:space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
-        <div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent flex items-center gap-2">
+      <div className="flex flex-col items-center sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 mt-4 sm:mt-0">
+        <div className="text-center sm:text-left">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent flex items-center gap-2 justify-center sm:justify-start">
             <Package className="w-8 h-8 text-blue-600" />
             Produtos
           </h1>
@@ -515,23 +515,23 @@ const Produtos = () => {
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-[70vw] sm:max-w-2xl max-h-[70vh] overflow-y-auto mx-auto">
-            <DialogHeader className="space-y-1 pb-2 sm:pb-3">
-              <DialogTitle className="text-sm sm:text-base">📦 Adicionar Novo Produto</DialogTitle>
-              <DialogDescription className="text-xs">
+            <DialogHeader className="space-y-2 pb-4 sm:pb-3">
+              <DialogTitle className="text-base sm:text-lg font-bold">📦 Adicionar Novo Produto</DialogTitle>
+              <DialogDescription className="text-sm">
                 Preencha as informações detalhadas do produto para seu catálogo.
               </DialogDescription>
             </DialogHeader>
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(handleAddProduct)} className="space-y-2 sm:space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
+              <form onSubmit={form.handleSubmit(handleAddProduct)} className="space-y-4 sm:space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-3">
                   <FormField
                     control={form.control}
                     name="name"
                     render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs sm:text-sm">Nome do Produto</FormLabel>
+                      <FormItem className="space-y-3">
+                        <FormLabel className="text-base sm:text-sm font-semibold">Nome do Produto</FormLabel>
                         <FormControl>
-                          <Input placeholder="Ex: Produto Exemplo 500ml" {...field} className="h-8 sm:h-10" />
+                          <Input placeholder="Ex: Produto Exemplo 500ml" {...field} className="h-12 sm:h-10 text-base sm:text-sm" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -541,8 +541,8 @@ const Produtos = () => {
                     control={form.control}
                     name="sku"
                     render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-sm sm:text-base flex items-center justify-between">
+                      <FormItem className="space-y-3">
+                        <FormLabel className="text-base sm:text-base flex items-center justify-between font-semibold">
                           <span>SKU (Código)</span>
                           <span className="text-xs text-gray-500 font-normal">
                             Gerado: {generateNextSKU()}
@@ -552,10 +552,10 @@ const Produtos = () => {
                           <Input 
                             placeholder="Gerado automaticamente ou digite seu código" 
                             {...field} 
-                            className={`h-8 sm:h-10 ${skuDuplicateError ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}`}
+                            className={`h-12 sm:h-10 text-base sm:text-sm ${skuDuplicateError ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}`}
                           />
                         </FormControl>
-                        <FormDescription className="text-xs">
+                        <FormDescription className="text-sm">
                           💡 O código é gerado automaticamente, mas você pode editá-lo
                         </FormDescription>
                         <FormMessage />
@@ -573,18 +573,18 @@ const Produtos = () => {
                   control={form.control}
                   name="description"
                   render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm sm:text-base">
+                    <FormItem className="space-y-3">
+                      <FormLabel className="text-base sm:text-base font-semibold">
                         Descrição do Produto <span className="text-xs text-gray-500 font-normal">(Opcional)</span>
                       </FormLabel>
                       <FormControl>
                         <Textarea
                           placeholder="Descreva o produto, ingredientes, benefícios, tamanho, etc. (Opcional)"
-                          className="min-h-[80px] text-sm sm:text-base"
+                              className="min-h-[80px] text-base sm:text-base"
                           {...field}
                         />
                       </FormControl>
-                      <FormDescription className="text-xs text-gray-500">
+                      <FormDescription className="text-sm text-gray-600">
                         💡 Este campo é opcional. Você pode deixar em branco.
                       </FormDescription>
                       <FormMessage />
@@ -592,17 +592,17 @@ const Produtos = () => {
                   )}
                 />
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-3">
                   <FormField
                     control={form.control}
                     name="category"
                     render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs sm:text-sm">Categoria</FormLabel>
+                      <FormItem className="space-y-3">
+                        <FormLabel className="text-base sm:text-sm font-semibold">Categoria</FormLabel>
                         <div className="flex gap-2">
                           <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isAddingCategory}>
                             <FormControl>
-                              <SelectTrigger className="h-8 sm:h-10">
+                              <SelectTrigger className="h-12 sm:h-10 text-base sm:text-sm">
                                 <SelectValue placeholder="Selecione uma categoria" />
                               </SelectTrigger>
                             </FormControl>
@@ -649,7 +649,7 @@ const Produtos = () => {
                                   type="button" 
                                   size="sm" 
                                   variant="outline"
-                                  className="h-8 sm:h-10 text-xs"
+                                  className="h-11 sm:h-10 text-base sm:text-sm"
                                 >
                                   ⚙️
                                 </Button>
@@ -690,7 +690,7 @@ const Produtos = () => {
                                 }
                                 setIsAddingCategory(false);
                               }}
-                              className="h-8 sm:h-10"
+                              className="h-11 sm:h-10 text-base sm:text-sm"
                             >
                               ✓
                             </Button>
@@ -700,7 +700,7 @@ const Produtos = () => {
                               size="sm" 
                               variant="outline"
                               onClick={() => setIsAddingCategory(true)}
-                              className="h-8 sm:h-10"
+                              className="h-11 sm:h-10 text-base sm:text-sm"
                             >
                               ➕
                             </Button>
@@ -736,11 +736,11 @@ const Produtos = () => {
                     control={form.control}
                     name="status"
                     render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs sm:text-sm">Status do Produto</FormLabel>
+                      <FormItem className="space-y-3">
+                        <FormLabel className="text-base sm:text-sm font-semibold">Status do Produto</FormLabel>
                         <Select onValueChange={field.onChange} defaultValue={field.value}>
                           <FormControl>
-                            <SelectTrigger className="h-8 sm:h-10">
+                            <SelectTrigger className="h-12 sm:h-10 text-base sm:text-sm">
                               <SelectValue />
                             </SelectTrigger>
                           </FormControl>
@@ -755,72 +755,174 @@ const Produtos = () => {
                   />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-4">
                   <FormField
                     control={form.control}
                     name="price"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs sm:text-sm">Preço de Venda (R$)</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            placeholder="0.00"
-                            className="h-8 sm:h-10"
-                            {...field}
-                            onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
+                    render={({ field }) => {
+                      // Converter valor numérico para string para controle
+                      const valueAsString = field.value === 0 ? '' : String(field.value || '');
+                      
+                      return (
+                        <FormItem className="space-y-3">
+                          <FormLabel className="text-base sm:text-sm font-semibold">Preço de Venda (R$)</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              placeholder="0.00"
+                              className="h-11 sm:h-10 text-base sm:text-sm"
+                              value={valueAsString}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                
+                                // Permite campo vazio (retorna 0 mas mantém visualmente vazio)
+                                if (value === '' || value === null) {
+                                  field.onChange(0);
+                                  return;
+                                }
+                                
+                                // Se o valor for "0" seguido de um dígito diferente de 0, apaga o zero
+                                if (value.match(/^0[1-9]/) && value.length === 2) {
+                                  const newValue = value.substring(1);
+                                  field.onChange(parseFloat(newValue));
+                                  return;
+                                }
+                                
+                                // Permite valores normais incluindo decimais
+                                const numValue = parseFloat(value);
+                                if (!isNaN(numValue)) {
+                                  field.onChange(numValue);
+                                } else if (value === '' || value === '-') {
+                                  field.onChange(0);
+                                }
+                              }}
+                              onBlur={() => {
+                                // Quando sair do campo, garante que valor seja 0 se vazio
+                                if (field.value === 0 || !field.value) {
+                                  field.onChange(0);
+                                }
+                              }}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      );
+                    }}
                   />
                   <FormField
                     control={form.control}
                     name="stock"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs sm:text-sm">Estoque Atual</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            placeholder="0"
-                            className="h-8 sm:h-10"
-                            {...field}
-                            onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
+                    render={({ field }) => {
+                      // Converter valor numérico para string para controle
+                      const valueAsString = field.value === 0 ? '' : String(field.value || '');
+                      
+                      return (
+                        <FormItem className="space-y-3">
+                          <FormLabel className="text-base sm:text-sm font-semibold">Estoque Atual</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              placeholder="0"
+                              className="h-11 sm:h-10 text-base sm:text-sm"
+                              value={valueAsString}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                
+                                // Permite campo vazio (retorna 0 mas mantém visualmente vazio)
+                                if (value === '' || value === null) {
+                                  field.onChange(0);
+                                  return;
+                                }
+                                
+                                // Se o valor for "0" seguido de um dígito diferente de 0, apaga o zero
+                                if (value.match(/^0[1-9]/) && value.length === 2) {
+                                  const newValue = value.substring(1);
+                                  field.onChange(parseInt(newValue));
+                                  return;
+                                }
+                                
+                                // Permite valores normais
+                                const intValue = parseInt(value);
+                                if (!isNaN(intValue)) {
+                                  field.onChange(intValue);
+                                } else if (value === '' || value === '-') {
+                                  field.onChange(0);
+                                }
+                              }}
+                              onBlur={() => {
+                                // Quando sair do campo, garante que valor seja 0 se vazio
+                                if (field.value === 0 || !field.value) {
+                                  field.onChange(0);
+                                }
+                              }}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      );
+                    }}
                   />
                   <FormField
                     control={form.control}
                     name="minStock"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-xs sm:text-sm">Estoque Mínimo</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            placeholder="0"
-                            className="h-8 sm:h-10"
-                            {...field}
-                            onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
+                    render={({ field }) => {
+                      // Converter valor numérico para string para controle
+                      const valueAsString = field.value === 0 ? '' : String(field.value || '');
+                      
+                      return (
+                        <FormItem className="space-y-3">
+                          <FormLabel className="text-base sm:text-sm font-semibold">Estoque Mínimo</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              placeholder="0"
+                              className="h-11 sm:h-10 text-base sm:text-sm"
+                              value={valueAsString}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                
+                                // Permite campo vazio (retorna 0 mas mantém visualmente vazio)
+                                if (value === '' || value === null) {
+                                  field.onChange(0);
+                                  return;
+                                }
+                                
+                                // Se o valor for "0" seguido de um dígito diferente de 0, apaga o zero
+                                if (value.match(/^0[1-9]/) && value.length === 2) {
+                                  const newValue = value.substring(1);
+                                  field.onChange(parseInt(newValue));
+                                  return;
+                                }
+                                
+                                // Permite valores normais
+                                const intValue = parseInt(value);
+                                if (!isNaN(intValue)) {
+                                  field.onChange(intValue);
+                                } else if (value === '' || value === '-') {
+                                  field.onChange(0);
+                                }
+                              }}
+                              onBlur={() => {
+                                // Quando sair do campo, garante que valor seja 0 se vazio
+                                if (field.value === 0 || !field.value) {
+                                  field.onChange(0);
+                                }
+                              }}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      );
+                    }}
                   />
                 </div>
 
                 <DialogFooter className="flex flex-col sm:flex-row gap-2 pt-2 sm:pt-3">
-                  <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)} className="w-full sm:w-auto h-8 text-xs">
+                  <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)} className="w-full sm:w-auto h-11 sm:h-8 text-sm sm:text-xs">
                     ❌ Cancelar
                   </Button>
-                  <Button type="submit" className="w-full sm:w-auto h-8 text-xs bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white shadow-lg hover:shadow-xl transition-all duration-200">📦 Adicionar Produto</Button>
+                  <Button type="submit" className="w-full sm:w-auto h-11 sm:h-8 text-sm sm:text-xs bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white shadow-lg hover:shadow-xl transition-all duration-200">📦 Adicionar Produto</Button>
                 </DialogFooter>
               </form>
             </Form>
@@ -878,14 +980,14 @@ const Produtos = () => {
       </div>
 
       {/* Busca e Filtros */}
-      <Card className="p-2 sm:p-6">
-        <div className="flex gap-2">
+      <Card className="p-3 sm:p-6">
+        <div className="flex gap-2 sm:gap-3">
           <div className="flex-1">
             <Input
               placeholder="Buscar produtos..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="h-8 sm:h-10 text-sm sm:text-sm"
+              className="h-10 sm:h-10 text-base sm:text-sm"
             />
           </div>
         </div>
@@ -950,23 +1052,23 @@ const Produtos = () => {
               }
             }}>
               <DialogContent className="max-w-[70vw] sm:max-w-2xl max-h-[70vh] overflow-y-auto mx-auto">
-                <DialogHeader className="space-y-2 pb-3 sm:pb-4">
-                  <DialogTitle className="text-base sm:text-lg">✏️ Editar Produto</DialogTitle>
-                  <DialogDescription className="text-xs sm:text-sm">
+                <DialogHeader className="space-y-2 pb-4 sm:pb-4">
+                  <DialogTitle className="text-base sm:text-lg font-bold">✏️ Editar Produto</DialogTitle>
+                  <DialogDescription className="text-sm">
                     Atualize as informações detalhadas do produto.
                   </DialogDescription>
                 </DialogHeader>
                 <Form {...form}>
                   <form onSubmit={form.handleSubmit(handleEditProduct)} className="space-y-3 sm:space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-3">
                       <FormField
                         control={form.control}
                         name="name"
                         render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-xs sm:text-sm">Nome do Produto</FormLabel>
+                          <FormItem className="space-y-3">
+                            <FormLabel className="text-base sm:text-sm font-semibold">Nome do Produto</FormLabel>
                             <FormControl>
-                              <Input placeholder="Ex: Produto Exemplo 500ml" {...field} className="h-8 sm:h-10" />
+                              <Input placeholder="Ex: Produto Exemplo 500ml" {...field} className="h-12 sm:h-10 text-base sm:text-sm" />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -976,13 +1078,13 @@ const Produtos = () => {
                         control={form.control}
                         name="sku"
                         render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-xs sm:text-sm">SKU (Código)</FormLabel>
+                          <FormItem className="space-y-3">
+                            <FormLabel className="text-base sm:text-sm font-semibold">SKU (Código)</FormLabel>
                             <FormControl>
                               <Input 
                                 placeholder="Ex: ACAI-500-TRAD" 
                                 {...field} 
-                                className={`h-8 sm:h-10 ${skuDuplicateError ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}`}
+                                className={`h-12 sm:h-10 text-base sm:text-sm ${skuDuplicateError ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}`}
                               />
                             </FormControl>
                             <FormMessage />
@@ -1000,18 +1102,18 @@ const Produtos = () => {
                       control={form.control}
                       name="description"
                       render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-xs sm:text-sm">
+                        <FormItem className="space-y-3">
+                          <FormLabel className="text-base sm:text-sm font-semibold">
                             Descrição do Produto <span className="text-xs text-gray-500 font-normal">(Opcional)</span>
                           </FormLabel>
                           <FormControl>
                             <Textarea
                               placeholder="Descreva o produto, ingredientes, benefícios, tamanho, etc. (Opcional)"
-                              className="min-h-[80px] text-sm sm:text-base"
+                              className="min-h-[80px] text-base sm:text-base"
                               {...field}
                             />
                           </FormControl>
-                          <FormDescription className="text-xs text-gray-500">
+                          <FormDescription className="text-sm text-gray-600">
                             💡 Este campo é opcional. Você pode deixar em branco.
                           </FormDescription>
                           <FormMessage />
@@ -1019,17 +1121,17 @@ const Produtos = () => {
                       )}
                     />
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-3">
                       <FormField
                         control={form.control}
                         name="category"
                         render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-xs sm:text-sm">Categoria</FormLabel>
+                          <FormItem className="space-y-3">
+                            <FormLabel className="text-base sm:text-sm font-semibold">Categoria</FormLabel>
                             <div className="flex gap-2">
                               <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isAddingCategory}>
                                 <FormControl>
-                                  <SelectTrigger className="h-8 sm:h-10">
+                                  <SelectTrigger className="h-12 sm:h-10 text-base sm:text-sm">
                                     <SelectValue placeholder="Selecione uma categoria" />
                                   </SelectTrigger>
                                 </FormControl>
@@ -1058,7 +1160,7 @@ const Produtos = () => {
                                     }
                                     setIsAddingCategory(false);
                                   }}
-                                  className="h-8 sm:h-10"
+                                  className="h-11 sm:h-10 text-base sm:text-sm"
                                 >
                                   ✓
                                 </Button>
@@ -1068,7 +1170,7 @@ const Produtos = () => {
                                   size="sm" 
                                   variant="outline"
                                   onClick={() => setIsAddingCategory(true)}
-                                  className="h-8 sm:h-10"
+                                  className="h-11 sm:h-10 text-base sm:text-sm"
                                 >
                                   ➕
                                 </Button>
@@ -1104,11 +1206,11 @@ const Produtos = () => {
                         control={form.control}
                         name="status"
                         render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-xs sm:text-sm">Status do Produto</FormLabel>
+                          <FormItem className="space-y-3">
+                            <FormLabel className="text-base sm:text-sm font-semibold">Status do Produto</FormLabel>
                             <Select onValueChange={field.onChange} defaultValue={field.value}>
                               <FormControl>
-                                <SelectTrigger className="h-8 sm:h-10">
+                                <SelectTrigger className="h-12 sm:h-10 text-base sm:text-sm">
                                   <SelectValue />
                                 </SelectTrigger>
                               </FormControl>
@@ -1123,72 +1225,174 @@ const Produtos = () => {
                       />
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-4">
                       <FormField
                         control={form.control}
                         name="price"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-xs sm:text-sm">Preço de Venda (R$)</FormLabel>
-                            <FormControl>
-                              <Input
-                                type="number"
-                                step="0.01"
-                                placeholder="0.00"
-                                className="h-8 sm:h-10"
-                                {...field}
-                                onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
+                        render={({ field }) => {
+                          // Converter valor numérico para string para controle
+                          const valueAsString = field.value === 0 ? '' : String(field.value || '');
+                          
+                          return (
+                            <FormItem className="space-y-3">
+                              <FormLabel className="text-base sm:text-sm font-semibold">Preço de Venda (R$)</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  placeholder="0.00"
+                                  className="h-12 sm:h-10 text-base sm:text-sm"
+                                  value={valueAsString}
+                                  onChange={(e) => {
+                                    const value = e.target.value;
+                                    
+                                    // Permite campo vazio (retorna 0 mas mantém visualmente vazio)
+                                    if (value === '' || value === null) {
+                                      field.onChange(0);
+                                      return;
+                                    }
+                                    
+                                    // Se o valor for "0" seguido de um dígito diferente de 0, apaga o zero
+                                    if (value.match(/^0[1-9]/) && value.length === 2) {
+                                      const newValue = value.substring(1);
+                                      field.onChange(parseFloat(newValue));
+                                      return;
+                                    }
+                                    
+                                    // Permite valores normais incluindo decimais
+                                    const numValue = parseFloat(value);
+                                    if (!isNaN(numValue)) {
+                                      field.onChange(numValue);
+                                    } else if (value === '' || value === '-') {
+                                      field.onChange(0);
+                                    }
+                                  }}
+                                  onBlur={() => {
+                                    // Quando sair do campo, garante que valor seja 0 se vazio
+                                    if (field.value === 0 || !field.value) {
+                                      field.onChange(0);
+                                    }
+                                  }}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          );
+                        }}
                       />
                       <FormField
                         control={form.control}
                         name="stock"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-xs sm:text-sm">Estoque Atual</FormLabel>
-                            <FormControl>
-                              <Input
-                                type="number"
-                                placeholder="0"
-                                className="h-8 sm:h-10"
-                                {...field}
-                                onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
+                        render={({ field }) => {
+                          // Converter valor numérico para string para controle
+                          const valueAsString = field.value === 0 ? '' : String(field.value || '');
+                          
+                          return (
+                            <FormItem className="space-y-3">
+                              <FormLabel className="text-base sm:text-sm font-semibold">Estoque Atual</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  placeholder="0"
+                                  className="h-12 sm:h-10 text-base sm:text-sm"
+                                  value={valueAsString}
+                                  onChange={(e) => {
+                                    const value = e.target.value;
+                                    
+                                    // Permite campo vazio (retorna 0 mas mantém visualmente vazio)
+                                    if (value === '' || value === null) {
+                                      field.onChange(0);
+                                      return;
+                                    }
+                                    
+                                    // Se o valor for "0" seguido de um dígito diferente de 0, apaga o zero
+                                    if (value.match(/^0[1-9]/) && value.length === 2) {
+                                      const newValue = value.substring(1);
+                                      field.onChange(parseInt(newValue));
+                                      return;
+                                    }
+                                    
+                                    // Permite valores normais
+                                    const intValue = parseInt(value);
+                                    if (!isNaN(intValue)) {
+                                      field.onChange(intValue);
+                                    } else if (value === '' || value === '-') {
+                                      field.onChange(0);
+                                    }
+                                  }}
+                                  onBlur={() => {
+                                    // Quando sair do campo, garante que valor seja 0 se vazio
+                                    if (field.value === 0 || !field.value) {
+                                      field.onChange(0);
+                                    }
+                                  }}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          );
+                        }}
                       />
                       <FormField
                         control={form.control}
                         name="minStock"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-xs sm:text-sm">Estoque Mínimo</FormLabel>
-                            <FormControl>
-                              <Input
-                                type="number"
-                                placeholder="0"
-                                className="h-8 sm:h-10"
-                                {...field}
-                                onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
+                        render={({ field }) => {
+                          // Converter valor numérico para string para controle
+                          const valueAsString = field.value === 0 ? '' : String(field.value || '');
+                          
+                          return (
+                            <FormItem className="space-y-3">
+                              <FormLabel className="text-base sm:text-sm font-semibold">Estoque Mínimo</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  placeholder="0"
+                                  className="h-12 sm:h-10 text-base sm:text-sm"
+                                  value={valueAsString}
+                                  onChange={(e) => {
+                                    const value = e.target.value;
+                                    
+                                    // Permite campo vazio (retorna 0 mas mantém visualmente vazio)
+                                    if (value === '' || value === null) {
+                                      field.onChange(0);
+                                      return;
+                                    }
+                                    
+                                    // Se o valor for "0" seguido de um dígito diferente de 0, apaga o zero
+                                    if (value.match(/^0[1-9]/) && value.length === 2) {
+                                      const newValue = value.substring(1);
+                                      field.onChange(parseInt(newValue));
+                                      return;
+                                    }
+                                    
+                                    // Permite valores normais
+                                    const intValue = parseInt(value);
+                                    if (!isNaN(intValue)) {
+                                      field.onChange(intValue);
+                                    } else if (value === '' || value === '-') {
+                                      field.onChange(0);
+                                    }
+                                  }}
+                                  onBlur={() => {
+                                    // Quando sair do campo, garante que valor seja 0 se vazio
+                                    if (field.value === 0 || !field.value) {
+                                      field.onChange(0);
+                                    }
+                                  }}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          );
+                        }}
                       />
                     </div>
 
                     <DialogFooter className="flex flex-col sm:flex-row gap-2 pt-2 sm:pt-3">
-                      <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)} className="w-full sm:w-auto h-8 text-xs">
+                      <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)} className="w-full sm:w-auto h-11 sm:h-8 text-sm sm:text-xs">
                         ❌ Cancelar
                       </Button>
-                      <Button type="submit" className="w-full sm:w-auto h-8 text-xs bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white shadow-lg hover:shadow-xl transition-all duration-200">💾 Salvar Alterações</Button>
+                      <Button type="submit" className="w-full sm:w-auto h-11 sm:h-8 text-sm sm:text-xs bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white shadow-lg hover:shadow-xl transition-all duration-200">💾 Salvar Alterações</Button>
                     </DialogFooter>
                   </form>
                 </Form>
@@ -1236,7 +1440,7 @@ const Produtos = () => {
                     variant="destructive"
                     onClick={confirmDelete}
                     disabled={isDeleting}
-                    className="w-full sm:w-auto"
+                    className="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white focus:ring-red-600"
                   >
                     {isDeleting ? (
                       <>

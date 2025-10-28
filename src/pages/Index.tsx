@@ -40,7 +40,7 @@ const Index = () => {
   return (
     <main className={`flex-1 ${isMobile ? 'p-2 xs:p-3' : 'p-3 sm:p-6'} ${isMobile ? 'space-y-4' : 'space-y-6 sm:space-y-10'} bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 min-h-screen`}>
       {/* Hero Section com Design Profissional - Responsivo */}
-      <div className={`relative ${isMobile ? 'rounded-xl' : 'rounded-2xl sm:rounded-3xl'} overflow-hidden bg-gradient-to-br from-blue-300 via-indigo-400 via-purple-400 to-pink-300 text-slate-800 ${isMobile ? 'shadow-lg' : 'shadow-xl sm:shadow-2xl'} border border-slate-200/50`}>
+      <div className={`relative ${isMobile ? 'rounded-xl mt-6' : 'rounded-2xl sm:rounded-3xl mt-0'} overflow-hidden bg-gradient-to-br from-blue-300 via-indigo-400 via-purple-400 to-pink-300 text-slate-800 ${isMobile ? 'shadow-lg' : 'shadow-xl sm:shadow-2xl'} border border-slate-200/50`}>
         {/* Padrão geométrico moderno em vez da imagem */}
         <div className="absolute inset-0 opacity-10">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_80%,rgba(120,119,198,0.3)_0%,transparent_50%)]"></div>

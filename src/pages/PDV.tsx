@@ -23,6 +23,7 @@ import {
 import { useResponsive } from "@/hooks/use-responsive";
 import { useData } from "@/contexts/DataContext";
 import { toast } from "@/hooks/use-toast";
+import { generateUniqueReceiptNumber } from "@/lib/utils";
 
 interface CartItem {
   id: string;
@@ -98,15 +99,6 @@ const PDV = () => {
     }).filter(item => item.quantity > 0));
   };
 
-  // Gerar número de receita único
-  const generateReceiptNumber = () => {
-    const date = new Date();
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const time = String(date.getHours()).padStart(2, '0') + String(date.getMinutes()).padStart(2, '0') + String(date.getSeconds()).padStart(2, '0');
-    return `REC-${year}${month}${day}-${time}`;
-  };
 
   // Finalizar venda
   const finalizeSale = async () => {
@@ -168,7 +160,7 @@ const PDV = () => {
       
       // Gerar dados da receita
       const receipt: ReceiptData = {
-        receiptNumber: generateReceiptNumber(),
+        receiptNumber: generateUniqueReceiptNumber("REC"),
         date: new Date().toLocaleString('pt-BR'),
         items: [...cart],
         total: total
@@ -227,8 +219,8 @@ const PDV = () => {
   return (
     <main className="flex-1 p-2 sm:p-6 space-y-3 sm:space-y-6">
       {/* Cabeçalho */}
-      <div>
-        <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent flex items-center gap-2">
+      <div className="mt-4 sm:mt-0 text-center sm:text-left">
+        <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent flex items-center gap-2 justify-center sm:justify-start">
           <ShoppingCart className="w-8 h-8 text-blue-600" />
           Ponto de Venda (PDV)
         </h1>
@@ -253,7 +245,7 @@ const PDV = () => {
                   placeholder="Buscar por nome ou SKU..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
+                  className="pl-10 h-11 text-base"
                 />
               </div>
             </CardHeader>
@@ -325,7 +317,7 @@ const PDV = () => {
                             variant="ghost"
                             size="sm"
                             onClick={() => removeFromCart(item.id)}
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50 h-8 w-8 p-0"
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50 h-10 w-10 p-0"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -337,7 +329,7 @@ const PDV = () => {
                               variant="outline"
                               size="sm"
                               onClick={() => updateQuantity(item.id, -1)}
-                              className="h-7 w-7 p-0"
+                              className="h-9 w-9 p-0"
                             >
                               <Minus className="h-3 w-3" />
                             </Button>
@@ -346,7 +338,7 @@ const PDV = () => {
                               variant="outline"
                               size="sm"
                               onClick={() => updateQuantity(item.id, 1)}
-                              className="h-7 w-7 p-0"
+                              className="h-9 w-9 p-0"
                             >
                               <Plus className="h-3 w-3" />
                             </Button>

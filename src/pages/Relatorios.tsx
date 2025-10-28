@@ -272,9 +272,9 @@ const Relatorios = () => {
   return (
     <main className="flex-1 p-4 sm:p-6 space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent flex items-center gap-2">
+      <div className="flex flex-col items-center sm:flex-row sm:justify-between sm:items-center gap-4 mt-4 sm:mt-0">
+        <div className="text-center sm:text-left">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent flex items-center gap-2 justify-center sm:justify-start">
             <BarChart3 className="w-8 h-8 text-blue-600" />
             Relatórios
           </h1>
@@ -311,68 +311,66 @@ const Relatorios = () => {
       </Card>
 
       {/* KPIs Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
         {/* Total Produtos */}
-        <Card className="border-l-4 border-l-blue-500 hover:shadow-lg transition-shadow">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600 flex items-center gap-2">
-              <Package className="w-4 h-4" />
-              Total Produtos
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-blue-600">{totalProducts}</div>
-            <p className="text-xs text-gray-500 mt-1">Produtos cadastrados</p>
-          </CardContent>
-        </Card>
+        <div className="group bg-gradient-to-br from-blue-100 to-blue-200 rounded-2xl sm:rounded-3xl p-4 sm:p-6 text-blue-800 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 border border-blue-200/50">
+          <div className="flex items-center justify-between mb-3 sm:mb-4">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-300/50 rounded-xl sm:rounded-2xl flex items-center justify-center backdrop-blur-sm">
+              <Package className="w-5 h-5 sm:w-6 sm:h-6 text-blue-700" />
+            </div>
+            <div className="text-right">
+              <div className="text-2xl sm:text-3xl font-black">{totalProducts}</div>
+              <div className="text-xs sm:text-sm opacity-90">Total</div>
+            </div>
+          </div>
+          <h3 className="text-base sm:text-lg font-semibold mb-2">📦 Total Produtos</h3>
+          <p className="text-xs sm:text-sm opacity-80">Produtos cadastrados</p>
+        </div>
 
         {/* Valor Estoque */}
-        <Card className="border-l-4 border-l-green-500 hover:shadow-lg transition-shadow">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600 flex items-center gap-2">
-              <DollarSign className="w-4 h-4" />
-              Valor Estoque
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-green-600">
-              R$ {totalStockValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+        <div className="group bg-gradient-to-br from-green-100 to-green-200 rounded-2xl sm:rounded-3xl p-4 sm:p-6 text-green-800 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 border border-green-200/50">
+          <div className="flex items-center justify-between mb-3 sm:mb-4">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-300/50 rounded-xl sm:rounded-2xl flex items-center justify-center backdrop-blur-sm">
+              <DollarSign className="w-5 h-5 sm:w-6 sm:h-6 text-green-700" />
             </div>
-            <p className="text-xs text-gray-500 mt-1">Valor total investido</p>
-          </CardContent>
-        </Card>
+            <div className="text-right">
+              <div className="text-lg sm:text-xl font-black">R$ {totalStockValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+              <div className="text-xs sm:text-sm opacity-90">Investido</div>
+            </div>
+          </div>
+          <h3 className="text-base sm:text-lg font-semibold mb-2">💰 Valor Estoque</h3>
+          <p className="text-xs sm:text-sm opacity-80">Valor total investido</p>
+        </div>
 
         {/* Total Entradas */}
-        <Card className="border-l-4 border-l-emerald-500 hover:shadow-lg transition-shadow">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600 flex items-center gap-2">
-              <ArrowDown className="w-4 h-4 text-emerald-600" />
-              Entradas
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-emerald-600">
-              R$ {totalEntradas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+        <div className="group bg-gradient-to-br from-emerald-100 to-emerald-200 rounded-2xl sm:rounded-3xl p-4 sm:p-6 text-emerald-800 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 border border-emerald-200/50">
+          <div className="flex items-center justify-between mb-3 sm:mb-4">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-emerald-300/50 rounded-xl sm:rounded-2xl flex items-center justify-center backdrop-blur-sm">
+              <ArrowDown className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-700" />
             </div>
-            <p className="text-xs text-gray-500 mt-1">{entradaMovements.length} movimentações</p>
-          </CardContent>
-        </Card>
+            <div className="text-right">
+              <div className="text-lg sm:text-xl font-black">R$ {totalEntradas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+              <div className="text-xs sm:text-sm opacity-90">Total</div>
+            </div>
+          </div>
+          <h3 className="text-base sm:text-lg font-semibold mb-2">📥 Entradas</h3>
+          <p className="text-xs sm:text-sm opacity-80">{entradaMovements.length} movimentações</p>
+        </div>
 
         {/* Total Saídas */}
-        <Card className="border-l-4 border-l-orange-500 hover:shadow-lg transition-shadow">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600 flex items-center gap-2">
-              <ArrowUp className="w-4 h-4 text-orange-600" />
-              Saídas
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-orange-600">
-              R$ {totalSaidas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+        <div className="group bg-gradient-to-br from-orange-100 to-orange-200 rounded-2xl sm:rounded-3xl p-4 sm:p-6 text-orange-800 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 border border-orange-200/50">
+          <div className="flex items-center justify-between mb-3 sm:mb-4">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-orange-300/50 rounded-xl sm:rounded-2xl flex items-center justify-center backdrop-blur-sm">
+              <ArrowUp className="w-5 h-5 sm:w-6 sm:h-6 text-orange-700" />
             </div>
-            <p className="text-xs text-gray-500 mt-1">{saidaMovements.length} movimentações</p>
-          </CardContent>
-        </Card>
+            <div className="text-right">
+              <div className="text-lg sm:text-xl font-black">R$ {totalSaidas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+              <div className="text-xs sm:text-sm opacity-90">Total</div>
+            </div>
+          </div>
+          <h3 className="text-base sm:text-lg font-semibold mb-2">📤 Saídas</h3>
+          <p className="text-xs sm:text-sm opacity-80">{saidaMovements.length} movimentações</p>
+        </div>
       </div>
 
       {/* Lucro/Prejuízo */}

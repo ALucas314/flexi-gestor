@@ -44,7 +44,95 @@ export const getBatchesByProduct = async (productId: string, userId: string): Pr
   }
 };
 
-// Criar um novo lote
+// Verificar se número do lote já existe (retorna true se já existe, false se não existe)
+export const checkBatchNumberExists = async (
+  batchNumber: string,
+  productId?: string, // Se fornecido, verifica apenas para esse produto
+  userId?: string
+): Promise<boolean> => {
+  try {
+    let query = supabase
+      .from('lotes')
+      .select('id')
+      .eq('numero_lote', batchNumber)
+      .limit(1);
+
+    // Se fornecido, verificar apenas no produto específico
+    if (productId) {
+      query = query.eq('produto_id', productId);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Erro ao verificar número do lote:', error);
+      return false;
+    }
+
+    return (data?.length || 0) > 0;
+  } catch (error) {
+    console.error('Erro ao verificar número do lote:', error);
+    return false;
+  }
+};
+
+// Gerar próximo número de lote disponível automaticamente
+export const generateNextAvailableBatchNumber = async (
+  productId: string,
+  userId: string,
+  currentBatches: Batch[] = []
+): Promise<string> => {
+  try {
+    // Buscar todos os lotes existentes do banco para esse produto
+    const existingBatches = await getBatchesByProduct(productId, userId);
+    
+    // Criar conjunto com números já usados
+    const usedNumbers = new Set<string>();
+    
+    // Adicionar lotes existentes no banco
+    existingBatches.forEach(b => {
+      if (b.batchNumber) usedNumbers.add(b.batchNumber);
+    });
+    
+    // Adicionar lotes atuais na memória (ainda não salvos)
+    currentBatches.forEach(b => {
+      if (b.batchNumber) usedNumbers.add(b.batchNumber);
+    });
+    
+    // Gerar próximo número disponível começando de 1
+    let nextNumber = 1;
+    let batchNumber = '';
+    
+    while (true) {
+      batchNumber = `Lote ${nextNumber}`;
+      
+      // Verificar se já existe no banco
+      const exists = await checkBatchNumberExists(batchNumber, productId, userId);
+      
+      // Se não existe nem no banco nem na memória, usar este número
+      if (!exists && !usedNumbers.has(batchNumber)) {
+        break;
+      }
+      
+      nextNumber++;
+      
+      // Proteção contra loop infinito
+      if (nextNumber > 10000) {
+        // Usar timestamp como fallback para garantir unicidade
+        batchNumber = `Lote ${Date.now()}`;
+        break;
+      }
+    }
+    
+    return batchNumber;
+  } catch (error) {
+    console.error('Erro ao gerar número do lote:', error);
+    // Fallback usando timestamp
+    return `Lote ${Date.now()}`;
+  }
+};
+
+// Criar um novo lote com validação de unicidade
 export const createBatch = async (
   productId: string,
   batchNumber: string,
@@ -55,6 +143,13 @@ export const createBatch = async (
   expiryDate?: Date
 ): Promise<Batch | null> => {
   try {
+    // Validar se o número do lote já existe
+    const exists = await checkBatchNumberExists(batchNumber, productId, userId);
+    if (exists) {
+      console.error(`Número de lote '${batchNumber}' já existe para este produto`);
+      throw new Error(`Número de lote '${batchNumber}' já existe. Use outro número.`);
+    }
+
     // Buscar o produto para pegar o usuario_id correto (pode ser do usuário compartilhado)
     const { data: produto, error: produtoError } = await supabase
       .from('produtos')
@@ -100,6 +195,7 @@ export const createBatch = async (
       createdAt: new Date(data.criado_em)
     };
   } catch (error) {
+    console.error('Erro ao criar lote:', error);
     return null;
   }
 };

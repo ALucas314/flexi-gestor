@@ -509,9 +509,9 @@ const Saidas = () => {
   return (
     <main className="flex-1 p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent flex items-center gap-2">
+      <div className="flex flex-col items-center sm:flex-row sm:items-center sm:justify-between gap-4 mt-4 sm:mt-0">
+        <div className="text-center sm:text-left">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent flex items-center gap-2 justify-center sm:justify-start">
             <TrendingDown className="w-8 h-8 text-blue-600" />
             Saídas de Estoque
           </h1>
@@ -525,21 +525,21 @@ const Saidas = () => {
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="max-w-[70vw] sm:max-w-2xl max-h-[70vh] overflow-y-auto mx-auto">
-                  <DialogHeader className="space-y-1 pb-2 sm:pb-3">
-                    <DialogTitle className="text-sm sm:text-xl">Registrar Nova Saída</DialogTitle>
-                    <DialogDescription className="text-xs sm:text-sm">
+                  <DialogHeader className="space-y-2 pb-4 sm:pb-3">
+                    <DialogTitle className="text-base sm:text-xl font-bold">Registrar Nova Saída</DialogTitle>
+                    <DialogDescription className="text-sm">
                       Preencha as informações da saída de estoque.
                     </DialogDescription>
                   </DialogHeader>
                   <Form {...form}>
-                    <form onSubmit={form.handleSubmit(handleAddExit)} className="space-y-2 sm:space-y-3">
-                      <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                    <form onSubmit={form.handleSubmit(handleAddExit)} className="space-y-4 sm:space-y-3">
+                      <div className="grid grid-cols-2 gap-4 sm:gap-3">
                         <FormField
                           control={form.control}
                           name="productId"
                           render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>📦 Produto</FormLabel>
+                            <FormItem className="space-y-3">
+                              <FormLabel className="text-base sm:text-sm font-semibold">📦 Produto</FormLabel>
                               <Select 
                                 onValueChange={(value) => {
                                   field.onChange(value);
@@ -548,7 +548,7 @@ const Saidas = () => {
                                 defaultValue={field.value}
                               >
                                 <FormControl>
-                                  <SelectTrigger>
+                                  <SelectTrigger className="h-12 sm:h-10 text-base sm:text-sm">
                                     <SelectValue placeholder="Selecione um produto" />
                                   </SelectTrigger>
                                 </FormControl>
@@ -568,10 +568,10 @@ const Saidas = () => {
                           control={form.control}
                           name="customer"
                           render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>👤 Cliente</FormLabel>
+                            <FormItem className="space-y-3">
+                              <FormLabel className="text-base sm:text-sm font-semibold">👤 Cliente</FormLabel>
                               <FormControl>
-                                <Input placeholder="Nome do cliente" {...field} />
+                                <Input placeholder="Nome do cliente" className="h-12 sm:h-10 text-base sm:text-sm" {...field} />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -675,8 +675,27 @@ const Saidas = () => {
                                                 min="1"
                                                 max={available}
                                                 placeholder="0"
-                                                value={selectedBatch.quantity || ''}
-                                                onChange={(e) => updateSelectedBatch(index, selectedBatch.batchId, Math.max(0, parseInt(e.target.value) || 0))}
+                                                value={selectedBatch.quantity === 0 ? '' : (selectedBatch.quantity || '')}
+                                                onChange={(e) => {
+                                                  const value = e.target.value;
+                                                  
+                                                  if (value === '' || value === null) {
+                                                    updateSelectedBatch(index, selectedBatch.batchId, 0);
+                                                    return;
+                                                  }
+                                                  
+                                                  // Se o valor for "0" seguido de um dígito diferente de 0, apaga o zero
+                                                  if (value.match(/^0[1-9]/) && value.length === 2) {
+                                                    const newValue = value.substring(1);
+                                                    updateSelectedBatch(index, selectedBatch.batchId, Math.max(0, parseInt(newValue)));
+                                                    return;
+                                                  }
+                                                  
+                                                  const intValue = parseInt(value);
+                                                  if (!isNaN(intValue)) {
+                                                    updateSelectedBatch(index, selectedBatch.batchId, Math.max(0, intValue));
+                                                  }
+                                                }}
                                                 className={`h-9 ${exceeds ? 'border-red-500 focus:ring-red-500' : warning ? 'border-yellow-500 focus:ring-yellow-500' : ''}`}
                                               />
                                               {selectedBatch.batchId && (
@@ -734,16 +753,17 @@ const Saidas = () => {
                         </div>
                       )}
                       
-                      <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                      <div className="grid grid-cols-2 gap-4 sm:gap-3">
                         <FormField
                           control={form.control}
                           name="exitDate"
                           render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Data de Saída</FormLabel>
+                            <FormItem className="space-y-3">
+                              <FormLabel className="text-base sm:text-sm font-semibold">Data de Saída</FormLabel>
                               <FormControl>
                                 <Input 
-                                  type="date" 
+                                  type="date"
+                                  className="h-12 sm:h-10 text-base sm:text-sm"
                                   {...field}
                                   value={field.value instanceof Date ? field.value.toISOString().split('T')[0] : ''}
                                   onChange={(e) => field.onChange(new Date(e.target.value))}
@@ -757,11 +777,11 @@ const Saidas = () => {
                           control={form.control}
                           name="status"
                           render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Status</FormLabel>
+                            <FormItem className="space-y-3">
+                              <FormLabel className="text-base sm:text-sm font-semibold">Status</FormLabel>
                               <Select onValueChange={field.onChange} defaultValue={field.value}>
                                 <FormControl>
-                                  <SelectTrigger>
+                                  <SelectTrigger className="h-12 sm:h-10 text-base sm:text-sm">
                                     <SelectValue />
                                   </SelectTrigger>
                                 </FormControl>
@@ -781,26 +801,26 @@ const Saidas = () => {
                         control={form.control}
                         name="notes"
                         render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Observações</FormLabel>
+                          <FormItem className="space-y-3">
+                            <FormLabel className="text-base sm:text-sm font-semibold">Observações</FormLabel>
                             <FormControl>
-                              <Input placeholder="Observações adicionais..." {...field} />
+                              <Input placeholder="Observações adicionais..." className="h-12 sm:h-10 text-base sm:text-sm" {...field} />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
                       />
                       
-                      <DialogFooter className="pt-2 sm:pt-3 flex flex-col sm:flex-row gap-2">
-                        <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)} className="w-full sm:w-auto h-9 text-sm">
-                          Cancelar
+                      <DialogFooter className="flex flex-col sm:flex-row gap-2 pt-2 sm:pt-3">
+                        <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)} className="w-full sm:w-auto h-11 sm:h-8 text-sm sm:text-xs">
+                          ❌ Cancelar
                         </Button>
                         <Button 
                           type="submit" 
-                          className="w-full sm:w-auto h-9 text-sm"
+                          className="w-full sm:w-auto bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white shadow-lg hover:shadow-xl transition-all duration-200 h-11 sm:h-8 text-sm sm:text-xs"
                           disabled={hasExceedingBatches()}
                         >
-                          {hasExceedingBatches() ? '⚠️ Quantidade Excedida' : 'Registrar Saída'}
+                          {hasExceedingBatches() ? '⚠️ Quantidade Excedida' : '📦 Registrar Saída'}
                         </Button>
                       </DialogFooter>
                     </form>
@@ -810,74 +830,80 @@ const Saidas = () => {
             </div>
             
             {/* Cards de Estatísticas */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
               {/* Card Total de Saídas */}
-              <Card className="bg-gradient-to-br from-red-50 to-red-100 border-red-200 hover:shadow-lg transition-all duration-300">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-red-800">📤 Total de Saídas</CardTitle>
-                  <TrendingDown className="h-5 w-5 text-red-600" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold text-red-700 mb-1">{totalExits}</div>
-                  <p className="text-xs text-red-600">Saídas registradas</p>
-                </CardContent>
-              </Card>
+              <div className="group bg-gradient-to-br from-red-100 to-red-200 rounded-2xl sm:rounded-3xl p-4 sm:p-6 text-red-800 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 border border-red-200/50">
+                <div className="flex items-center justify-between mb-3 sm:mb-4">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-red-300/50 rounded-xl sm:rounded-2xl flex items-center justify-center backdrop-blur-sm">
+                    <TrendingDown className="w-5 h-5 sm:w-6 sm:h-6 text-red-700" />
+                  </div>
+                  <div className="text-right">
+                    <div className="text-2xl sm:text-3xl font-black">{totalExits.toLocaleString()}</div>
+                    <div className="text-xs sm:text-sm opacity-90">Total</div>
+                  </div>
+                </div>
+                <h3 className="text-base sm:text-lg font-semibold mb-2">📤 Total de Saídas</h3>
+                <p className="text-xs sm:text-sm opacity-80">Saídas registradas</p>
+              </div>
 
               {/* Card Valor Total */}
-              <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200 hover:shadow-lg transition-all duration-300">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-green-800">💰 Valor Total</CardTitle>
-                  <DollarSign className="h-5 w-5 text-green-600" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold text-green-700 mb-1">R$ {totalValue.toFixed(2).replace('.', ',')}</div>
-                  <p className="text-xs text-green-600">Valor total das saídas</p>
-                </CardContent>
-              </Card>
+              <div className="group bg-gradient-to-br from-green-100 to-green-200 rounded-2xl sm:rounded-3xl p-4 sm:p-6 text-green-800 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 border border-green-200/50">
+                <div className="flex items-center justify-between mb-3 sm:mb-4">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-300/50 rounded-xl sm:rounded-2xl flex items-center justify-center backdrop-blur-sm">
+                    <DollarSign className="w-5 h-5 sm:w-6 sm:h-6 text-green-700" />
+                  </div>
+                  <div className="text-right">
+                    <div className="text-2xl sm:text-3xl font-black">R$ {totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                    <div className="text-xs sm:text-sm opacity-90">Valor</div>
+                  </div>
+                </div>
+                <h3 className="text-base sm:text-lg font-semibold mb-2">💰 Valor Total</h3>
+                <p className="text-xs sm:text-sm opacity-80">Valor total das saídas</p>
+              </div>
 
               {/* Card Saídas do Mês */}
-              <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200 hover:shadow-lg transition-all duration-300">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-blue-800">📅 Este Mês</CardTitle>
-                  <Calendar className="h-5 w-5 text-blue-600" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold text-blue-700 mb-1">{thisMonthExits}</div>
-                  <p className="text-xs text-blue-600">Saídas do mês atual</p>
-                </CardContent>
-              </Card>
+              <div className="group bg-gradient-to-br from-blue-100 to-blue-200 rounded-2xl sm:rounded-3xl p-4 sm:p-6 text-blue-800 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 border border-blue-200/50">
+                <div className="flex items-center justify-between mb-3 sm:mb-4">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-300/50 rounded-xl sm:rounded-2xl flex items-center justify-center backdrop-blur-sm">
+                    <Calendar className="w-5 h-5 sm:w-6 sm:h-6 text-blue-700" />
+                  </div>
+                  <div className="text-right">
+                    <div className="text-2xl sm:text-3xl font-black">{thisMonthExits}</div>
+                    <div className="text-xs sm:text-sm opacity-90">Mês</div>
+                  </div>
+                </div>
+                <h3 className="text-base sm:text-lg font-semibold mb-2">📅 Este Mês</h3>
+                <p className="text-xs sm:text-sm opacity-80">Saídas do mês atual</p>
+              </div>
 
               {/* Card Produtos Vendidos */}
-              <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200 hover:shadow-lg transition-all duration-300">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-purple-800">🛒 Produtos Vendidos</CardTitle>
-                  <ShoppingCart className="h-5 w-5 text-purple-600" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold text-purple-700 mb-1">
-                    {exits.reduce((sum, exit) => sum + exit.quantity, 0)}
+              <div className="group bg-gradient-to-br from-purple-100 to-purple-200 rounded-2xl sm:rounded-3xl p-4 sm:p-6 text-purple-800 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 border border-purple-200/50">
+                <div className="flex items-center justify-between mb-3 sm:mb-4">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-purple-300/50 rounded-xl sm:rounded-2xl flex items-center justify-center backdrop-blur-sm">
+                    <ShoppingCart className="w-5 h-5 sm:w-6 sm:h-6 text-purple-700" />
                   </div>
-                  <p className="text-xs text-purple-600">Unidades vendidas</p>
-                </CardContent>
-              </Card>
+                  <div className="text-right">
+                    <div className="text-2xl sm:text-3xl font-black">
+                      {exits.reduce((sum, exit) => sum + exit.quantity, 0)}
+                    </div>
+                    <div className="text-xs sm:text-sm opacity-90">Unidades</div>
+                  </div>
+                </div>
+                <h3 className="text-base sm:text-lg font-semibold mb-2">🛒 Produtos Vendidos</h3>
+                <p className="text-xs sm:text-sm opacity-80">Unidades vendidas</p>
+              </div>
             </div>
             
-            {/* Busca */}
-            <Card className="bg-gradient-to-r from-slate-50 to-gray-50 border-slate-200">
-              <CardHeader className="pb-4">
-                <CardTitle className="flex items-center gap-2 text-slate-800">
-                  <Search className="w-5 h-5 text-slate-600" />
-                  🔍 Buscar Saídas
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
+            {/* Barra de Busca com Design Profissional */}
+            <Card className="bg-white border-0 shadow-xl rounded-2xl sm:rounded-3xl overflow-hidden">
+              <CardContent className="p-4 sm:p-6 md:p-8">
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-500 w-5 h-5" />
+                  <Search className="absolute left-3 sm:left-4 top-1/2 transform -translate-y-1/2 text-neutral-400 w-4 h-4 sm:w-5 sm:h-5" />
                   <Input
                     placeholder="🔍 Buscar saídas por produto ou cliente..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 bg-white border-slate-300 hover:border-slate-400 focus:border-red-500 transition-colors"
+                    className="pl-10 sm:pl-12 h-11 sm:h-14 border-2 border-neutral-200 rounded-xl sm:rounded-2xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-neutral-50"
                   />
                 </div>
                 

@@ -133,7 +133,7 @@ const Perfil = () => {
   return (
     <div className="container mx-auto p-2 sm:p-4 md:p-6 space-y-4 sm:space-y-6">
       {/* 🎯 Cabeçalho */}
-      <div className="text-center space-y-2 sm:space-y-4">
+      <div className="text-center space-y-2 sm:space-y-4 mt-4 sm:mt-0">
         <div className="flex items-center justify-center space-x-1 sm:space-x-2">
           <User className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
           <h1 className="text-2xl sm:text-3xl font-bold">Meu Perfil</h1>

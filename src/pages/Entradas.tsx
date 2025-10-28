@@ -12,9 +12,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useForm } from "react-hook-form";
 import { useToast } from "@/hooks/use-toast";
 import { useData } from "@/contexts/DataContext";
-import { getBatchesByProduct, createBatch, updateBatchQuantity } from "@/lib/batches";
+import { getBatchesByProduct, createBatch, updateBatchQuantity, checkBatchNumberExists, generateNextAvailableBatchNumber } from "@/lib/batches";
 import { useAuth } from "@/contexts/AuthContext";
 import { Label } from "@/components/ui/label";
+import { generateReceiptNumber } from "@/lib/utils";
 
 // Interface da entrada de estoque
 interface StockEntry {
@@ -47,6 +48,7 @@ const Entradas = () => {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [entryToDelete, setEntryToDelete] = useState<StockEntry | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [nextBatchNumberSuggestion, setNextBatchNumberSuggestion] = useState<string>("Lote 1");
   // Estado para armazenar valores parciais de datas enquanto digita
   const [dateTextValues, setDateTextValues] = useState<{[key: string]: {manu: string, exp: string}}>({});
 
@@ -132,27 +134,47 @@ const Entradas = () => {
   };
 
   // Gerar próximo número de lote disponível automaticamente
-  const generateNextBatchNumber = () => {
-    // Buscar todos os números de lote já usados (da lista e dos lotes selecionados)
-    const usedBatchNumbers = new Set<string>();
-    
-    // Adicionar lotes disponíveis
-    availableBatches.forEach(b => {
-      if (b.batchNumber) usedBatchNumbers.add(b.batchNumber);
-    });
-    
-    // Adicionar lotes selecionados
-    selectedBatches.forEach(b => {
-      if (b.batchNumber) usedBatchNumbers.add(b.batchNumber);
-    });
-    
-    // Encontrar o próximo número disponível
-    let nextNumber = 1;
-    while (usedBatchNumbers.has(`Lote ${nextNumber}`)) {
-      nextNumber++;
+  const generateNextBatchNumber = async () => {
+    if (!user?.id || !selectedProductId) {
+      return 'Lote 1'; // Fallback se não houver dados
     }
     
-    return `Lote ${nextNumber}`;
+    try {
+      // Buscar lotes atuais da lista (na memória antes de salvar)
+      const currentBatches = availableBatches.map(b => ({
+        batchNumber: b.batchNumber,
+        quantity: b.quantity,
+        unitCost: parseFloat(b.unitCost || '0'),
+        manufactureDate: undefined,
+        expiryDate: undefined,
+        createdAt: new Date()
+      }));
+      
+      // Usar função do backend para gerar número único
+      const nextNumber = await generateNextAvailableBatchNumber(
+        selectedProductId,
+        user.id,
+        currentBatches
+      );
+      
+      return nextNumber;
+    } catch (error) {
+      console.error('Erro ao gerar número do lote:', error);
+      // Fallback local
+      const usedBatchNumbers = new Set<string>();
+      availableBatches.forEach(b => {
+        if (b.batchNumber) usedBatchNumbers.add(b.batchNumber);
+      });
+      selectedBatches.forEach(b => {
+        if (b.batchNumber) usedBatchNumbers.add(b.batchNumber);
+      });
+      
+      let nextNumber = 1;
+      while (usedBatchNumbers.has(`Lote ${nextNumber}`)) {
+        nextNumber++;
+      }
+      return `Lote ${nextNumber}`;
+    }
   };
 
   // Controlar carregamento inicial
@@ -163,6 +185,18 @@ const Entradas = () => {
     
     return () => clearTimeout(timer);
   }, []);
+
+  // Atualizar sugestão de próximo número do lote quando produto ou lotes mudarem
+  useEffect(() => {
+    const updateNextBatchNumber = async () => {
+      if (selectedProductId && user?.id) {
+        const nextNumber = await generateNextBatchNumber();
+        setNextBatchNumberSuggestion(nextNumber);
+      }
+    };
+    
+    updateNextBatchNumber();
+  }, [selectedProductId, availableBatches, selectedBatches, user?.id]);
 
   // Filtros
   const filteredEntries = entries.filter(entry =>
@@ -178,19 +212,6 @@ const Entradas = () => {
     const now = new Date();
     return entryDate.getMonth() === now.getMonth() && entryDate.getFullYear() === now.getFullYear();
   }).length;
-
-  // Gerar número de nota fiscal único
-  const generateReceiptNumber = () => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const hours = String(now.getHours()).padStart(2, '0');
-    const minutes = String(now.getMinutes()).padStart(2, '0');
-    const seconds = String(now.getSeconds()).padStart(2, '0');
-    const milliseconds = String(now.getMilliseconds()).padStart(3, '0');
-    return `NFC-${year}${month}${day}-${hours}${minutes}${seconds}${milliseconds}`;
-  };
 
   // Funções CRUD
   const addEntry = async (data: StockEntryFormData) => {
@@ -222,7 +243,7 @@ const Entradas = () => {
 
         // Criar ou atualizar todos os lotes no backend
         for (const batch of selectedBatches) {
-          // Verificar se o lote já existe
+          // Verificar se o lote já existe na lista atual
           const existingBatch = availableBatches.find(b => b.batchNumber === batch.batchNumber);
           
           if (existingBatch) {
@@ -235,9 +256,23 @@ const Entradas = () => {
               );
             }
           } else {
+            // Verificar se o número do lote já existe no banco para este produto
+            if (user?.id) {
+              const existsInDatabase = await checkBatchNumberExists(batch.batchNumber, data.productId, user.id);
+              
+              if (existsInDatabase) {
+                toast({
+                  title: "❌ Número de Lote Duplicado!",
+                  description: `O lote "${batch.batchNumber}" já existe para este produto. Por favor, escolha outro número.`,
+                  variant: "destructive",
+                });
+                return; // Parar o processo
+              }
+            }
+            
             // Criar novo lote
             if (user?.id) {
-              await createBatch(
+              const created = await createBatch(
                 data.productId,
                 batch.batchNumber,
                 batch.quantity,
@@ -246,6 +281,16 @@ const Entradas = () => {
                 batch.manufactureDate,
                 batch.expiryDate
               );
+              
+              // Se falhou ao criar (ex: duplicata), mostrar erro
+              if (!created) {
+                toast({
+                  title: "❌ Erro ao Criar Lote",
+                  description: `Não foi possível criar o lote "${batch.batchNumber}". Verifique se o número já existe.`,
+                  variant: "destructive",
+                });
+                return;
+              }
             }
           }
         }
@@ -589,14 +634,14 @@ const Entradas = () => {
   return (
     <main className="flex-1 p-3 sm:p-6 space-y-6 sm:space-y-8 bg-gradient-to-br from-neutral-50 to-neutral-100 min-h-screen">
       {/* Header Principal com Design Profissional */}
-      <div className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="space-y-2">
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent flex items-center gap-2">
+      <div className="space-y-4 mt-4 sm:mt-0">
+        <div className="flex flex-col items-center sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="space-y-2 text-center sm:text-left">
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent flex items-center gap-2 justify-center sm:justify-start">
               <TrendingUp className="w-8 h-8 text-blue-600" />
               Entradas de Estoque
             </h1>
-            <p className="text-base sm:text-lg md:text-xl text-neutral-600 max-w-2xl">
+            <p className="text-base sm:text-lg md:text-xl text-neutral-600 max-w-2xl mx-auto sm:mx-0">
               Gerencie todas as entradas de produtos, registre compras e mantenha o controle completo do seu inventário
             </p>
           </div>
@@ -619,25 +664,25 @@ const Entradas = () => {
             
             {/* Modal de Nova Entrada com Design Melhorado */}
             <DialogContent className="max-w-[70vw] sm:max-w-4xl max-h-[70vh] overflow-y-auto mx-auto">
-              <DialogHeader className="space-y-1 pb-2 sm:pb-3">
-                <DialogTitle className="text-sm sm:text-xl font-bold text-neutral-900">
+              <DialogHeader className="space-y-2 pb-4 sm:pb-3">
+                <DialogTitle className="text-base sm:text-xl font-bold text-neutral-900">
                   ✨ Registrar Nova Entrada
                 </DialogTitle>
-                <DialogDescription className="text-xs sm:text-sm text-neutral-600">
+                <DialogDescription className="text-sm text-neutral-600">
                   Preencha as informações detalhadas da entrada de estoque para manter o controle preciso
                 </DialogDescription>
               </DialogHeader>
               
               <Form {...form}>
-                <form onSubmit={form.handleSubmit(addEntry)} className="space-y-2 sm:space-y-3">
+                <form onSubmit={form.handleSubmit(addEntry)} className="space-y-4 sm:space-y-3">
                   {/* Primeira linha - Produto e Fornecedor */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-3">
                     <FormField
                       control={form.control}
                       name="productId"
                       render={({ field }) => (
-                        <FormItem className="space-y-2">
-                          <FormLabel className="text-sm font-semibold text-neutral-700">
+                        <FormItem className="space-y-3">
+                          <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
                             🏷️ Produto
                           </FormLabel>
                           <Select onValueChange={(value) => {
@@ -645,7 +690,7 @@ const Entradas = () => {
                             loadBatchesForProduct(value);
                           }} defaultValue={field.value}>
                             <FormControl>
-                              <SelectTrigger className="h-8 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                              <SelectTrigger className="h-11 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
                                 <SelectValue placeholder="Selecione um produto" />
                               </SelectTrigger>
                             </FormControl>
@@ -666,15 +711,15 @@ const Entradas = () => {
                       control={form.control}
                       name="supplier"
                       render={({ field }) => (
-                        <FormItem className="space-y-2">
-                          <FormLabel className="text-sm font-semibold text-neutral-700">
+                        <FormItem className="space-y-3">
+                          <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
                             🏢 Fornecedor
                           </FormLabel>
                           <FormControl>
                             <Input 
                               placeholder="Nome do fornecedor" 
                               {...field} 
-                              className="h-8 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                              className="h-12 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-base sm:text-sm"
                             />
                           </FormControl>
                           <FormMessage />
@@ -726,10 +771,10 @@ const Entradas = () => {
                                       <div className="space-y-2">
                                         <Select
                                           value={availableBatches.find(b => b.batchNumber === batch.batchNumber) ? batch.batchNumber : "custom"}
-                                          onValueChange={(value) => {
+                                          onValueChange={async (value) => {
                                             if (value === "custom") {
                                               // Gerar o próximo número de lote automaticamente
-                                              const nextBatchNumber = generateNextBatchNumber();
+                                              const nextBatchNumber = await generateNextBatchNumber();
                                               updateBatchData(index, 'batchNumber', nextBatchNumber);
                                             } else if (value !== "custom") {
                                               updateBatchData(index, 'batchNumber', value);
@@ -762,7 +807,7 @@ const Entradas = () => {
                                             )}
                                             <div className="border-t my-1"></div>
                                             <SelectItem value="custom">
-                                              ➕ Criar {generateNextBatchNumber()} (Automatico)
+                                              ➕ Criar {nextBatchNumberSuggestion} (Automatico)
                                             </SelectItem>
                                           </SelectContent>
                                         </Select>
@@ -814,8 +859,27 @@ const Entradas = () => {
                                         type="number"
                                         min="1"
                                         placeholder="0"
-                                        value={batch.quantity || ''}
-                                        onChange={(e) => updateBatchData(index, 'quantity', parseInt(e.target.value) || 0)}
+                                        value={batch.quantity === 0 ? '' : (batch.quantity || '')}
+                                        onChange={(e) => {
+                                          const value = e.target.value;
+                                          
+                                          if (value === '' || value === null) {
+                                            updateBatchData(index, 'quantity', 0);
+                                            return;
+                                          }
+                                          
+                                          // Se o valor for "0" seguido de um dígito diferente de 0, apaga o zero
+                                          if (value.match(/^0[1-9]/) && value.length === 2) {
+                                            const newValue = value.substring(1);
+                                            updateBatchData(index, 'quantity', parseInt(newValue));
+                                            return;
+                                          }
+                                          
+                                          const intValue = parseInt(value);
+                                          if (!isNaN(intValue)) {
+                                            updateBatchData(index, 'quantity', intValue);
+                                          }
+                                        }}
                                         className="h-9"
                                       />
                                     </div>
@@ -828,8 +892,27 @@ const Entradas = () => {
                                         step="0.01"
                                         min="0"
                                         placeholder="0.00"
-                                        value={batch.unitCost || ''}
-                                        onChange={(e) => updateBatchData(index, 'unitCost', parseFloat(e.target.value) || 0)}
+                                        value={batch.unitCost === 0 ? '' : (batch.unitCost || '')}
+                                        onChange={(e) => {
+                                          const value = e.target.value;
+                                          
+                                          if (value === '' || value === null) {
+                                            updateBatchData(index, 'unitCost', 0);
+                                            return;
+                                          }
+                                          
+                                          // Se o valor for "0" seguido de um dígito diferente de 0, apaga o zero
+                                          if (value.match(/^0[1-9]/) && value.length === 2) {
+                                            const newValue = value.substring(1);
+                                            updateBatchData(index, 'unitCost', parseFloat(newValue));
+                                            return;
+                                          }
+                                          
+                                          const numValue = parseFloat(value);
+                                          if (!isNaN(numValue)) {
+                                            updateBatchData(index, 'unitCost', numValue);
+                                          }
+                                        }}
                                         className="h-9"
                                       />
                                     </div>
@@ -1007,8 +1090,8 @@ const Entradas = () => {
                       control={form.control}
                       name="entryDate"
                       render={({ field }) => (
-                        <FormItem className="space-y-2">
-                          <FormLabel className="text-sm font-semibold text-neutral-700">
+                        <FormItem className="space-y-3">
+                          <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
                             📅 Data de Entrada
                           </FormLabel>
                           <FormControl>
@@ -1017,7 +1100,7 @@ const Entradas = () => {
                               {...field}
                               value={field.value instanceof Date ? field.value.toISOString().split('T')[0] : ''}
                               onChange={(e) => field.onChange(new Date(e.target.value))}
-                              className="h-8 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                              className="h-12 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-base sm:text-sm"
                             />
                           </FormControl>
                           <FormMessage />
@@ -1029,13 +1112,13 @@ const Entradas = () => {
                       control={form.control}
                       name="status"
                       render={({ field }) => (
-                        <FormItem className="space-y-2">
-                          <FormLabel className="text-sm font-semibold text-neutral-700">
+                        <FormItem className="space-y-3">
+                          <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
                             📋 Status
                           </FormLabel>
                           <Select onValueChange={field.onChange} defaultValue={field.value}>
                             <FormControl>
-                              <SelectTrigger className="h-8 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                              <SelectTrigger className="h-11 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
                                 <SelectValue />
                               </SelectTrigger>
                             </FormControl>
@@ -1056,7 +1139,7 @@ const Entradas = () => {
                     control={form.control}
                     name="notes"
                     render={({ field }) => (
-                      <FormItem className="space-y-2">
+                      <FormItem className="space-y-3">
                         <FormLabel className="text-sm font-semibold text-neutral-700">
                           📝 Observações
                         </FormLabel>
@@ -1064,7 +1147,7 @@ const Entradas = () => {
                           <Input 
                             placeholder="Observações adicionais sobre a entrada..." 
                             {...field} 
-                            className="h-8 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                            className="h-12 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-base sm:text-sm"
                           />
                         </FormControl>
                         <FormMessage />
@@ -1349,30 +1432,30 @@ const Entradas = () => {
       {/* Modal de Edição com Design Sofisticado */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="max-w-3xl bg-white rounded-xl shadow-2xl border-0">
-          <DialogHeader className="space-y-3 pb-6">
-            <DialogTitle className="text-2xl font-bold text-neutral-900">
+          <DialogHeader className="space-y-2 pb-4 sm:pb-6">
+            <DialogTitle className="text-base sm:text-2xl font-bold text-neutral-900">
               ✏️ Editar Entrada
             </DialogTitle>
-            <DialogDescription className="text-neutral-600 text-base">
+            <DialogDescription className="text-sm sm:text-base text-neutral-600">
               Atualize as informações da entrada de estoque selecionada
             </DialogDescription>
           </DialogHeader>
           
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(editEntry)} className="space-y-6">
+            <form onSubmit={form.handleSubmit(editEntry)} className="space-y-4 sm:space-y-6">
               {/* Primeira linha - Produto e Fornecedor */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                 <FormField
                   control={form.control}
                   name="productId"
                   render={({ field }) => (
-                    <FormItem className="space-y-2">
-                      <FormLabel className="text-sm font-semibold text-neutral-700">
+                    <FormItem className="space-y-3">
+                      <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
                         🏷️ Produto
                       </FormLabel>
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
-                          <SelectTrigger className="h-12 border-neutral-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                          <SelectTrigger className="h-12 sm:h-10 border-neutral-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-base sm:text-sm">
                             <SelectValue placeholder="Selecione um produto" />
                           </SelectTrigger>
                         </FormControl>
@@ -1393,8 +1476,8 @@ const Entradas = () => {
                   control={form.control}
                   name="supplier"
                   render={({ field }) => (
-                    <FormItem className="space-y-2">
-                      <FormLabel className="text-sm font-semibold text-neutral-700">
+                    <FormItem className="space-y-3">
+                      <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
                         🏢 Fornecedor
                       </FormLabel>
                       <FormControl>
@@ -1415,46 +1498,114 @@ const Entradas = () => {
                 <FormField
                   control={form.control}
                   name="quantity"
-                  render={({ field }) => (
-                    <FormItem className="space-y-2">
-                      <FormLabel className="text-sm font-semibold text-neutral-700">
-                        📊 Quantidade
-                      </FormLabel>
-                      <FormControl>
-                        <Input 
-                          type="number" 
-                          placeholder="0" 
-                          {...field}
-                          onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
-                          className="h-12 border-neutral-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
+                  render={({ field }) => {
+                    // Converter valor numérico para string para controle
+                    const valueAsString = field.value === 0 ? '' : String(field.value || '');
+                    
+                    return (
+                      <FormItem className="space-y-3">
+                        <FormLabel className="text-sm font-semibold text-neutral-700">
+                          📊 Quantidade
+                        </FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="number" 
+                            placeholder="0" 
+                            value={valueAsString}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              
+                              // Permite campo vazio (retorna 0 mas mantém visualmente vazio)
+                              if (value === '' || value === null) {
+                                field.onChange(0);
+                                return;
+                              }
+                              
+                              // Se o valor for "0" seguido de um dígito diferente de 0, apaga o zero
+                              if (value.match(/^0[1-9]/) && value.length === 2) {
+                                const newValue = value.substring(1);
+                                field.onChange(parseInt(newValue));
+                                return;
+                              }
+                              
+                              // Permite valores normais
+                              const intValue = parseInt(value);
+                              if (!isNaN(intValue)) {
+                                field.onChange(intValue);
+                              } else if (value === '' || value === '-') {
+                                field.onChange(0);
+                              }
+                            }}
+                            onBlur={() => {
+                              // Quando sair do campo, garante que valor seja 0 se vazio
+                              if (field.value === 0 || !field.value) {
+                                field.onChange(0);
+                              }
+                            }}
+                            className="h-12 border-neutral-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    );
+                  }}
                 />
                 
                 <FormField
                   control={form.control}
                   name="unitCost"
-                  render={({ field }) => (
-                    <FormItem className="space-y-2">
-                      <FormLabel className="text-sm font-semibold text-neutral-700">
-                        💰 Custo Unitário
-                      </FormLabel>
-                      <FormControl>
-                        <Input 
-                          type="number" 
-                          step="0.01" 
-                          placeholder="0.00" 
-                          {...field}
-                          onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
-                          className="h-12 border-neutral-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
+                  render={({ field }) => {
+                    // Converter valor numérico para string para controle
+                    const valueAsString = field.value === 0 ? '' : String(field.value || '');
+                    
+                    return (
+                      <FormItem className="space-y-3">
+                        <FormLabel className="text-sm font-semibold text-neutral-700">
+                          💰 Custo Unitário
+                        </FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="number" 
+                            step="0.01" 
+                            placeholder="0.00" 
+                            value={valueAsString}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              
+                              // Permite campo vazio (retorna 0 mas mantém visualmente vazio)
+                              if (value === '' || value === null) {
+                                field.onChange(0);
+                                return;
+                              }
+                              
+                              // Se o valor for "0" seguido de um dígito diferente de 0, apaga o zero
+                              if (value.match(/^0[1-9]/) && value.length === 2) {
+                                const newValue = value.substring(1);
+                                field.onChange(parseFloat(newValue));
+                                return;
+                              }
+                              
+                              // Permite valores normais incluindo decimais
+                              const numValue = parseFloat(value);
+                              if (!isNaN(numValue)) {
+                                field.onChange(numValue);
+                              } else if (value === '' || value === '-') {
+                                field.onChange(0);
+                              }
+                            }}
+                            onBlur={() => {
+                              // Quando sair do campo, garante que valor seja 0 se vazio
+                              if (field.value === 0 || !field.value) {
+                                field.onChange(0);
+                              }
+                            }}
+                            className="h-12 border-neutral-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    );
+                  }}
                 />
               </div>
               
@@ -1475,8 +1626,8 @@ const Entradas = () => {
                   control={form.control}
                   name="entryDate"
                   render={({ field }) => (
-                    <FormItem className="space-y-2">
-                      <FormLabel className="text-sm font-semibold text-neutral-700">
+                    <FormItem className="space-y-3">
+                      <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
                         📅 Data de Entrada
                       </FormLabel>
                       <FormControl>
@@ -1497,13 +1648,13 @@ const Entradas = () => {
                   control={form.control}
                   name="status"
                   render={({ field }) => (
-                    <FormItem className="space-y-2">
-                      <FormLabel className="text-sm font-semibold text-neutral-700">
+                    <FormItem className="space-y-3">
+                      <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
                         🎯 Status
                       </FormLabel>
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
-                          <SelectTrigger className="h-12 border-neutral-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                          <SelectTrigger className="h-12 sm:h-10 border-neutral-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-base sm:text-sm">
                             <SelectValue />
                           </SelectTrigger>
                         </FormControl>
