@@ -268,9 +268,11 @@ VITE_SUPABASE_ANON_KEY=sua_chave_aqui
 
 <div align="center">
 
-![License](https://img.shields.io/badge/Licença-MIT-green?style=for-the-badge)
+![License](https://img.shields.io/badge/Licença-Uso%20Não%20Comercial-orange?style=for-the-badge)
 
-Este projeto está licenciado sob a **MIT License** - veja o arquivo [LICENSE](LICENSE) para detalhes.
+Este projeto está licenciado sob **Uso Não Comercial** - veja o arquivo [LICENSE](LICENSE) para detalhes.
+
+⚠️ **Uso comercial é EXPRESSAMENTE PROIBIDO** sem autorização do autor.
 
 </div>
 

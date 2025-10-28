@@ -1,22 +1,45 @@
-MIT License
+Licença de Uso Não Comercial
 
 Copyright (c) 2024 Flexi Gestor
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+TODOS OS DIREITOS RESERVADOS AO AUTOR/CRIADOR ORIGINAL.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+Esta licença estabelece os termos de uso do software Flexi Gestor ("Software"). 
+Ao usar, copiar, modificar ou distribuir este software, você aceita os termos desta licença.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+DIREITOS CONCEDIDOS:
+
+1. USO PRIVADO E ACADÊMICO
+   - Você pode usar o software para fins pessoais e acadêmicos.
+   - Você pode estudar o código-fonte para fins educacionais.
+   - Você pode fazer modificações para uso pessoal.
+
+2. RESTRIÇÕES COMERCIAIS
+   - É EXPRESSAMENTE PROIBIDO o uso comercial deste software.
+   - É PROIBIDO usar, vender, alugar ou distribuir este software com fins comerciais.
+   - É PROIBIDO a criação de produtos ou serviços derivados com fins comerciais.
+   - Apenas o autor/criador original possui direitos comerciais exclusivos.
+
+3. DISTRIBUIÇÃO
+   - Você pode compartilhar o código-fonte, desde que mantenha esta licença.
+   - Qualquer distribuição deve incluir este arquivo de licença.
+   - Você não pode remover ou alterar os avisos de copyright.
+
+4. LIMITAÇÃO DE RESPONSABILIDADE
+   - O SOFTWARE É FORNECIDO "COMO ESTÁ", SEM GARANTIAS DE QUALQUER TIPO.
+   - O AUTOR NÃO SE RESPONSABILIZA POR QUAISQUER DANOS, LUCROS CESSANTES 
+     OU OUTRAS RESPONSABILIDADES DECORRENTES DO USO DO SOFTWARE.
+
+5. TÉRMINO DA LICENÇA
+   - Esta licença é efetiva até ser modificada ou revogada pelo autor.
+   - O descumprimento dos termos resulta em perda automática de direitos.
+
+CONTATO PARA USO COMERCIAL:
+Para solicitar permissão de uso comercial, entre em contato com o autor/criador.
+
+---
+
+Este software é propriedade intelectual do autor. O uso comercial sem 
+autorização expressa é uma violação de direitos autorais e pode resultar 
+em medidas legais.
 
