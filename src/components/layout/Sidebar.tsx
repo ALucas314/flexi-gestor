@@ -165,7 +165,7 @@ export const Sidebar = ({ className, variant = 'overlay', onNavigate }: SidebarP
       </div>
 
       {/* Navegação Principal - Responsiva */}
-      <nav className="flex-1 p-3 sm:p-4 md:p-6 space-y-2">
+      <nav className="flex-1 p-3 sm:p-4 md:p-6 space-y-2 overflow-y-auto">
         <div className="mb-3 sm:mb-4 flex items-center justify-between">
           <h2 className="text-xs font-bold text-indigo-700 uppercase tracking-wider">
             Navegação Principal
