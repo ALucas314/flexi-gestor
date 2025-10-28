@@ -8,7 +8,7 @@
 
 *Sistema completo de gestão empresarial para controlar estoque, vendas e finanças com precisão e eficiência*
 
-[📱 **Demo Online**](#) • [📋 **Documentação**](#) • [🚀 **Começar**](#)
+[📱 **Demo Online**](flexigestor5.netlify.app/) 
 
 </div>
 
