@@ -75,7 +75,6 @@ O **Flexi Gestor** é uma solução empresarial moderna e intuitiva desenvolvida
 - ✅ Busca avançada por produtos
 - ✅ Filtros por categoria e status
 - ✅ Histórico de movimentações
-- ✅ Relatórios personalizáveis
 
 ---
 
