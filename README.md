@@ -282,7 +282,7 @@ Este projeto está licenciado sob a **MIT License** - veja o arquivo [LICENSE](L
 
 *Desenvolvido com ❤️ pela equipe Flexi Gestor*
 
-**Contribuidores**: [Seu Nome](https://github.com/seu-usuario)
+**Contribuidores**: [Seu Nome](https://github.com/ALucas314)
 
 </div>
 
@@ -291,7 +291,5 @@ Este projeto está licenciado sob a **MIT License** - veja o arquivo [LICENSE](L
 <div align="center">
 
 **⭐ Se este projeto te ajudou, considere dar uma estrela! ⭐**
-
-[![GitHub stars](https://img.shields.io/github/stars/seu-usuario/flexi-gestor?style=social)](https://github.com/seu-usuario/flexi-gestor)
 
 </div>
