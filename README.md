@@ -282,7 +282,7 @@ Este projeto está licenciado sob a **MIT License** - veja o arquivo [LICENSE](L
 
 *Desenvolvido com ❤️ pela equipe Flexi Gestor*
 
-**Contribuidores**: [Seu Nome](https://github.com/ALucas314)
+**Contribuidores**: [Antônio Lucas Costa Araújo](https://github.com/ALucas314)
 
 </div>
 
