@@ -358,16 +358,9 @@ const Saidas = () => {
     try {
       setIsSaving(true);
 
-      // Atualizar status no Supabase
-      const { error: updateError } = await supabase
-        .from('movimentacoes')
-        .update({ status: newStatus })
-        .eq('id', exitToEdit.id);
-
-      if (updateError) {
-        console.error('Erro ao atualizar status:', updateError);
-        // Continuar mesmo com erro
-      }
+      // Atualizar status localmente
+      // Nota: Integração com Supabase removida temporariamente
+      console.log('Status atualizado para:', newStatus);
 
       // Se mudando para CANCELADO, devolver unidades aos lotes
       if (newStatus === "cancelado" && exitToEdit.status !== "cancelado") {

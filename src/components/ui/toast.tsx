@@ -45,11 +45,13 @@ const Toast = React.forwardRef<
 >(({ className, variant, onOpenChange, ...props }, ref) => {
   const [touchStart, setTouchStart] = React.useState<{ x: number; y: number } | null>(null);
   const [touchMove, setTouchMove] = React.useState<{ x: number; y: number } | null>(null);
+  const [swipeDirection, setSwipeDirection] = React.useState<string | null>(null);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     const touch = e.touches[0];
     setTouchStart({ x: touch.clientX, y: touch.clientY });
     setTouchMove(null);
+    setSwipeDirection(null);
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
@@ -65,19 +67,54 @@ const Toast = React.forwardRef<
     const absDeltaX = Math.abs(deltaX);
     const absDeltaY = Math.abs(deltaY);
 
-    // Se mover mais de 50px para a direita ou para cima, fecha a notificação
-    if ((absDeltaX > 50 && deltaX > 0) || (absDeltaY > 50 && deltaY < 0)) {
-      onOpenChange(false);
+    // Determine a direção predominante do swipe
+    if (absDeltaX > 50 || absDeltaY > 50) {
+      if (absDeltaX > absDeltaY) {
+        // Swipe horizontal predominante
+        if (deltaX > 0) {
+          setSwipeDirection('right');
+        } else {
+          setSwipeDirection('left');
+        }
+      } else {
+        // Swipe vertical predominante
+        if (deltaY < 0) {
+          setSwipeDirection('up');
+        } else {
+          setSwipeDirection('down');
+        }
+      }
+
+      // Pequeno delay para animação, depois fecha
+      setTimeout(() => {
+        onOpenChange(false);
+      }, 50);
     }
 
     setTouchStart(null);
     setTouchMove(null);
+    setTimeout(() => setSwipeDirection(null), 300);
   };
+
+  // Class baseada na direção do swipe
+  const swipeAnimationClass = swipeDirection === 'right' 
+    ? 'animate-slide-out-to-right'
+    : swipeDirection === 'left'
+    ? 'animate-slide-out-to-left'
+    : swipeDirection === 'up'
+    ? 'animate-slide-out-to-top'
+    : swipeDirection === 'down'
+    ? 'animate-slide-out-to-bottom'
+    : '';
 
   return (
     <ToastPrimitives.Root
       ref={ref}
-      className={cn(toastVariants({ variant }), className)}
+      className={cn(
+        toastVariants({ variant }), 
+        swipeAnimationClass,
+        className
+      )}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
