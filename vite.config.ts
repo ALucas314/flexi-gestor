@@ -15,15 +15,22 @@ export default defineConfig(({ mode }) => ({
       host: 'localhost',
       port: 8080,
       clientPort: 8080,
+      client: {
+        reconnect: 5, // Tentar reconectar até 5 vezes
+        overlay: true,
+      },
     },
     // Watch options para auto-reload funcionar melhor
     watch: {
-      usePolling: true, // Necessário para alguns sistemas Windows
-      interval: 1000, // Verificar mudanças a cada 1 segundo
-      ignored: ['**/node_modules/**', '**/.git/**'], // Ignorar pastas desnecessárias
+      usePolling: false, // Desabilitar polling - reduz uso de CPU
+      ignored: ['**/node_modules/**', '**/.git/**', '**/dist/**'], // Ignorar pastas desnecessárias
     },
     // Força reload completo se HMR falhar
-    strictPort: true,
+    strictPort: false, // Permitir usar outra porta se 8080 estiver ocupada
+    // Melhorar timeout para evitar desconexões
+    warmup: {
+      clientFiles: ['./src/main.tsx', './src/App.tsx', './index.html'],
+    },
   },
   plugins: [
     react({
