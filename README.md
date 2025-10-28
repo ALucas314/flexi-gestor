@@ -262,16 +262,6 @@ VITE_SUPABASE_ANON_KEY=sua_chave_aqui
 
 ---
 
-## 📞 **Suporte e Contato**
-
-<div align="center">
-
-![Email](https://img.shields.io/badge/Email-suporte@flexigestor.com-blue?style=for-the-badge&logo=gmail)
-![WhatsApp](https://img.shields.io/badge/WhatsApp-+55%2011%2099999--9999-green?style=for-the-badge&logo=whatsapp)
-![LinkedIn](https://img.shields.io/badge/LinkedIn-Flexi%20Gestor-blue?style=for-the-badge&logo=linkedin)
-
-</div>
-
 
 
 ---
