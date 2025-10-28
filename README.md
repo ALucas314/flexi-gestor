@@ -23,7 +23,6 @@ O **Flexi Gestor** é uma solução empresarial moderna e intuitiva desenvolvida
 - **📊 Controle Total**: Gestão completa de estoque e vendas
 - **🔒 Segurança**: Sistema robusto e confiável
 - **📱 Multi-dispositivo**: Funciona perfeitamente em qualquer tela
-- **🎨 Personalizável**: Cores e temas adaptáveis
 
 ---
 
