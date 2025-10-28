@@ -29,11 +29,15 @@ export const HMRReloader = () => {
     if (import.meta.hot) {
       // Detectar conexão
       import.meta.hot.on('vite:ws:connect', () => {
+        console.log('✅ HMR conectado');
         lastHeartbeatRef.current = Date.now();
       });
 
       // Detectar desconexão
       import.meta.hot.on('vite:ws:disconnect', () => {
+        console.warn('⚠️ HMR desconectado - aguardando reconexão...');
+        let checkCount = 0;
+        
         // Verificar a cada 3 segundos se pode recarregar
         const checkInterval = setInterval(() => {
           if (isReloadingRef.current) {
@@ -41,8 +45,14 @@ export const HMRReloader = () => {
             return;
           }
           
+          checkCount++;
           const timeSinceLastHeartbeat = Date.now() - lastHeartbeatRef.current;
           const timeSinceLastActivity = Date.now() - lastActivityRef.current;
+          
+          // Log a cada 10 segundos
+          if (checkCount % 4 === 0) {
+            console.log(`🔄 Verificando... HMR offline há ${Math.floor(timeSinceLastHeartbeat/1000)}s, usuário ocioso há ${Math.floor(timeSinceLastActivity/1000)}s`);
+          }
           
           // Só recarregar se:
           // 1. Desconectado há mais de 30 segundos
@@ -50,6 +60,7 @@ export const HMRReloader = () => {
           if (timeSinceLastHeartbeat > 30000 && timeSinceLastActivity > 5000) {
             isReloadingRef.current = true;
             clearInterval(checkInterval);
+            console.log('🔄 Recarregando página silenciosamente...');
             // Recarregar silenciosamente
             window.location.reload();
           }
@@ -58,6 +69,7 @@ export const HMRReloader = () => {
 
       // Atualização bem-sucedida
       import.meta.hot.on('vite:beforeUpdate', () => {
+        console.log('📝 Atualização HMR recebida');
         lastHeartbeatRef.current = Date.now();
       });
 
