@@ -1,0 +1,547 @@
+// 📅 Componente para Gerenciar Lotes de Produtos
+// Permite adicionar, editar e visualizar lotes com datas de fabricação e validade
+
+import React, { useState, useEffect } from 'react';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Badge } from './ui/badge';
+import { 
+  Plus, 
+  Calendar, 
+  Package, 
+  AlertTriangle,
+  CheckCircle,
+  Trash2,
+  Edit
+} from 'lucide-react';
+import { getBatchesByProduct, createBatch, deleteBatch, checkBatchNumberExists, generateNextAvailableBatchNumber } from '@/lib/batches';
+import { useAuth } from '@/contexts/AuthContext';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { useToast } from '@/hooks/use-toast';
+import { daysBetween } from '@/lib/utils';
+import { ConfirmDialog } from './ui/ConfirmDialog';
+import { useConfirmDialog } from '@/hooks/use-confirm-dialog';
+
+interface Batch {
+  id: string;
+  batchNumber: string;
+  quantity: number;
+  manufactureDate: string | null;
+  expiryDate: string | null;
+  createdAt: string;
+  product?: {
+    name: string;
+    sku: string;
+  };
+}
+
+interface BatchManagerProps {
+  productId: string;
+  productName: string;
+  productSku: string; // SKU do produto - usado como base para número do lote
+  productStock: number; // Estoque total do produto
+  onBatchesChange?: () => void; // Callback quando lotes mudarem
+}
+
+export const BatchManager: React.FC<BatchManagerProps> = ({ 
+  productId, 
+  productName,
+  productSku,
+  productStock,
+  onBatchesChange 
+}) => {
+  const { toast } = useToast();
+  const { user } = useAuth();
+  const { workspaceAtivo } = useWorkspace();
+  const { confirm, dialogState, closeDialog, handleConfirm } = useConfirmDialog();
+  const [batches, setBatches] = useState<Batch[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    batchNumber: '',
+    quantity: ''
+  });
+
+  // Carregar lotes do produto
+  const loadBatches = async () => {
+    if (!user?.id) return;
+    
+    try {
+      setIsLoading(true);
+      const batchesData = await getBatchesByProduct(productId, user.id);
+      setBatches(batchesData.map(b => ({
+        id: b.id,
+        batchNumber: b.batchNumber,
+        quantity: b.quantity,
+        manufactureDate: b.manufactureDate?.toISOString() || null,
+        expiryDate: b.expiryDate?.toISOString() || null,
+        createdAt: b.createdAt.toISOString()
+      })));
+      
+      // Gerar número do lote usando apenas o SKU do produto
+      setFormData(prev => ({
+        ...prev,
+        batchNumber: productSku
+      }));
+    } catch (error) {
+      console.error('Erro ao carregar lotes:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (user?.id && productId) {
+      loadBatches();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productId]);
+
+  // Adicionar novo lote
+  const handleAddBatch = async () => {
+    if (!user?.id) {
+      toast({
+        title: '❌ Erro',
+        description: 'Usuário não autenticado',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    try {
+      if (!formData.batchNumber || !formData.quantity) {
+        toast({
+          title: '❌ Campos Obrigatórios',
+          description: 'Número do lote e quantidade são obrigatórios',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      // Validar quantidade mínima
+      const quantity = parseInt(formData.quantity);
+      if (quantity <= 0) {
+        toast({
+          title: '❌ Quantidade Inválida',
+          description: 'A quantidade deve ser maior que zero',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      // Calcular quantidade já alocada em lotes existentes
+      const totalAllocated = batches.reduce((sum, b) => sum + b.quantity, 0);
+      const availableStock = productStock - totalAllocated;
+
+      // Validar se há estoque disponível para alocar
+      if (availableStock <= 0) {
+        toast({
+          title: '⚠️ Sem Estoque Disponível',
+          description: `Todo o estoque (${productStock} unidades) já está alocado em ${batches.length} lote(s). Exclua um lote ou aumente o estoque do produto.`,
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      // Validar se a quantidade não excede o estoque disponível
+      if (quantity > availableStock) {
+        toast({
+          title: '⚠️ Estoque Insuficiente',
+          description: `Você está tentando alocar ${quantity} unidades, mas só há ${availableStock} unidades disponíveis. (Total: ${productStock}, Já Alocado: ${totalAllocated})`,
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      // Verificar se o número do lote já existe
+      const existsInDatabase = await checkBatchNumberExists(formData.batchNumber, productId, user.id);
+      
+      if (existsInDatabase) {
+        toast({
+          title: '❌ Número de Lote Duplicado!',
+          description: `O lote "${formData.batchNumber}" já existe para este produto. Escolha outro número.`,
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      setIsLoading(true);
+
+      const created = await createBatch(
+        productId,
+        formData.batchNumber,
+        quantity,
+        0, // unitCost - pode ser zero aqui
+        workspaceAtivo?.id || user.id, // Usar workspace ativo!
+        formData.manufactureDate ? new Date(formData.manufactureDate) : undefined,
+        formData.expiryDate ? new Date(formData.expiryDate) : undefined
+      );
+
+      // Verificar se o lote foi criado com sucesso
+      if (!created) {
+        toast({
+          title: '❌ Erro ao Criar Lote',
+          description: `Não foi possível criar o lote "${formData.batchNumber}". Verifique se o número já existe.`,
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      toast({
+        title: '✅ Lote Adicionado!',
+        description: `Lote ${formData.batchNumber} foi criado com sucesso`,
+        variant: 'default'
+      });
+
+      // Recarregar lotes
+      await loadBatches();
+      setIsDialogOpen(false);
+      
+      // Notificar mudança
+      onBatchesChange?.();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Não foi possível criar o lote';
+      toast({
+        title: '❌ Erro ao Adicionar Lote',
+        description: errorMessage,
+        variant: 'destructive'
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Deletar lote
+  const handleDeleteBatch = async (batchId: string, batchNumber: string) => {
+    if (!user?.id) return;
+    
+    confirm(
+      'Confirmar Exclusão',
+      `Deseja realmente deletar o lote ${batchNumber}?`,
+      async () => {
+        try {
+          setIsLoading(true);
+          await deleteBatch(batchId, workspaceAtivo?.id || user.id);
+
+          toast({
+            title: '✅ Lote Deletado!',
+            description: `Lote ${batchNumber} foi removido com sucesso`,
+            variant: 'default'
+          });
+
+          await loadBatches();
+          onBatchesChange?.();
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Não foi possível deletar o lote';
+          toast({
+            title: '❌ Erro ao Deletar Lote',
+            description: errorMessage,
+            variant: 'destructive'
+          });
+        } finally {
+          setIsLoading(false);
+        }
+      },
+      {
+        variant: 'destructive',
+        confirmText: 'Deletar',
+        cancelText: 'Cancelar',
+      }
+    );
+  };
+
+  // Calcular status do lote (vencido, próximo do vencimento, ok)
+  const getBatchStatus = (expiryDate: string | null) => {
+    if (!expiryDate) return { label: 'Sem Validade', color: 'gray', icon: Package };
+
+    const today = new Date();
+    const expiry = new Date(expiryDate);
+    const diffDays = expiry > today 
+      ? daysBetween(today, expiry)  // Dias até vencer
+      : -daysBetween(expiry, today); // Dias que já passou (negativo)
+
+    if (diffDays < 0) {
+      return { label: 'Vencido', color: 'red', icon: AlertTriangle };
+    } else if (diffDays <= 30) {
+      return { label: `Vence em ${diffDays} dias`, color: 'yellow', icon: AlertTriangle };
+    } else {
+      return { label: `Vence em ${diffDays} dias`, color: 'green', icon: CheckCircle };
+    }
+  };
+
+  return (
+    <>
+    <div className="space-y-4">
+      {/* Cabeçalho com botão de adicionar */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900">📅 Lotes do Produto</h3>
+          <p className="text-sm text-gray-600">{productName}</p>
+        </div>
+        
+        <Button 
+          onClick={async () => {
+            setIsDialogOpen(!isDialogOpen);
+            
+            // Gerar automaticamente o próximo número de lote disponível
+            if (user?.id && productId) {
+              try {
+                const nextBatchNumber = await generateNextAvailableBatchNumber(productId, user.id, batches);
+                setFormData({
+                  batchNumber: nextBatchNumber,
+                  quantity: ''
+                });
+              } catch (error) {
+                console.error('Erro ao gerar número do lote:', error);
+                // Fallback: usar SKU do produto
+                setFormData({
+                  batchNumber: productSku,
+                  quantity: ''
+                });
+              }
+            } else {
+              // Fallback: usar SKU do produto
+              setFormData({
+                batchNumber: productSku,
+                quantity: ''
+              });
+            }
+          }}
+          className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white"
+        >
+          <Plus className="mr-2 h-4 w-4" />
+          Novo Lote
+        </Button>
+      </div>
+
+      {/* Formulário inline para adicionar lote */}
+      {isDialogOpen && (
+        <Card className="bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200">
+          <CardContent className="p-4 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="batchNumber" className="flex items-center justify-between">
+                <span>📦 Número do Lote *</span>
+                <span className="text-xs text-gray-500 font-normal">
+                  SKU: {productSku}
+                </span>
+              </Label>
+              <Input
+                id="batchNumber"
+                placeholder={formData.batchNumber || "Gerado automaticamente"}
+                value={formData.batchNumber}
+                onChange={(e) => setFormData(prev => ({ ...prev, batchNumber: e.target.value }))}
+                className="font-semibold"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="quantity">🔢 Quantidade *</Label>
+              {(() => {
+                const totalAllocated = batches.reduce((sum, b) => sum + b.quantity, 0);
+                const availableStock = productStock - totalAllocated;
+                
+                return (
+                  <>
+                    <Input
+                      id="quantity"
+                      type="number"
+                      min="1"
+                      max={availableStock}
+                      placeholder={`Máximo: ${availableStock} unidades`}
+                      value={formData.quantity}
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value) || 0;
+                        if (value <= availableStock || e.target.value === '') {
+                          setFormData(prev => ({ ...prev, quantity: e.target.value }));
+                        }
+                      }}
+                      className={`text-lg font-semibold ${
+                        parseInt(formData.quantity) > availableStock ? 'border-red-500' : ''
+                      }`}
+                    />
+                    <div className="text-xs space-y-1">
+                      <p className="text-gray-600">
+                        📦 Disponível: <span className="font-bold text-green-600">{availableStock} unidades</span>
+                      </p>
+                      {parseInt(formData.quantity) > availableStock && (
+                        <span className="block text-red-600 font-semibold">
+                          ⚠️ Quantidade excede o estoque disponível!
+                        </span>
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+
+            <div className="flex gap-2">
+              <Button 
+                onClick={handleAddBatch} 
+                disabled={isLoading}
+                className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white"
+              >
+                {isLoading ? 'Adicionando...' : 'Adicionar Lote'}
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => setIsDialogOpen(false)}
+              >
+                Cancelar
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Lista de lotes */}
+      <div className="grid gap-3">
+        {isLoading && batches.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">
+            <div className="animate-spin h-8 w-8 border-2 border-indigo-600 border-t-transparent rounded-full mx-auto mb-2"></div>
+            Carregando lotes...
+          </div>
+        ) : batches.length === 0 ? (
+          <Card className="bg-gray-50 border-dashed">
+            <CardContent className="pt-6 text-center">
+              <Package className="h-12 w-12 mx-auto mb-3 text-gray-400" />
+              <p className="text-gray-600">Nenhum lote cadastrado</p>
+              <p className="text-sm text-gray-500 mt-1">Adicione um lote para começar</p>
+            </CardContent>
+          </Card>
+        ) : (
+          batches.map((batch) => {
+            return (
+              <Card 
+                key={batch.id} 
+                className="hover:shadow-md transition-all border-gray-200"
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 space-y-2">
+                      <div className="flex items-center space-x-2">
+                        <Badge variant="outline" className="font-mono font-bold text-sm">
+                          📦 {batch.batchNumber}
+                        </Badge>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-2 text-sm">
+                        <div>
+                          <p className="text-gray-600">📦 Quantidade:</p>
+                          <p className="font-semibold text-gray-900">{batch.quantity} unidades</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDeleteBatch(batch.id, batch.batchNumber)}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })
+        )}
+      </div>
+
+      {/* Resumo total */}
+      <Card className="bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200">
+        <CardContent className="p-5">
+          <div className="space-y-4">
+            {/* Cabeçalho do Resumo */}
+            <div className="flex items-center space-x-3 pb-3 border-b border-indigo-200">
+              <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center">
+                <Package className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <h4 className="font-semibold text-gray-900">📊 Resumo de Distribuição</h4>
+                <p className="text-xs text-gray-600">Distribuição do estoque em lotes</p>
+              </div>
+            </div>
+
+            {/* Grid de Informações */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {/* Estoque Total */}
+              <div className="bg-white rounded-lg p-3 border border-indigo-100">
+                <p className="text-xs text-gray-600 mb-1">📦 Estoque Total</p>
+                <p className="text-2xl font-bold text-gray-900">{productStock}</p>
+                <p className="text-xs text-gray-500">unidades</p>
+              </div>
+
+              {/* Distribuídos em Lotes */}
+              <div className="bg-white rounded-lg p-3 border border-green-100">
+                <p className="text-xs text-gray-600 mb-1">✅ Em Lotes</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {batches.reduce((sum, b) => sum + b.quantity, 0)}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {productStock > 0 
+                    ? `${Math.round((batches.reduce((sum, b) => sum + b.quantity, 0) / productStock) * 100)}%`
+                    : '0%'
+                  }
+                </p>
+              </div>
+
+              {/* Não Alocados */}
+              <div className="bg-white rounded-lg p-3 border border-orange-100">
+                <p className="text-xs text-gray-600 mb-1">📋 Não Alocados</p>
+                <p className="text-2xl font-bold text-orange-600">
+                  {Math.max(0, productStock - batches.reduce((sum, b) => sum + b.quantity, 0))}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {productStock > 0 
+                    ? `${Math.round((Math.max(0, productStock - batches.reduce((sum, b) => sum + b.quantity, 0)) / productStock) * 100)}%`
+                    : '0%'
+                  }
+                </p>
+              </div>
+
+              {/* Total de Lotes */}
+              <div className="bg-white rounded-lg p-3 border border-indigo-100">
+                <p className="text-xs text-gray-600 mb-1">🏷️ Total Lotes</p>
+                <p className="text-2xl font-bold text-indigo-600">{batches.length}</p>
+                <p className="text-xs text-gray-500">
+                  {batches.length === 1 ? 'lote' : 'lotes'}
+                </p>
+              </div>
+            </div>
+
+            {/* Alerta se houver divergência */}
+            {batches.reduce((sum, b) => sum + b.quantity, 0) > productStock && (
+              <div className="flex items-center space-x-2 bg-red-100 border border-red-300 rounded-lg p-3">
+                <AlertTriangle className="h-5 w-5 text-red-600 flex-shrink-0" />
+                <div className="text-sm">
+                  <p className="font-semibold text-red-900">⚠️ Atenção: Divergência Detectada!</p>
+                  <p className="text-red-700">
+                    A soma dos lotes ({batches.reduce((sum, b) => sum + b.quantity, 0)}) é maior que o estoque total ({productStock}). 
+                    Verifique as quantidades dos lotes ou ajuste o estoque do produto.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+
+    {/* Diálogo de Confirmação */}
+    <ConfirmDialog
+      isOpen={dialogState.isOpen}
+      onClose={closeDialog}
+      onConfirm={handleConfirm}
+      title={dialogState.title}
+      description={dialogState.description}
+      confirmText={dialogState.confirmText}
+      cancelText={dialogState.cancelText}
+      variant={dialogState.variant}
+    />
+  </>
+  );
+};
+
