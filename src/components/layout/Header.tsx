@@ -55,7 +55,7 @@ export const Header = () => {
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-indigo-50 via-indigo-100/60 to-indigo-100 backdrop-blur-md border-b border-indigo-200 shadow-lg">
-      <div className={`flex items-center justify-between ${isMobile ? 'px-3 py-3' : 'px-2 sm:px-4 md:px-6 py-3 sm:py-4'} ${isMobile ? 'gap-2' : 'gap-2 sm:gap-4'}`}>
+      <div className={`flex items-center justify-between ${isMobile ? 'px-3 py-2' : 'px-2 sm:px-4 md:px-6 py-3 sm:py-4'} ${isMobile ? 'gap-2' : 'gap-2 sm:gap-4'}`}>
         {/* Logo e Navegação */}
         <div className={`flex items-center ${isMobile ? 'space-x-2' : 'space-x-2 md:space-x-3 lg:space-x-4'}`}>
           {/* Menu Burger - Visível apenas se não estiver pinado OU for mobile */}
@@ -65,9 +65,9 @@ export const Header = () => {
                 <Button 
                   variant="ghost" 
                   size={isMobile ? "default" : "sm"}
-                  className={`${isMobile ? 'p-3 h-12 w-12' : 'p-1.5 md:p-2'} hover:bg-indigo-50 rounded-xl transition-all duration-200`}
+                  className={`${isMobile ? 'p-3 h-16 w-16' : 'p-1.5 md:p-2'} hover:bg-indigo-50 rounded-xl transition-all duration-200`}
                 >
-                  <Menu className={`${isMobile ? 'h-6 w-6' : 'h-5 w-5'} text-indigo-600`} />
+                  <Menu className={`${isMobile ? 'h-8 w-8' : 'h-5 w-5'} text-indigo-600`} strokeWidth={isMobile ? 3 : 2} />
                 </Button>
               </SheetTrigger>
               <SheetContent 
@@ -118,7 +118,7 @@ export const Header = () => {
                 )}
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align={isMobile ? "center" : "end"} className={`${isMobile ? 'w-[calc(100vw-2rem)] max-w-md mx-4' : 'w-96'} p-0 rounded-2xl border border-gray-200/50 shadow-2xl bg-white/95 backdrop-blur-lg`}>
+            <DropdownMenuContent align={isMobile ? "center" : "end"} className={`${isMobile ? 'w-[calc(100vw-2rem)] max-w-md mx-4' : 'w-80 max-w-sm'} p-0 rounded-xl border border-gray-200/50 shadow-lg bg-white backdrop-blur-sm`}>
               <div className={`${isMobile ? 'p-4' : 'p-6'} border-b border-neutral-200 bg-gradient-to-r from-indigo-50 to-purple-50`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
@@ -238,7 +238,7 @@ export const Header = () => {
                 )}
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align={isMobile ? "center" : "end"} className={`${isMobile ? 'w-[calc(100vw-2rem)] max-w-sm mx-4' : 'w-72 sm:w-80'} rounded-2xl border border-gray-200/50 shadow-2xl bg-white/95 backdrop-blur-lg p-2`}>
+            <DropdownMenuContent align={isMobile ? "center" : "end"} className={`${isMobile ? 'w-[calc(100vw-2rem)] max-w-sm mx-4' : 'w-64 sm:w-72'} rounded-xl border border-gray-200/50 shadow-lg bg-white backdrop-blur-sm p-2`}>
               {/* Informações do Usuário */}
               <div className="px-4 py-4 border-b border-gray-200/50 bg-gradient-to-br from-indigo-50/50 to-purple-50/50 rounded-xl mb-2">
                 <div className="flex items-center space-x-3">

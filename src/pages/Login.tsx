@@ -185,7 +185,7 @@ const Login = () => {
           </div>
           
           {/* Badges */}
-          <div className="flex flex-wrap justify-center gap-1 w-full mb-1 sm:mb-2">
+          <div className="flex flex-wrap justify-center gap-1 w-full mb-1 sm:mb-2 ml-2">
             <Badge variant="secondary" className="bg-gradient-to-r from-green-50 to-emerald-50 text-green-700 border border-green-200 text-xs font-medium hover:shadow-md transition-all duration-200 hover:scale-105 cursor-default px-2 py-0.5">
               <Shield className="w-3 h-3 mr-1" />
               <span className="hidden sm:inline">Seguro</span>

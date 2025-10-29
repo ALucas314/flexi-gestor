@@ -388,7 +388,7 @@ const Relatorios = () => {
                 <p className="text-xs text-gray-500">Saídas - Entradas</p>
               </div>
             </div>
-            <div className={`text-4xl font-bold ${lucroEstimado >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            <div className={`text-xl sm:text-2xl font-bold ${lucroEstimado >= 0 ? 'text-green-600' : 'text-red-600'}`}>
               {lucroEstimado >= 0 ? '+' : ''}R$ {Math.abs(lucroEstimado).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </div>
           </div>

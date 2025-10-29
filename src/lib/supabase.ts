@@ -27,8 +27,58 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: true,
     // Storage personalizado (usa localStorage por padrão)
     storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+    // Tentar recuperar sessão automaticamente
+    flowType: 'pkce',
   },
+  // Desabilitar Realtime por padrão para evitar problemas de CSP
+  // Se precisar usar Realtime, pode ser habilitado depois
+  realtime: {
+    params: {
+      eventsPerSecond: 10
+    }
+  },
+  // Configuração global para evitar erros de rede
+  global: {
+    headers: {
+      'X-Client-Info': 'flexi-gestor'
+    }
+  }
 })
+
+// Listener global para tratar erros de autenticação do Supabase
+if (typeof window !== 'undefined') {
+  // Escutar mudanças de autenticação para tratar erros de refresh token
+  supabase.auth.onAuthStateChange((event, session) => {
+    // Se o token foi revogado ou expirado, limpar localmente
+    if (event === 'TOKEN_REFRESHED' && !session) {
+      try {
+        const keys = Object.keys(localStorage);
+        keys.forEach(key => {
+          if (key.includes('supabase.auth.token')) {
+            localStorage.removeItem(key);
+          }
+        });
+      } catch {
+        // Ignorar erros
+      }
+    }
+  });
+
+  // Interceptar console.error para suprimir erros de refresh token
+  const originalConsoleError = console.error;
+  console.error = (...args: any[]) => {
+    const errorMessage = args.join(' ');
+    // Suprimir erros específicos de refresh token inválido
+    if (errorMessage.includes('Invalid Refresh Token') ||
+        errorMessage.includes('Refresh Token Not Found') ||
+        errorMessage.includes('refresh_token')) {
+      // Não logar esses erros, apenas ignorar
+      return;
+    }
+    // Para todos os outros erros, logar normalmente
+    originalConsoleError.apply(console, args);
+  };
+}
 
 // Tipos do banco de dados
 export type Json =

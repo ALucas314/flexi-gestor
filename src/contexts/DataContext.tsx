@@ -38,6 +38,7 @@ interface Movement {
   total: number;
   receiptNumber?: string;
   status?: 'pendente' | 'confirmado' | 'cancelado'; // Campo para controlar status da movimentação
+  paymentMethod?: string;
 }
 
 interface Notification {
@@ -53,6 +54,8 @@ interface DataContextType {
   products: Product[];
   movements: Movement[];
   notifications: Notification[];
+  categories: string[];
+  customUnits: string[];
   isLoading: boolean;
   addProduct: (product: Omit<Product, 'id'>) => Promise<void>;
   updateProduct: (id: string, product: Partial<Product>) => Promise<void>;
@@ -63,6 +66,14 @@ interface DataContextType {
   markNotificationAsRead: (id: string) => Promise<void>;
   removeNotification: (id: string) => Promise<void>;
   clearAllNotifications: () => Promise<void>;
+  // Categorias
+  addCategory: (categoryName: string) => Promise<void>;
+  deleteCategory: (categoryName: string) => Promise<void>;
+  refreshCategories: () => Promise<void>;
+  // Unidades de medida
+  addCustomUnit: (unitSigla: string) => Promise<void>;
+  deleteCustomUnit: (unitSigla: string) => Promise<void>;
+  refreshCustomUnits: () => Promise<void>;
   searchGlobal: (term: string) => {
     products: Product[];
     movements: Movement[];
@@ -84,6 +95,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [products, setProducts] = useState<Product[]>([]);
   const [movements, setMovements] = useState<Movement[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [customUnits, setCustomUnits] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   const { isAuthenticated, user } = useAuth();
@@ -117,7 +130,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         sku: p.sku,
         status: 'ativo' as const,
         createdAt: new Date(p.criado_em),
-        updatedAt: new Date(p.atualizado_em)
+        updatedAt: new Date(p.atualizado_em),
+        // Campos adicionais mapeados do banco
+        unitOfMeasure: p.unidade_medida || 'UN',
+        managedByBatch: p.gerenciado_por_lote === true || p.gerenciado_por_lote === 'true' || false
       }));
 
       setProducts(mappedProducts);
@@ -162,7 +178,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         date: new Date(m.criado_em),
         total: parseFloat(m.preco_total) || 0,
         receiptNumber: m.numero_recibo,
-        status: (m.status || 'confirmado') as 'pendente' | 'confirmado' | 'cancelado' // Incluir campo status
+        status: (m.status || 'confirmado') as 'pendente' | 'confirmado' | 'cancelado',
+        paymentMethod: m.metodo_pagamento || undefined
       }));
 
       setMovements(mappedMovements);
@@ -355,9 +372,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           preco: product.price,
           estoque: product.stock,
           estoque_minimo: product.minStock,
-          unidade_medida: 'UN',
+          unidade_medida: (product as any).unitOfMeasure || 'UN',
           fornecedor: 'Fornecedor Padrão',
           descricao: product.description,
+          gerenciado_por_lote: (product as any).managedByBatch === true,
           usuario_id: workspaceAtivo.id // Usar ID do workspace ativo!
         }])
         .select()
@@ -414,6 +432,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       if (updates.stock !== undefined) updateData.estoque = updates.stock;
       if (updates.minStock !== undefined) updateData.estoque_minimo = updates.minStock;
       if (updates.description !== undefined) updateData.descricao = updates.description;
+      if ((updates as any).unitOfMeasure !== undefined) updateData.unidade_medida = (updates as any).unitOfMeasure;
+      if ((updates as any).managedByBatch !== undefined) updateData.gerenciado_por_lote = (updates as any).managedByBatch === true;
       updateData.atualizado_em = new Date().toISOString();
 
       // Não precisa filtrar por usuario_id aqui pois o RLS já garante
@@ -515,7 +535,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           quantidade: movement.quantity,
           preco_unitario: movement.unitPrice,
           preco_total: total,
-          metodo_pagamento: null,
+          metodo_pagamento: movement.paymentMethod || null,
           observacoes: movement.description,
           numero_recibo: receiptNumber,
           usuario_id: workspaceAtivo.id // Usar ID do workspace ativo!
@@ -545,7 +565,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         await updateProduct(movement.productId, { stock: newStock });
       }
 
-      // Recarregar movimentações
+      // Recarregar produtos e movimentações para atualizar o dashboard
+      await refreshProducts();
       await refreshMovements();
 
       // Adicionar notificação baseada no tipo
@@ -687,7 +708,34 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   // 📊 Estatísticas do dashboard
   const getDashboardStats = () => {
     const totalProducts = products.length;
-    const stockValue = products.reduce((sum, product) => sum + (product.price * product.stock), 0);
+    
+    // Calcular valor do estoque usando custo médio das entradas ou preço de venda
+    const stockValue = products.reduce((sum, product) => {
+      // Buscar todas as entradas deste produto
+      const productEntries = movements
+        .filter(m => m.productId === product.id && m.type === 'entrada')
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      
+      // Se há entradas, calcular custo médio ponderado
+      if (productEntries.length > 0) {
+        let totalCost = 0;
+        let totalQuantity = 0;
+        
+        productEntries.forEach(entry => {
+          totalCost += (entry.unitPrice * entry.quantity);
+          totalQuantity += entry.quantity;
+        });
+        
+        const averageCost = totalQuantity > 0 ? totalCost / totalQuantity : 0;
+        // Usar custo médio se disponível, senão usar preço de venda
+        const unitValue = averageCost > 0 ? averageCost : product.price;
+        return sum + (unitValue * product.stock);
+      } else {
+        // Se não há entradas, usar preço de venda (ou 0 se não definido)
+        return sum + (product.price * product.stock);
+      }
+    }, 0);
+    
     const lowStockCount = products.filter(p => p.stock <= p.minStock).length;
     
     const today = new Date();
@@ -712,11 +760,168 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     };
   };
 
+  // 🏷️ Funções de Categorias
+  const refreshCategories = useCallback(async () => {
+    if (!user?.id || !workspaceAtivo?.id) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('categorias')
+        .select('nome')
+        .eq('usuario_id', user.id)
+        .order('nome', { ascending: true });
+
+      if (error) throw error;
+
+      const categoryNames = data?.map(c => c.nome) || [];
+      setCategories(categoryNames);
+    } catch (error) {
+      console.error('Erro ao carregar categorias:', error);
+    }
+  }, [user?.id, workspaceAtivo?.id]);
+
+  const addCategory = useCallback(async (categoryName: string) => {
+    if (!user?.id || !workspaceAtivo?.id) return;
+    
+    const trimmedName = categoryName.trim();
+    if (!trimmedName) throw new Error('Nome da categoria não pode ser vazio');
+
+    const { data: existing } = await supabase
+      .from('categorias')
+      .select('id')
+      .eq('usuario_id', user.id)
+      .eq('nome', trimmedName)
+      .single();
+
+    if (existing) {
+      throw new Error(`A categoria "${trimmedName}" já existe`);
+    }
+
+    const { error } = await supabase
+      .from('categorias')
+      .insert({
+        nome: trimmedName,
+        usuario_id: user.id,
+        workspace_id: workspaceAtivo.id,
+      });
+
+    if (error) throw error;
+    await refreshCategories();
+  }, [user?.id, workspaceAtivo?.id, refreshCategories]);
+
+  const deleteCategory = useCallback(async (categoryName: string) => {
+    if (!user?.id || !workspaceAtivo?.id) return;
+    
+    const { data: productsUsingCategory } = await supabase
+      .from('produtos')
+      .select('id')
+      .eq('usuario_id', user.id)
+      .eq('categoria', categoryName)
+      .limit(1);
+
+    if (productsUsingCategory && productsUsingCategory.length > 0) {
+      throw new Error(`Existem produtos usando essa categoria. Altere a categoria dos produtos primeiro.`);
+    }
+
+    const { error } = await supabase
+      .from('categorias')
+      .delete()
+      .eq('usuario_id', user.id)
+      .eq('nome', categoryName);
+
+    if (error) throw error;
+    await refreshCategories();
+  }, [user?.id, workspaceAtivo?.id, refreshCategories]);
+
+  // 📏 Funções de Unidades de Medida
+  const refreshCustomUnits = useCallback(async () => {
+    if (!user?.id || !workspaceAtivo?.id) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('unidades_medida')
+        .select('sigla')
+        .eq('usuario_id', user.id)
+        .order('sigla', { ascending: true });
+
+      if (error) throw error;
+
+      const unitSiglases = data?.map(u => u.sigla) || [];
+      setCustomUnits(unitSiglases);
+    } catch (error) {
+      console.error('Erro ao carregar unidades:', error);
+    }
+  }, [user?.id, workspaceAtivo?.id]);
+
+  const addCustomUnit = useCallback(async (unitSigla: string) => {
+    if (!user?.id || !workspaceAtivo?.id) return;
+    
+    const trimmedSigla = unitSigla.trim().toUpperCase();
+    if (!trimmedSigla) throw new Error('Sigla da unidade não pode ser vazia');
+
+    const { data: existing } = await supabase
+      .from('unidades_medida')
+      .select('id')
+      .eq('usuario_id', user.id)
+      .eq('sigla', trimmedSigla)
+      .single();
+
+    if (existing) {
+      throw new Error(`A unidade "${trimmedSigla}" já existe`);
+    }
+
+    const { error } = await supabase
+      .from('unidades_medida')
+      .insert({
+        nome: trimmedSigla,
+        sigla: trimmedSigla,
+        usuario_id: user.id,
+        workspace_id: workspaceAtivo.id,
+      });
+
+    if (error) throw error;
+    await refreshCustomUnits();
+  }, [user?.id, workspaceAtivo?.id, refreshCustomUnits]);
+
+  const deleteCustomUnit = useCallback(async (unitSigla: string) => {
+    if (!user?.id || !workspaceAtivo?.id) return;
+    
+    const { data: productsUsingUnit } = await supabase
+      .from('produtos')
+      .select('id')
+      .eq('usuario_id', user.id)
+      .eq('unidade_medida', unitSigla.toUpperCase())
+      .limit(1);
+
+    if (productsUsingUnit && productsUsingUnit.length > 0) {
+      throw new Error(`Existem produtos usando essa unidade. Altere a unidade dos produtos primeiro.`);
+    }
+
+    const { error } = await supabase
+      .from('unidades_medida')
+      .delete()
+      .eq('usuario_id', user.id)
+      .eq('sigla', unitSigla.toUpperCase());
+
+    if (error) throw error;
+    await refreshCustomUnits();
+  }, [user?.id, workspaceAtivo?.id, refreshCustomUnits]);
+
+  // Carregar categorias e unidades ao iniciar
+  useEffect(() => {
+    if (user?.id && workspaceAtivo?.id) {
+      refreshCategories();
+      refreshCustomUnits();
+    }
+  }, [user?.id, workspaceAtivo?.id, refreshCategories, refreshCustomUnits]);
+
   return (
     <DataContext.Provider value={{
       products,
       movements,
       notifications,
+      categories,
+      customUnits,
       isLoading,
       addProduct,
       updateProduct,
@@ -727,6 +932,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       markNotificationAsRead,
       removeNotification,
       clearAllNotifications,
+      addCategory,
+      deleteCategory,
+      refreshCategories,
+      addCustomUnit,
+      deleteCustomUnit,
+      refreshCustomUnits,
       searchGlobal,
       getDashboardStats,
       refreshData,

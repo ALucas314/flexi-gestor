@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Plus, TrendingDown, Package, Search, Trash2, Calendar, DollarSign, ShoppingCart, Receipt, CheckCircle, Printer, Share2, Edit } from "lucide-react";
+import { Plus, TrendingDown, Package, Search, Trash2, Calendar, DollarSign, ShoppingCart, Receipt, CheckCircle, Printer, Share2, Edit, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,6 +10,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Textarea } from "@/components/ui/textarea";
 import { useForm } from "react-hook-form";
 import { useToast } from "@/hooks/use-toast";
 import { useData } from "@/contexts/DataContext";
@@ -41,7 +43,7 @@ const Saidas = () => {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [availableBatches, setAvailableBatches] = useState<any[]>([]);
-  const [selectedBatches, setSelectedBatches] = useState<Array<{batchId: string, quantity: number}>>([]);
+  const [selectedBatches, setSelectedBatches] = useState<Array<{batchId: string, batchNumber?: string, quantity: number}>>([]);
   const [selectedProductId, setSelectedProductId] = useState<string>("");
   const [showReceipt, setShowReceipt] = useState(false);
   const [selectedExit, setSelectedExit] = useState<StockExit | null>(null);
@@ -51,6 +53,8 @@ const Saidas = () => {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [exitToEdit, setExitToEdit] = useState<StockExit | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [productSearchTerm, setProductSearchTerm] = useState("");
+  const [productSearchOpen, setProductSearchOpen] = useState(false);
 
   // Hooks
   const { toast } = useToast();
@@ -97,7 +101,9 @@ const Saidas = () => {
       setSelectedBatches([]);
       
       const batches = await getBatchesByProduct(productId, user.id);
-      setAvailableBatches(batches || []);
+      // Filtrar apenas lotes com estoque > 0 para saídas
+      const batchesWithStock = (batches || []).filter(b => b.quantity > 0);
+      setAvailableBatches(batchesWithStock);
     } catch (error) {
       setAvailableBatches([]);
     }
@@ -105,7 +111,7 @@ const Saidas = () => {
 
   // Adicionar lote à seleção
   const addBatchToSelection = () => {
-    setSelectedBatches(prev => [...prev, { batchId: '', quantity: 0 }]);
+    setSelectedBatches(prev => [...prev, { batchId: '', batchNumber: '', quantity: 0 }]);
   };
 
   // Remover lote da seleção
@@ -114,10 +120,34 @@ const Saidas = () => {
   };
 
   // Atualizar lote selecionado
-  const updateSelectedBatch = (index: number, batchId: string, quantity: number) => {
+  const updateSelectedBatch = (index: number, batchId: string, quantity: number, batchNumber?: string) => {
     setSelectedBatches(prev => {
       const updated = [...prev];
-      updated[index] = { batchId, quantity };
+      updated[index] = { batchId, batchNumber, quantity };
+      return updated;
+    });
+  };
+
+  // Atualizar número do lote (digitável)
+  const updateBatchNumber = (index: number, batchNumber: string) => {
+    setSelectedBatches(prev => {
+      const updated = [...prev];
+      // Buscar lote pelo número digitado
+      const foundBatch = availableBatches.find(b => {
+        const bNumber = b.batchNumber?.toString() || '';
+        const inputNumber = batchNumber.trim();
+        // Comparar números extraídos
+        const bMatch = bNumber.match(/\d+/);
+        const inputMatch = inputNumber.match(/\d+/);
+        return bMatch && inputMatch && bMatch[0] === inputMatch[0];
+      });
+      
+      if (foundBatch) {
+        updated[index] = { ...updated[index], batchId: foundBatch.id, batchNumber: foundBatch.batchNumber };
+      } else {
+        // Se não encontrou, permite digitar mas limpa o batchId
+        updated[index] = { ...updated[index], batchNumber, batchId: '' };
+      }
       return updated;
     });
   };
@@ -125,6 +155,40 @@ const Saidas = () => {
   // Calcular total selecionado dos lotes
   const getTotalSelectedQuantity = () => {
     return selectedBatches.reduce((sum, batch) => sum + (batch.quantity || 0), 0);
+  };
+
+  // Obter preço de venda do produto ou custo médio das entradas como fallback
+  const getProductPrice = (productId: string): number => {
+    const product = products.find(p => p.id === productId);
+    
+    // Se o produto tem preço definido (> 0), usar o preço de venda
+    if (product && product.price > 0) {
+      return product.price;
+    }
+    
+    // Se não tem preço, calcular custo médio das entradas como fallback
+    const productEntries = movements.filter(m => 
+      m.type === 'entrada' && m.productId === productId
+    );
+
+    if (productEntries.length === 0) {
+      return 0;
+    }
+
+    // Calcular custo médio ponderado: (soma de todas as quantidades * preços) / quantidade total
+    let totalValue = 0;
+    let totalQuantity = 0;
+
+    productEntries.forEach(entry => {
+      totalValue += entry.quantity * entry.unitPrice;
+      totalQuantity += entry.quantity;
+    });
+
+    if (totalQuantity === 0) {
+      return 0;
+    }
+
+    return totalValue / totalQuantity;
   };
 
   // Verificar se algum lote excede a quantidade disponível
@@ -197,10 +261,65 @@ const Saidas = () => {
       return;
     }
 
-    // Calcular quantidade total e preço baseado nos lotes selecionados
-    const totalQuantity = getTotalSelectedQuantity();
-    const unitPrice = product.price; // Usar preço do produto
-    const totalPrice = totalQuantity * unitPrice;
+    // Verificar se o produto é gerenciado por lote
+    const managedByBatch = (product as any)?.managedByBatch === true;
+    
+    // Calcular quantidade total e preço baseado no tipo de gerenciamento
+    let totalQuantity: number;
+    let unitPrice: number;
+    
+    if (managedByBatch) {
+      // Se gerencia por lote, usar quantidade dos lotes selecionados
+      totalQuantity = getTotalSelectedQuantity();
+      unitPrice = getProductPrice(data.productId); // Usar preço de venda do produto
+      
+      // Validar se há lotes selecionados
+      if (totalQuantity === 0) {
+        toast({
+          title: "⚠️ Quantidade Inválida!",
+          description: "Selecione ao menos um lote com quantidade.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // Validar se há estoque suficiente nos lotes selecionados
+      if (selectedBatches.length > 0) {
+        for (const selectedBatch of selectedBatches) {
+          const batch = availableBatches.find(b => b.id === selectedBatch.batchId);
+          if (batch && selectedBatch.quantity > batch.quantity) {
+            toast({
+              title: "❌ Estoque Insuficiente no Lote!",
+              description: `Lote ${batch.batchNumber} tem apenas ${batch.quantity} unidades disponíveis`,
+              variant: "destructive",
+            });
+            return;
+          }
+          if (selectedBatch.quantity <= 0) {
+            toast({
+              title: "❌ Quantidade Inválida!",
+              description: "A quantidade deve ser maior que zero",
+              variant: "destructive",
+            });
+            return;
+          }
+        }
+      }
+    } else {
+      // Se NÃO gerencia por lote, usar quantidade do formulário e preço de venda do produto
+      totalQuantity = data.quantity || 0;
+      unitPrice = getProductPrice(data.productId); // Usar preço de venda do produto
+      
+      // Validar quantidade
+      if (totalQuantity <= 0) {
+        toast({
+          title: "⚠️ Quantidade Inválida!",
+          description: "Informe uma quantidade maior que zero.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
 
     // Verificar se há estoque suficiente
     if (product.stock < totalQuantity) {
@@ -212,16 +331,7 @@ const Saidas = () => {
       return;
     }
 
-    // Validar se há lotes selecionados ou quantidade
-    if (totalQuantity === 0) {
-      toast({
-        title: "⚠️ Quantidade Inválida!",
-        description: "Selecione ao menos um lote com quantidade.",
-        variant: "destructive",
-      });
-      return;
-    }
-
+    const totalPrice = totalQuantity * unitPrice;
     const receiptNumber = generateReceiptNumber();
     
     const newExit: StockExit = {
@@ -235,29 +345,6 @@ const Saidas = () => {
       exitDate: data.exitDate,
       receiptNumber: receiptNumber,
     };
-
-    // Validar se há estoque suficiente nos lotes selecionados
-    if (selectedBatches.length > 0) {
-      for (const selectedBatch of selectedBatches) {
-        const batch = availableBatches.find(b => b.id === selectedBatch.batchId);
-        if (batch && selectedBatch.quantity > batch.quantity) {
-          toast({
-            title: "❌ Estoque Insuficiente no Lote!",
-            description: `Lote ${batch.batchNumber} tem apenas ${batch.quantity} unidades disponíveis`,
-            variant: "destructive",
-          });
-          return;
-        }
-        if (selectedBatch.quantity <= 0) {
-          toast({
-            title: "❌ Quantidade Inválida!",
-            description: "A quantidade deve ser maior que zero",
-            variant: "destructive",
-          });
-          return;
-        }
-      }
-    }
 
     // Atualizar lotes selecionados no backend
     if (selectedBatches.length > 0 && user?.id) {
@@ -467,6 +554,7 @@ const Saidas = () => {
     return () => clearTimeout(timer);
   }, []);
 
+
   // Filtros
   const filteredExits = exits.filter(exit =>
     exit.productName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -510,160 +598,354 @@ const Saidas = () => {
           </h1>
           <p className="text-muted-foreground">Registre vendas e saídas do sistema</p>
         </div>
-              <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+              <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
+                setIsAddDialogOpen(open);
+                if (!open) {
+                  // Limpar estados ao fechar
+                  setSelectedProductId("");
+                  setSelectedBatches([]);
+                  setProductSearchTerm("");
+                  setProductSearchOpen(false);
+                  form.reset({
+                    productId: "",
+                    quantity: 0,
+                    unitPrice: 0,
+                    customer: "",
+                    exitDate: new Date(),
+                    notes: "",
+                    status: "pendente",
+                  });
+                }
+              }}>
                 <DialogTrigger asChild>
                   <Button className="w-full sm:w-auto bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-xl sm:rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-200 transform hover:scale-105">
                     <Plus className="w-5 h-5 sm:w-6 sm:h-6 mr-2 sm:mr-3" />
                     Nova Saída
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-sm">
-                  <DialogHeader className="space-y-2 pb-4 sm:pb-3">
-                    <DialogTitle className="text-base sm:text-xl font-bold">Registrar Nova Saída</DialogTitle>
-                    <DialogDescription className="text-sm">
-                      Preencha as informações da saída de estoque.
+                <DialogContent className="max-w-md sm:max-w-lg md:max-w-2xl max-h-[90vh] flex flex-col p-0">
+                  <DialogHeader className="space-y-2 pb-4 px-6 pt-6 border-b">
+                    <DialogTitle className="text-base sm:text-xl font-bold text-neutral-900">
+                      📤 Registrar Nova Saída
+                    </DialogTitle>
+                    <DialogDescription className="text-sm text-neutral-600">
+                      Preencha as informações detalhadas da saída de estoque para manter o controle preciso
                     </DialogDescription>
                   </DialogHeader>
                   <Form {...form}>
-                    <form onSubmit={form.handleSubmit(handleAddExit)} className="space-y-4 sm:space-y-3">
-                      <div className="grid grid-cols-2 gap-4 sm:gap-3">
-                        <FormField
-                          control={form.control}
-                          name="productId"
-                          render={({ field }) => (
-                            <FormItem className="space-y-3">
-                              <FormLabel className="text-base sm:text-sm font-semibold">📦 Produto</FormLabel>
-                              <Select 
-                                onValueChange={(value) => {
-                                  field.onChange(value);
-                                  loadBatchesForProduct(value);
-                                }} 
-                                defaultValue={field.value}
-                              >
-                                <FormControl>
-                                  <SelectTrigger className="h-12 sm:h-10 text-base sm:text-sm">
-                                    <SelectValue placeholder="Selecione um produto" />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  {products.map(product => (
-                                    <SelectItem key={product.id} value={product.id}>
-                                      {product.name} - {product.sku} (Estoque: {product.stock})
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={form.control}
-                          name="customer"
-                          render={({ field }) => (
-                            <FormItem className="space-y-3">
-                              <FormLabel className="text-base sm:text-sm font-semibold">👤 Cliente</FormLabel>
-                              <FormControl>
-                                <Input placeholder="Nome do cliente" className="h-12 sm:h-10 text-base sm:text-sm" {...field} />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
+                    <form onSubmit={form.handleSubmit(handleAddExit)} className="flex flex-col flex-1 min-h-0">
+                      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+                        {/* Primeira linha - Produto e Cliente */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-3">
+                          <FormField
+                            control={form.control}
+                            name="productId"
+                            render={({ field }) => {
+                              const selectedProduct = products.find(p => p.id === field.value);
+                              const filteredProducts = products.filter(product =>
+                                product.name.toLowerCase().includes(productSearchTerm.toLowerCase()) ||
+                                product.sku.toLowerCase().includes(productSearchTerm.toLowerCase())
+                              );
 
-                      {/* Seletor de Lotes Múltiplos */}
-                      {selectedProductId && (
-                        <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-300 rounded-xl p-5">
-                          <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center space-x-2">
-                              <Calendar className="h-5 w-5 text-indigo-600" />
-                              <h4 className="font-bold text-indigo-900">📦 Distribuir por Lotes</h4>
-                            </div>
-                            <Button
-                              type="button"
-                              size="sm"
-                              onClick={addBatchToSelection}
-                              className="bg-indigo-600 hover:bg-indigo-700 text-white"
-                            >
-                              <Plus className="h-4 w-4 mr-1" />
-                              Adicionar Lote
-                            </Button>
-                          </div>
-
-                          {availableBatches.length === 0 ? (
-                            <div className="text-center py-4 bg-yellow-50 rounded-lg border-2 border-dashed border-yellow-300">
-                              <Package className="h-10 w-10 mx-auto mb-2 text-yellow-600" />
-                              <p className="text-sm text-yellow-800 font-medium">⚠️ Este produto não tem lotes cadastrados</p>
-                              <p className="text-xs text-yellow-700 mt-1">
-                                💡 A saída será registrada normalmente sem rastreio por lote
-                              </p>
-                              <p className="text-xs text-yellow-700 mt-1">
-                                Para usar lotes, vá em Produtos → Lotes e cadastre primeiro
-                              </p>
-                            </div>
-                          ) : selectedBatches.length === 0 ? (
-                            <div className="text-center py-4 bg-white/60 rounded-lg border-2 border-dashed border-indigo-300">
-                              <Package className="h-10 w-10 mx-auto mb-2 text-indigo-400" />
-                              <p className="text-sm text-indigo-700 font-medium">Nenhum lote selecionado</p>
-                              <p className="text-xs text-indigo-600 mt-1">
-                                💡 Clique em "Adicionar Lote" para distribuir a venda entre lotes específicos
-                              </p>
-                              <p className="text-xs text-indigo-600 mt-1">
-                                ou deixe vazio para usar FIFO automático
-                              </p>
-                            </div>
-                          ) : (
-                            <div className="space-y-3">
-                              {selectedBatches.map((selectedBatch, index) => (
-                                <div key={index} className="bg-white rounded-lg p-3 border-2 border-indigo-200 shadow-sm">
-                                  <div className="flex items-center gap-3">
-                                    <div className="flex-1 grid grid-cols-2 gap-3">
-                                      <div>
-                                        <Label className="text-xs text-gray-600">Lote</Label>
-                                        <Select
-                                          value={selectedBatch.batchId}
-                                          onValueChange={(value) => updateSelectedBatch(index, value, selectedBatch.quantity)}
+                              return (
+                                <FormItem className="space-y-3">
+                                  <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
+                                    🏷️ Produto
+                                  </FormLabel>
+                                  <div className="relative">
+                                    {selectedProduct ? (
+                                      <div className="flex items-center gap-2">
+                                        <Input
+                                          value={selectedProduct.name}
+                                          readOnly
+                                          className="h-11 sm:h-10 border-2 border-neutral-200 rounded-xl pr-10 cursor-pointer"
+                                          onClick={() => {
+                                            setProductSearchTerm("");
+                                            field.onChange("");
+                                            setSelectedProductId("");
+                                            setSelectedBatches([]);
+                                          }}
+                                        />
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => {
+                                            setProductSearchTerm("");
+                                            field.onChange("");
+                                            setSelectedProductId("");
+                                            setSelectedBatches([]);
+                                          }}
+                                          className="absolute right-2 h-7 w-7 p-0"
                                         >
-                                          <SelectTrigger className="h-9">
-                                            <SelectValue placeholder="Selecione o lote" />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            {availableBatches.map(batch => {
-                                              const expiryDate = batch.expiryDate ? new Date(batch.expiryDate) : null;
-                                              const daysUntilExpiry = expiryDate 
-                                                ? Math.ceil((expiryDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
-                                                : null;
-                                              
-                                              const status = daysUntilExpiry !== null
-                                                ? daysUntilExpiry < 0 
-                                                  ? '🔴'
-                                                  : daysUntilExpiry <= 30
-                                                    ? '🟡'
-                                                    : '🟢'
-                                                : '⚪';
-
-                                              return (
-                                                <SelectItem key={batch.id} value={batch.id}>
-                                                  {status} Lote {batch.batchNumber} - {batch.quantity} un.
-                                                  {batch.expiryDate && ` (${new Date(batch.expiryDate).toLocaleDateString('pt-BR')})`}
-                                                </SelectItem>
-                                              );
-                                            })}
-                                          </SelectContent>
-                                        </Select>
+                                          <X className="h-4 w-4" />
+                                        </Button>
                                       </div>
-                                      <div className="flex-1">
-                                        <Label className="text-xs text-gray-600">Quantidade</Label>
-                                        {(() => {
-                                          const batch = availableBatches.find(b => b.id === selectedBatch.batchId);
-                                          const available = batch?.quantity || 0;
-                                          const exceeds = selectedBatch.quantity > available;
-                                          const warning = available > 0 && selectedBatch.quantity > available * 0.8 && !exceeds;
-                                          
-                                          return (
-                                            <div className="space-y-1">
+                                    ) : (
+                                      <>
+                                        <div className="relative">
+                                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                          <Input
+                                            placeholder="Digite o código ou nome do produto..."
+                                            value={productSearchTerm}
+                                            onChange={(e) => {
+                                              setProductSearchTerm(e.target.value);
+                                              // Se limpar o campo, limpar também a seleção
+                                              if (e.target.value === '') {
+                                                field.onChange("");
+                                                setSelectedProductId("");
+                                                setSelectedBatches([]);
+                                              }
+                                            }}
+                                            onKeyDown={(e) => {
+                                              if (e.key === 'Enter' && filteredProducts.length === 1) {
+                                                field.onChange(filteredProducts[0].id);
+                                                loadBatchesForProduct(filteredProducts[0].id);
+                                                setProductSearchTerm("");
+                                              } else if (e.key === 'Escape') {
+                                                setProductSearchTerm("");
+                                              }
+                                            }}
+                                            className="h-11 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 pl-10"
+                                            autoFocus={productSearchTerm !== ''}
+                                          />
+                                        </div>
+                                        
+                                        {productSearchTerm.trim() !== '' && (
+                                          <div className="absolute z-50 w-full mt-1 bg-white border-2 border-neutral-200 rounded-xl shadow-lg max-h-[300px] overflow-y-auto">
+                                            {filteredProducts.length === 0 ? (
+                                              <div className="p-4 text-center text-sm text-muted-foreground">
+                                                Nenhum produto encontrado
+                                              </div>
+                                            ) : (
+                                              filteredProducts.slice(0, 2).map(product => (
+                                                <button
+                                                  key={product.id}
+                                                  type="button"
+                                                  className="w-full px-4 py-3 text-left hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus:outline-none border-b last:border-b-0 transition-colors"
+                                                  onClick={() => {
+                                                    field.onChange(product.id);
+                                                    loadBatchesForProduct(product.id);
+                                                    setProductSearchTerm("");
+                                                  }}
+                                                >
+                                                  <div className="font-medium">{product.name}</div>
+                                                  <div className="text-xs text-muted-foreground">Código: {product.sku} (Estoque: {product.stock})</div>
+                                                </button>
+                                              ))
+                                            )}
+                                          </div>
+                                        )}
+                                      </>
+                                    )}
+                                  </div>
+                                  <FormMessage />
+                                </FormItem>
+                              );
+                            }}
+                          />
+                          <FormField
+                            control={form.control}
+                            name="customer"
+                            render={({ field }) => (
+                              <FormItem className="space-y-3">
+                                <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
+                                  👤 Cliente
+                                </FormLabel>
+                                <FormControl>
+                                  <Input 
+                                    placeholder="Nome do cliente" 
+                                    {...field} 
+                                    className="h-12 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 text-base sm:text-sm"
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+
+                      {/* Interface de Gestão de Lotes - Aparece quando produto é selecionado E tem gerenciamento por lote */}
+                      {selectedProductId && (() => {
+                        const selectedProduct = products.find(p => p.id === selectedProductId);
+                        const managedByBatch = (selectedProduct as any)?.managedByBatch === true;
+                        
+                        // Se NÃO usa gerenciamento por lote, mostrar campos simples
+                        if (!managedByBatch) {
+                          return (
+                            <Card className="border-2 border-red-200">
+                              <CardHeader className="pb-3">
+                                <CardTitle className="text-lg font-semibold text-gray-900">
+                                  📦 Informações da Saída
+                                </CardTitle>
+                                <p className="text-sm text-gray-600">{selectedProduct?.name || 'Produto selecionado'}</p>
+                              </CardHeader>
+                              <CardContent className="space-y-4">
+                                <FormField
+                                  control={form.control}
+                                  name="quantity"
+                                  render={({ field }) => (
+                                    <FormItem className="space-y-2">
+                                      <FormLabel className="text-sm font-semibold text-neutral-700">
+                                        🔢 Quantidade a Retirar *
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          type="number"
+                                          min="1"
+                                          max={selectedProduct?.stock || 0}
+                                          placeholder="Ex: 10"
+                                          {...field}
+                                          onChange={(e) => {
+                                            const value = e.target.value;
+                                            if (value === '' || value === null) {
+                                              field.onChange(0);
+                                              return;
+                                            }
+                                            const intValue = parseInt(value);
+                                            if (!isNaN(intValue)) {
+                                              field.onChange(Math.min(intValue, selectedProduct?.stock || 0));
+                                            }
+                                          }}
+                                          value={field.value === 0 ? '' : field.value}
+                                          className="h-11 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 text-base sm:text-sm"
+                                        />
+                                      </FormControl>
+                                      <FormMessage />
+                                      <p className="text-xs text-gray-500">
+                                        Estoque disponível: <strong>{selectedProduct?.stock || 0} unidades</strong>
+                                      </p>
+                                    </FormItem>
+                                  )}
+                                />
+                                
+                                {form.watch('quantity') > 0 && selectedProduct && (() => {
+                                  const unitPrice = getProductPrice(selectedProduct.id);
+                                  const totalPrice = form.watch('quantity') * unitPrice;
+                                  return (
+                                    <div className="pt-3 border-t border-red-200 space-y-2">
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-sm font-medium text-gray-900">💰 Preço Unitário:</span>
+                                        <span className="text-sm font-semibold text-gray-700">
+                                          R$ {unitPrice.toFixed(2)}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-sm font-medium text-gray-900">💰 Valor Total:</span>
+                                        <span className="text-lg font-bold text-green-600">
+                                          R$ {totalPrice.toFixed(2)}
+                                        </span>
+                                      </div>
+                                    {(() => {
+                                      const quantityToExit = form.watch('quantity');
+                                      const currentStock = selectedProduct?.stock || 0;
+                                      const remaining = currentStock - quantityToExit;
+                                      return (
+                                        <div className="flex items-center justify-between pt-2 border-t border-red-200">
+                                          <span className="text-sm font-medium text-gray-900">
+                                            📦 Estoque Restante:
+                                          </span>
+                                          <span className={`text-lg font-bold ${remaining < 0 ? 'text-red-600' : remaining < (currentStock * 0.2) ? 'text-yellow-600' : 'text-green-600'}`}>
+                                            {Math.max(0, remaining)} unidades
+                                          </span>
+                                        </div>
+                                      );
+                                    })()}
+                                  </div>
+                                  );
+                                })()}
+                              </CardContent>
+                            </Card>
+                          );
+                        }
+                        
+                        // Se usa gerenciamento por lote, mostrar Card de Lotes
+                        return (
+                          <Card className="border-2 border-red-200">
+                            <CardHeader className="pb-3">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <CardTitle className="text-lg font-semibold text-gray-900">📅 Lotes do Produto</CardTitle>
+                                  <p className="text-sm text-gray-600">{selectedProduct?.name || 'Produto selecionado'}</p>
+                                </div>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  onClick={addBatchToSelection}
+                                  className="inline-flex items-center gap-2 h-9 rounded-md px-3 text-sm font-medium bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:from-indigo-700 hover:to-purple-700 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                >
+                                  <Plus className="h-4 w-4 mr-1" />
+                                  Selecionar Lote
+                                </Button>
+                              </div>
+                            </CardHeader>
+
+                            <CardContent className="space-y-4 max-h-[350px] overflow-y-auto">
+                              {availableBatches.length === 0 ? (
+                                <div className="text-center py-8">
+                                  <Package className="h-12 w-12 mx-auto mb-3 text-gray-400" />
+                                  <p className="text-gray-600">⚠️ Nenhum lote com estoque disponível</p>
+                                  <p className="text-sm text-gray-500 mt-1">Todos os lotes deste produto estão sem estoque</p>
+                                </div>
+                              ) : selectedBatches.length === 0 ? (
+                                <div className="text-center py-8">
+                                  <Package className="h-12 w-12 mx-auto mb-3 text-gray-400" />
+                                  <p className="text-gray-600">Nenhum lote selecionado</p>
+                                  <p className="text-sm text-gray-500 mt-1">Adicione um lote para começar a retirar estoque</p>
+                                </div>
+                              ) : (
+                                <div className="space-y-3">
+                                  {selectedBatches.map((selectedBatch, index) => {
+                                    const batch = availableBatches.find(b => b.id === selectedBatch.batchId);
+                                    const available = batch?.quantity || 0;
+                                    const exceeds = selectedBatch.quantity > available;
+                                    
+                                    return (
+                                      <Card key={index} className="hover:shadow-md transition-all border-gray-200">
+                                        <CardContent className="p-5 space-y-5">
+                                          {/* Primeira linha: Lote e Quantidade */}
+                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                                            {/* Campo Lote */}
+                                            <div className="space-y-2">
+                                              <Label htmlFor={`batch-${index}`} className="text-sm font-medium">
+                                                📦 Selecione o Lote
+                                              </Label>
                                               <Input
+                                                id={`batch-${index}`}
+                                                type="text"
+                                                value={selectedBatch.batchNumber || (batch?.batchNumber || '')}
+                                                onChange={(e) => {
+                                                  const value = e.target.value.trim();
+                                                  updateBatchNumber(index, value);
+                                                }}
+                                                placeholder="Digite o número do lote"
+                                                className="h-10 font-semibold"
+                                              />
+                                              {batch ? (
+                                                <p className="text-xs text-gray-500">
+                                                  ✅ Lote encontrado: {batch.quantity} unidades disponíveis
+                                                  {batch.expiryDate && ` • Validade: ${new Date(batch.expiryDate).toLocaleDateString('pt-BR')}`}
+                                                </p>
+                                              ) : selectedBatch.batchNumber ? (
+                                                <p className="text-xs text-yellow-600">
+                                                  ⚠️ Lote não encontrado. Verifique o número digitado.
+                                                </p>
+                                              ) : (
+                                                <p className="text-xs text-gray-500">
+                                                  💡 Digite o número do lote ou use "Usar Existente"
+                                                </p>
+                                              )}
+                                            </div>
+                                            {/* Campo Quantidade */}
+                                            <div className="space-y-2">
+                                              <div className="flex items-center justify-between gap-2 h-7">
+                                                <Label htmlFor={`quantity-${index}`} className="text-sm font-medium">
+                                                  🔢 Quantidade a Retirar
+                                                </Label>
+                                                <span className="h-7" />
+                                              </div>
+                                              <Input
+                                                id={`quantity-${index}`}
                                                 type="number"
                                                 min="1"
                                                 max={available}
@@ -673,147 +955,224 @@ const Saidas = () => {
                                                   const value = e.target.value;
                                                   
                                                   if (value === '' || value === null) {
-                                                    updateSelectedBatch(index, selectedBatch.batchId, 0);
+                                                    updateSelectedBatch(index, selectedBatch.batchId, 0, selectedBatch.batchNumber);
                                                     return;
                                                   }
                                                   
-                                                  // Se o valor for "0" seguido de um dígito diferente de 0, apaga o zero
                                                   if (value.match(/^0[1-9]/) && value.length === 2) {
                                                     const newValue = value.substring(1);
-                                                    updateSelectedBatch(index, selectedBatch.batchId, Math.max(0, parseInt(newValue)));
+                                                    const intValue = Math.max(0, parseInt(newValue));
+                                                    updateSelectedBatch(index, selectedBatch.batchId, intValue, selectedBatch.batchNumber);
                                                     return;
                                                   }
                                                   
                                                   const intValue = parseInt(value);
                                                   if (!isNaN(intValue)) {
-                                                    updateSelectedBatch(index, selectedBatch.batchId, Math.max(0, intValue));
+                                                    // Permitir valores até a quantidade disponível (incluindo igual)
+                                                    if (intValue <= available) {
+                                                      updateSelectedBatch(index, selectedBatch.batchId, intValue, selectedBatch.batchNumber);
+                                                    } else {
+                                                      // Mostrar erro mas não bloquear completamente
+                                                      toast({
+                                                        title: "⚠️ Quantidade Excede Disponível",
+                                                        description: `A quantidade ${intValue} excede o disponível de ${available} unidades. Máximo permitido: ${available} unidades.`,
+                                                        variant: "destructive",
+                                                        duration: 3000,
+                                                      });
+                                                      // Ainda atualiza para mostrar o valor, mas mantém a validação visual
+                                                      updateSelectedBatch(index, selectedBatch.batchId, intValue, selectedBatch.batchNumber);
+                                                    }
                                                   }
                                                 }}
-                                                className={`h-9 ${exceeds ? 'border-red-500 focus:ring-red-500' : warning ? 'border-yellow-500 focus:ring-yellow-500' : ''}`}
+                                                className={`h-10 font-semibold ${exceeds ? 'border-2 border-red-500 focus:border-red-500 focus:ring-red-500' : available > 0 && selectedBatch.quantity >= available * 0.8 && selectedBatch.quantity < available ? 'border-2 border-yellow-500 focus:border-yellow-500 focus:ring-yellow-500' : ''}`}
                                               />
                                               {selectedBatch.batchId && (
-                                                <div className="flex items-center gap-1 text-xs">
+                                                <p className={`text-xs ${exceeds ? 'text-red-600 bg-red-50 p-2 rounded-md border border-red-200' : selectedBatch.quantity === available ? 'text-green-600 bg-green-50 p-2 rounded-md border border-green-200' : 'text-gray-500'}`}>
                                                   {exceeds ? (
-                                                    <span className="text-red-600 font-medium flex items-center gap-1">
-                                                      ❌ Excede! Disponível: {available} un.
-                                                    </span>
-                                                  ) : warning ? (
-                                                    <span className="text-yellow-600 font-medium flex items-center gap-1">
-                                                      ⚠️ Disponível: {available} un.
-                                                    </span>
+                                                    <>❌ Excede disponível! Disponível: <strong>{available} un.</strong></>
+                                                  ) : selectedBatch.quantity === available ? (
+                                                    <>✅ Usando todo o estoque disponível: <strong>{available} un.</strong></>
                                                   ) : (
-                                                    <span className="text-green-600 font-medium flex items-center gap-1">
-                                                      ✅ Disponível: {available} un.
-                                                    </span>
+                                                    <>✅ Disponível: <strong>{available} un.</strong></>
                                                   )}
-                                                </div>
+                                                </p>
                                               )}
                                             </div>
-                                          );
-                                        })()}
+                                          </div>
+                                          {/* Botão Remover */}
+                                          <div className="flex gap-2 pt-3 border-t border-gray-200">
+                                            <Button
+                                              type="button"
+                                              size="sm"
+                                              onClick={() => removeBatchFromSelection(index)}
+                                              className="flex-1 bg-red-600 hover:bg-red-700 text-white focus:ring-red-600 transition-colors"
+                                            >
+                                              <Trash2 className="h-4 w-4 mr-1" />
+                                              Remover Lote
+                                            </Button>
+                                          </div>
+                                        </CardContent>
+                                      </Card>
+                                    );
+                                  })}
+                                  
+                                  {/* Resumo da distribuição */}
+                                  <Card className="bg-gradient-to-r from-red-50 to-orange-50 border-red-200">
+                                    <CardContent className="p-4 space-y-2">
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-sm font-medium text-gray-900">
+                                          📊 Total a Sair:
+                                        </span>
+                                        <span className="text-lg font-bold text-red-600">
+                                          {getTotalSelectedQuantity()} unidades
+                                        </span>
                                       </div>
-                                    </div>
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => removeBatchFromSelection(index)}
-                                      className="text-red-600 hover:text-red-700 hover:bg-red-50 h-9 w-9 p-0"
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                  </div>
+                                      {(() => {
+                                        const product = products.find(p => p.id === selectedProductId);
+                                        const totalStock = product?.stock || 0;
+                                        const totalToExit = getTotalSelectedQuantity();
+                                        const remaining = totalStock - totalToExit;
+                                        return (
+                                          <div className="flex items-center justify-between pt-2 border-t border-red-200">
+                                            <span className="text-sm font-medium text-gray-900">
+                                              📦 Estoque Restante:
+                                            </span>
+                                            <span className={`text-lg font-bold ${remaining < 0 ? 'text-red-600' : remaining < (totalStock * 0.2) ? 'text-yellow-600' : 'text-green-600'}`}>
+                                              {Math.max(0, remaining)} unidades
+                                            </span>
+                                          </div>
+                                        );
+                                      })()}
+                                    </CardContent>
+                                  </Card>
                                 </div>
-                              ))}
-                              
-                              {/* Resumo da distribuição */}
-                              <div className="bg-white/60 rounded-lg p-3 border-2 border-indigo-300">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-sm font-medium text-indigo-900">
-                                    📊 Total a Sair:
-                                  </span>
-                                  <span className="text-lg font-bold text-indigo-600">
-                                    {getTotalSelectedQuantity()} unidades
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                          
-                          <p className="text-xs text-indigo-700 mt-3 bg-white/40 p-2 rounded">
-                            💡 <strong>Dica:</strong> Se não adicionar lotes, o sistema usará FIFO automático (primeiro a vencer, primeiro a sair)
-                          </p>
-                        </div>
-                      )}
+                              )}
+                            </CardContent>
+                          </Card>
+                        );
+                      })()}
                       
-                      <div className="grid grid-cols-2 gap-4 sm:gap-3">
+                        {/* Segunda linha - Data de Saída e Status */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-3">
+                          <FormField
+                            control={form.control}
+                            name="exitDate"
+                            render={({ field }) => (
+                              <FormItem className="space-y-3">
+                                <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
+                                  📅 Data de Saída
+                                </FormLabel>
+                                <FormControl>
+                                  <Input 
+                                    type="date"
+                                    {...field}
+                                    value={field.value instanceof Date ? field.value.toISOString().split('T')[0] : ''}
+                                    onChange={(e) => field.onChange(new Date(e.target.value))}
+                                    className="h-11 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 text-base sm:text-sm"
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={form.control}
+                            name="status"
+                            render={({ field }) => (
+                              <FormItem className="space-y-3">
+                                <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
+                                  🎯 Status
+                                </FormLabel>
+                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                  <FormControl>
+                                    <SelectTrigger className="h-12 sm:h-10 border-neutral-200 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 text-base sm:text-sm">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    <SelectItem value="pendente">⏳ Pendente</SelectItem>
+                                    <SelectItem value="confirmado">✅ Confirmado</SelectItem>
+                                    <SelectItem value="cancelado">❌ Cancelado</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                        
+                        {/* Campo de Observações */}
                         <FormField
                           control={form.control}
-                          name="exitDate"
+                          name="notes"
                           render={({ field }) => (
                             <FormItem className="space-y-3">
-                              <FormLabel className="text-base sm:text-sm font-semibold">Data de Saída</FormLabel>
+                              <FormLabel className="text-sm font-semibold text-neutral-700">
+                                📝 Observações
+                              </FormLabel>
                               <FormControl>
-                                <Input 
-                                  type="date"
-                                  className="h-12 sm:h-10 text-base sm:text-sm"
+                                <Textarea 
+                                  placeholder="Observações adicionais sobre a saída..." 
                                   {...field}
-                                  value={field.value instanceof Date ? field.value.toISOString().split('T')[0] : ''}
-                                  onChange={(e) => field.onChange(new Date(e.target.value))}
+                                  rows={3}
+                                  className="min-h-[80px] border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 text-base sm:text-sm resize-none"
                                 />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
                           )}
                         />
-                        <FormField
-                          control={form.control}
-                          name="status"
-                          render={({ field }) => (
-                            <FormItem className="space-y-3">
-                              <FormLabel className="text-base sm:text-sm font-semibold">Status</FormLabel>
-                              <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                <FormControl>
-                                  <SelectTrigger className="h-12 sm:h-10 text-base sm:text-sm">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  <SelectItem value="pendente">Pendente</SelectItem>
-                                  <SelectItem value="confirmado">Confirmado</SelectItem>
-                                  <SelectItem value="cancelado">Cancelado</SelectItem>
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
                       </div>
                       
-                      <FormField
-                        control={form.control}
-                        name="notes"
-                        render={({ field }) => (
-                          <FormItem className="space-y-3">
-                            <FormLabel className="text-base sm:text-sm font-semibold">Observações</FormLabel>
-                            <FormControl>
-                              <Input placeholder="Observações adicionais..." className="h-12 sm:h-10 text-base sm:text-sm" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      
-                      <DialogFooter className="flex flex-col sm:flex-row gap-2 pt-2 sm:pt-3">
-                        <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)} className="w-full sm:w-auto h-11 sm:h-8 text-sm sm:text-xs">
+                      {/* Footer do Modal */}
+                      <DialogFooter className="px-6 py-4 border-t border-neutral-200 bg-neutral-50/50 flex flex-col sm:flex-row gap-2">
+                        <Button 
+                          type="button" 
+                          variant="outline" 
+                          onClick={() => {
+                            setIsAddDialogOpen(false);
+                            setProductSearchTerm("");
+                            setSelectedProductId("");
+                            setSelectedBatches([]);
+                            form.reset({
+                              productId: "",
+                              quantity: 0,
+                              unitPrice: 0,
+                              customer: "",
+                              exitDate: new Date(),
+                              notes: "",
+                              status: "pendente",
+                            });
+                          }}
+                          className="w-full sm:w-auto border-2 border-neutral-300 text-neutral-700 hover:bg-neutral-50 h-9 text-sm"
+                        >
                           ❌ Cancelar
                         </Button>
                         <Button 
-                          type="submit" 
-                          className="w-full sm:w-auto bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white shadow-lg hover:shadow-xl transition-all duration-200 h-11 sm:h-8 text-sm sm:text-xs"
-                          disabled={hasExceedingBatches()}
+                          type="submit"
+                          className="w-full sm:w-auto bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white shadow-lg hover:shadow-xl transition-all duration-200 h-9 text-sm"
+                          disabled={(() => {
+                            const selectedProduct = products.find(p => p.id === selectedProductId);
+                            const managedByBatch = (selectedProduct as any)?.managedByBatch === true;
+                            if (managedByBatch) {
+                              return hasExceedingBatches();
+                            } else {
+                              // Se não gerencia por lote, verificar se quantidade é válida
+                              const quantity = form.getValues('quantity');
+                              return !quantity || quantity <= 0;
+                            }
+                          })()}
                         >
-                          {hasExceedingBatches() ? '⚠️ Quantidade Excedida' : '📦 Registrar Saída'}
+                          {(() => {
+                            const selectedProduct = products.find(p => p.id === selectedProductId);
+                            const managedByBatch = (selectedProduct as any)?.managedByBatch === true;
+                            if (managedByBatch) {
+                              return hasExceedingBatches() ? '⚠️ Quantidade Excedida' : '📤 Registrar Saída';
+                            } else {
+                              const quantity = form.getValues('quantity');
+                              return (!quantity || quantity <= 0) ? '⚠️ Informe a Quantidade' : '📤 Registrar Saída';
+                            }
+                          })()}
                         </Button>
                       </DialogFooter>
                     </form>
@@ -1038,7 +1397,7 @@ const Saidas = () => {
 
       {/* Modal de Confirmação de Exclusão */}
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg">
               <Trash2 className="h-5 w-5 text-red-600" />
@@ -1101,7 +1460,7 @@ const Saidas = () => {
 
       {/* Modal de Edição de Saída */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg">
               <Edit className="h-5 w-5 text-blue-600" />
@@ -1197,7 +1556,7 @@ const Saidas = () => {
 
       {/* Modal de Receita */}
       <Dialog open={showReceipt} onOpenChange={setShowReceipt}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-green-600">
               <CheckCircle className="h-6 w-6" />

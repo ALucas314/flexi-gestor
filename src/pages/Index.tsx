@@ -18,6 +18,19 @@ const Index = () => {
     return saved !== null ? JSON.parse(saved) : true;
   });
 
+  // Quantidade de vendas (saídas) realizadas hoje
+  const todaySalesCount = React.useMemo(() => {
+    const todayStr = new Date().toDateString();
+    return movements.filter(m => {
+      try {
+        const d = new Date(m.date);
+        return m.type === 'saida' && d.toDateString() === todayStr;
+      } catch {
+        return false;
+      }
+    }).length;
+  }, [movements]);
+
   // Verificar se há produtos cadastrados
   const hasProducts = products.length > 0;
 
@@ -63,21 +76,21 @@ const Index = () => {
             
             {/* Quick Stats no Hero com Design Melhorado - Responsivo */}
             <div className={`grid ${isMobile ? 'grid-cols-2' : 'grid-cols-2 md:grid-cols-4'} ${isMobile ? 'gap-2' : 'gap-3 sm:gap-6'} ${isMobile ? 'mt-4' : 'mt-6 sm:mt-10'}`}>
-              <div className={`bg-white/60 backdrop-blur-md ${isMobile ? 'rounded-lg p-2' : 'rounded-xl sm:rounded-2xl p-3 sm:p-6'} text-center border border-white/40 hover:bg-white/80 transition-all duration-300 hover:scale-105 shadow-md`}>
-                <div className={`${isMobile ? 'text-lg' : 'text-xl sm:text-2xl md:text-3xl'} font-black ${isMobile ? 'mb-1' : 'mb-1 sm:mb-2'} text-slate-800`}>{stats.totalProducts}</div>
-                <div className={`${isMobile ? 'text-xs' : 'text-xs sm:text-sm'} font-medium opacity-90 text-slate-700`}>Produtos</div>
+              <div className={`bg-white/60 backdrop-blur-md ${isMobile ? 'rounded-lg p-2' : 'rounded-xl sm:rounded-2xl p-3 sm:p-6'} text-center border border-white/40 hover:bg-white/80 transition-all duration-300 hover:scale-105 shadow-md overflow-hidden`}>
+                <div className={`${isMobile ? 'text-lg' : 'text-xl sm:text-2xl md:text-3xl'} font-black ${isMobile ? 'mb-1' : 'mb-1 sm:mb-2'} text-slate-800 truncate`}>{stats.totalProducts}</div>
+                <div className="text-[10px] xs:text-xs sm:text-sm font-medium opacity-90 text-slate-700 leading-tight px-1 break-words hyphens-auto">Produtos</div>
               </div>
-              <div className={`bg-white/60 backdrop-blur-md ${isMobile ? 'rounded-lg p-2' : 'rounded-xl sm:rounded-2xl p-3 sm:p-6'} text-center border border-white/40 hover:bg-white/80 transition-all duration-300 hover:scale-105 shadow-md`}>
-                <div className={`${isMobile ? 'text-lg' : 'text-xl sm:text-2xl md:text-3xl'} font-black ${isMobile ? 'mb-1' : 'mb-1 sm:mb-2'} text-slate-800`}>{movements.length}</div>
-                <div className={`${isMobile ? 'text-xs' : 'text-xs sm:text-sm'} font-medium opacity-90 text-slate-700`}>Movimentações</div>
+              <div className={`bg-white/60 backdrop-blur-md ${isMobile ? 'rounded-lg p-2' : 'rounded-xl sm:rounded-2xl p-3 sm:p-6'} text-center border border-white/40 hover:bg-white/80 transition-all duration-300 hover:scale-105 shadow-md overflow-hidden`}>
+                <div className={`${isMobile ? 'text-lg' : 'text-xl sm:text-2xl md:text-3xl'} font-black ${isMobile ? 'mb-1' : 'mb-1 sm:mb-2'} text-slate-800 truncate`}>{movements.length}</div>
+                <div className="text-[10px] xs:text-xs sm:text-sm font-medium opacity-90 text-slate-700 leading-tight px-1 break-words hyphens-auto line-clamp-2">Movimentações</div>
               </div>
-              <div className={`bg-white/60 backdrop-blur-md ${isMobile ? 'rounded-lg p-2' : 'rounded-xl sm:rounded-2xl p-3 sm:p-6'} text-center border border-white/40 hover:bg-white/80 transition-all duration-300 hover:scale-105 shadow-md`}>
-                <div className={`${isMobile ? 'text-lg' : 'text-xl sm:text-2xl md:text-3xl'} font-black ${isMobile ? 'mb-1' : 'mb-1 sm:mb-2'} text-slate-800`}>R$ {stats.stockValue.toFixed(0)}</div>
-                <div className={`${isMobile ? 'text-xs' : 'text-xs sm:text-sm'} font-medium opacity-90 text-slate-700`}>Valor Estoque</div>
+              <div className={`bg-white/60 backdrop-blur-md ${isMobile ? 'rounded-lg p-2' : 'rounded-xl sm:rounded-2xl p-3 sm:p-6'} text-center border border-white/40 hover:bg-white/80 transition-all duration-300 hover:scale-105 shadow-md overflow-hidden`}>
+                <div className={`${isMobile ? 'text-lg' : 'text-xl sm:text-2xl md:text-3xl'} font-black ${isMobile ? 'mb-1' : 'mb-1 sm:mb-2'} text-slate-800 truncate`}>R$ {stats.stockValue.toFixed(0)}</div>
+                <div className="text-[10px] xs:text-xs sm:text-sm font-medium opacity-90 text-slate-700 leading-tight px-1 break-words hyphens-auto">Valor Estoque</div>
               </div>
-              <div className={`bg-white/60 backdrop-blur-md ${isMobile ? 'rounded-lg p-2' : 'rounded-xl sm:rounded-2xl p-3 sm:p-6'} text-center border border-white/40 hover:bg-white/80 transition-all duration-300 hover:scale-105 shadow-md`}>
-                <div className={`${isMobile ? 'text-lg' : 'text-xl sm:text-2xl md:text-3xl'} font-black ${isMobile ? 'mb-1' : 'mb-1 sm:mb-2'} text-slate-800`}>{stats.lowStockCount}</div>
-                <div className={`${isMobile ? 'text-xs' : 'text-xs sm:text-sm'} font-medium opacity-90 text-slate-700`}>Estoque Baixo</div>
+              <div className={`bg-white/60 backdrop-blur-md ${isMobile ? 'rounded-lg p-2' : 'rounded-xl sm:rounded-2xl p-3 sm:p-6'} text-center border border-white/40 hover:bg-white/80 transition-all duration-300 hover:scale-105 shadow-md overflow-hidden`}>
+                <div className={`${isMobile ? 'text-lg' : 'text-xl sm:text-2xl md:text-3xl'} font-black ${isMobile ? 'mb-1' : 'mb-1 sm:mb-2'} text-slate-800 truncate`}>{stats.lowStockCount}</div>
+                <div className="text-[10px] xs:text-xs sm:text-sm font-medium opacity-90 text-slate-700 leading-tight px-1 break-words hyphens-auto">Estoque Baixo</div>
               </div>
             </div>
           </div>
@@ -125,7 +138,7 @@ const Index = () => {
             </div>
           </div>
           <h3 className={`${isMobile ? 'text-sm' : 'text-base sm:text-lg'} font-semibold ${isMobile ? 'mb-1' : 'mb-2'}`}>📈 Vendas Hoje</h3>
-          <p className={`${isMobile ? 'text-xs' : 'text-xs sm:text-sm'} opacity-80`}>0 vendas realizadas</p>
+          <p className={`${isMobile ? 'text-xs' : 'text-xs sm:text-sm'} opacity-80`}>{todaySalesCount} vendas realizadas</p>
         </div>
 
         <div className={`group bg-gradient-to-br from-orange-100 to-orange-200 ${isMobile ? 'rounded-xl p-3' : 'rounded-2xl sm:rounded-3xl p-4 sm:p-6'} text-orange-800 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 border border-orange-200/50`}>
@@ -231,7 +244,27 @@ const Index = () => {
                     .sort((a, b) => b.stock - a.stock)
                     .slice(0, 5)
                     .map((product, index) => {
-                      const totalValue = product.stock * product.price;
+                      // Calcular preço efetivo: usar preço de venda, ou custo médio das entradas se preço for 0
+                      let effectivePrice = product.price;
+                      if (effectivePrice === 0 || !effectivePrice) {
+                        const productEntries = movements
+                          .filter(m => m.productId === product.id && m.type === 'entrada')
+                          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+                        
+                        if (productEntries.length > 0) {
+                          let totalCost = 0;
+                          let totalQuantity = 0;
+                          
+                          productEntries.forEach(entry => {
+                            totalCost += (entry.unitPrice * entry.quantity);
+                            totalQuantity += entry.quantity;
+                          });
+                          
+                          effectivePrice = totalQuantity > 0 ? totalCost / totalQuantity : 0;
+                        }
+                      }
+                      
+                      const totalValue = product.stock * effectivePrice;
                       return (
                         <div 
                           key={product.id} 
@@ -246,7 +279,7 @@ const Index = () => {
                               <div className={`flex items-center ${isMobile ? 'gap-0.5' : 'gap-1'} mt-0.5 flex-wrap`}>
                                 <span className={`${isMobile ? 'text-xs' : 'text-xs'} text-blue-600 font-medium whitespace-nowrap`}>{product.stock} un</span>
                                 <span className={`${isMobile ? 'text-xs' : 'text-xs'} text-gray-400`}>×</span>
-                                <span className={`${isMobile ? 'text-xs' : 'text-xs'} text-gray-600 whitespace-nowrap`}>R$ {product.price.toFixed(2)}</span>
+                                <span className={`${isMobile ? 'text-xs' : 'text-xs'} text-gray-600 whitespace-nowrap`}>R$ {effectivePrice.toFixed(2)}</span>
                               </div>
                             </div>
                           </div>
@@ -282,13 +315,22 @@ const Index = () => {
               productName: m.productName,
               total: m.total
             }))} />
-            <ProductsChart products={products.map(p => ({
-              id: p.id,
-              name: p.name,
-              category: p.category,
-              stock: p.stock,
-              price: p.price
-            }))} />
+            <ProductsChart 
+              products={products.map(p => ({
+                id: p.id,
+                name: p.name,
+                category: p.category,
+                stock: p.stock,
+                price: p.price
+              }))}
+              movements={movements.map(m => ({
+                productId: m.productId,
+                type: m.type,
+                unitPrice: m.unitPrice,
+                quantity: m.quantity,
+                date: m.date
+              }))}
+            />
           </div>
         </>
       ) : (
@@ -317,7 +359,14 @@ const Index = () => {
       )}
 
       {/* Movimentações Recentes */}
-      <RecentMovements movements={recentMovements} />
+      <RecentMovements movements={recentMovements.map(m => ({
+        id: m.id,
+        type: m.type,
+        productName: m.productName || m.product?.name || 'Produto sem nome',
+        description: m.description,
+        total: m.total,
+        date: m.date
+      }))} />
 
     </main>
   );

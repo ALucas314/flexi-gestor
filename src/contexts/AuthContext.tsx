@@ -61,36 +61,87 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           }
         };
 
-        // Obter sessão atual do Supabase
-        const { data: { session }, error } = await supabase.auth.getSession();
+        // Verificar se há tokens no localStorage antes de tentar obter sessão
+        const hasStoredTokens = () => {
+          try {
+            const keys = Object.keys(localStorage);
+            return keys.some(key => key.includes('supabase.auth.token'));
+          } catch {
+            return false;
+          }
+        };
+
+        // Obter sessão atual do Supabase com tratamento de erro melhorado
+        let session = null;
+        let sessionError = null;
+        
+        try {
+          const result = await supabase.auth.getSession();
+          session = result.data?.session;
+          sessionError = result.error;
+        } catch (err: any) {
+          sessionError = err;
+        }
         
         // Se houver erro de refresh token inválido, limpar e continuar sem sessão
-        if (error) {
-          const isInvalidTokenError = error.message?.includes('Invalid Refresh Token') || 
-                                     error.message?.includes('Refresh Token Not Found') ||
-                                     error.message?.includes('refresh_token');
+        if (sessionError) {
+          const errorMessage = sessionError?.message || '';
+          const isInvalidTokenError = errorMessage.includes('Invalid Refresh Token') || 
+                                     errorMessage.includes('Refresh Token Not Found') ||
+                                     errorMessage.includes('refresh_token') ||
+                                     errorMessage.includes('JWT');
           
           if (isInvalidTokenError) {
             // Limpar tokens inválidos silenciosamente
             clearInvalidTokens();
-            await supabase.auth.signOut({ scope: 'local' });
+            try {
+              await supabase.auth.signOut({ scope: 'local' });
+            } catch {
+              // Ignorar erros ao fazer signOut
+            }
           }
           
           setIsLoading(false);
+          initialLoadDone.current = true;
           return;
         }
 
+        // SEMPRE verificar se há sessão válida, independente de tokens no localStorage
+        // O Supabase pode manter a sessão mesmo sem tokens explícitos no localStorage
         if (session?.user) {
           await loadUserProfile(session.user.id);
+        } else {
+          // Se não há sessão, verificar se o usuário ainda existe no Supabase
+          try {
+            const { data: { user: currentUser } } = await supabase.auth.getUser();
+            if (currentUser) {
+              // Há um usuário autenticado, mas sem sessão ativa no momento
+              // Tentar recarregar o perfil mesmo assim
+              await loadUserProfile(currentUser.id);
+            }
+          } catch (err) {
+            // Não há usuário autenticado, continuar sem usuário
+          }
         }
+        
+        initialLoadDone.current = true;
       } catch (error: any) {
         // Tratar erros de refresh token silenciosamente
-        const isInvalidTokenError = error?.message?.includes('Invalid Refresh Token') || 
-                                   error?.message?.includes('Refresh Token Not Found');
+        const errorMessage = error?.message || '';
+        const isInvalidTokenError = errorMessage.includes('Invalid Refresh Token') || 
+                                   errorMessage.includes('Refresh Token Not Found') ||
+                                   errorMessage.includes('refresh_token') ||
+                                   errorMessage.includes('JWT');
         
         if (isInvalidTokenError) {
           // Limpar tokens inválidos e continuar
           try {
+            const keys = Object.keys(localStorage);
+            keys.forEach(key => {
+              if (key.includes('supabase') || key.includes('auth-token')) {
+                localStorage.removeItem(key);
+              }
+            });
             await supabase.auth.signOut({ scope: 'local' });
           } catch (e) {
             // Ignorar erros ao fazer signOut
@@ -107,26 +158,42 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // Listener para mudanças no estado de autenticação
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        // Apenas carregar perfil se for um login NOVO (não na inicialização)
-        if (event === 'SIGNED_IN' && session?.user && initialLoadDone.current) {
-          await loadUserProfile(session.user.id);
-        } else if (event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
-          // Se token foi renovado, verificar se há sessão válida
-          if (event === 'SIGNED_OUT') {
+        try {
+          // Tratar erros de token inválido
+          if (event === 'TOKEN_REFRESHED' && !session) {
+            // Token inválido ou expirado
             setUser(null);
-          } else if (event === 'TOKEN_REFRESHED' && !session) {
+            return;
+          }
+
+          // Carregar perfil quando houver sessão válida e eventos relevantes
+          // Isso garante que após F5, se houver sessão restaurada, o perfil seja carregado
+          if (session?.user) {
+            // Carregar perfil se:
+            // 1. Login novo (após inicialização estar completa)
+            // 2. Token renovado (sessão restaurada após F5)
+            // 3. Qualquer mudança de autenticação com sessão válida (após inicialização)
+            if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') && initialLoadDone.current) {
+              await loadUserProfile(session.user.id);
+            }
+          } else if (event === 'SIGNED_OUT') {
             setUser(null);
+          }
+        } catch (error: any) {
+          // Ignorar erros silenciosamente para evitar loops de erro
+          const errorMessage = error?.message || '';
+          if (errorMessage.includes('Invalid Refresh Token') || 
+              errorMessage.includes('Refresh Token Not Found')) {
+            setUser(null);
+            try {
+              await supabase.auth.signOut({ scope: 'local' });
+            } catch {
+              // Ignorar erros ao fazer signOut
+            }
           }
         }
       }
     );
-
-    // Listener para erros de autenticação
-    supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT' && !session) {
-        setUser(null);
-      }
-    });
 
     return () => {
       subscription.unsubscribe();
@@ -539,3 +606,4 @@ export const useAuth = () => {
   }
   return context;
 };
+

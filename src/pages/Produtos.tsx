@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Plus, Search, Edit, Trash2, Package, Calendar } from "lucide-react";
+import { Plus, Search, Edit, Trash2, Package, Calendar, X } from "lucide-react";
 import { BatchManager } from "@/components/BatchManager";
 
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectSeparator } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ResponsiveTable, TableColumn, TableAction, ResponsiveBadge } from "@/components/ui/responsive-table";
 import { useForm } from "react-hook-form";
@@ -32,6 +32,7 @@ const productSchema = z.object({
   unitOfMeasure: z.string()
     .min(1, "❌ Unidade de medida é obrigatória")
     .max(20, "❌ Unidade de medida deve ter no máximo 20 caracteres"),
+  category: z.string().optional().default("Geral"),
   managedByBatch: z.boolean().optional().default(false), // Campo opcional para gerenciamento por lote
 });
 
@@ -76,15 +77,73 @@ const Produtos = () => {
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [newCategory, setNewCategory] = useState("");
   const [isManagingCategories, setIsManagingCategories] = useState(false);
+  const [isManagingUnits, setIsManagingUnits] = useState(false);
+  const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null);
   
-  // Carregar categorias do localStorage com categorias padrão
+  // Estados para unidades de medida personalizadas
+  const [customUnits, setCustomUnits] = useState<string[]>([]);
+  const [isAddingCustomUnit, setIsAddingCustomUnit] = useState(false);
+  const [newCustomUnit, setNewCustomUnit] = useState("");
+  const [selectedUnitInput, setSelectedUnitInput] = useState<string>(""); // Para controlar qual input está sendo usado
+  const [unitToDelete, setUnitToDelete] = useState<string | null>(null); // Unidade que será deletada
+  const [isDeleteUnitDialogOpen, setIsDeleteUnitDialogOpen] = useState(false); // Dialog de confirmação
+  
+  // Unidades padrão
+  const defaultUnits = [
+    { value: "UN", label: "📦 UN (Unidade)" },
+    { value: "CX", label: "📦 CX (Caixa)" },
+    { value: "KG", label: "⚖️ KG (Quilo)" },
+    { value: "G", label: "⚖️ G (Grama)" },
+    { value: "L", label: "💧 L (Litro)" },
+    { value: "ML", label: "💧 ML (Mililitro)" },
+    { value: "M", label: "📏 M (Metro)" },
+    { value: "CM", label: "📏 CM (Centímetro)" },
+    { value: "PAC", label: "📦 PAC (Pacote)" },
+    { value: "SAC", label: "📦 SAC (Saco)" },
+  ];
+  
+  // Hooks
+  const { toast } = useToast();
+  const { isMobile } = useResponsive();
+  const { 
+    products,
+    movements,
+    addProduct: addProductContext, 
+    updateProduct, 
+    deleteProduct: deleteProductContext, 
+    refreshProducts,
+    categories: categoriesFromContext,
+    customUnits: customUnitsFromContext,
+    addCategory,
+    deleteCategory,
+    refreshCategories,
+    addCustomUnit,
+    deleteCustomUnit,
+    refreshCustomUnits
+  } = useData();
+
+  // Usar categorias e unidades do contexto (que vem do banco de dados)
   useEffect(() => {
-    const saved = localStorage.getItem('flexi-categories');
-    if (saved) {
-      setCategories(JSON.parse(saved));
-    } else {
-      // Adicionar categorias padrão se não houver nenhuma
+    if (categoriesFromContext.length > 0) {
+      // Adicionar categorias padrão se não houver nenhuma no banco
       const defaultCategories = [
+        "Geral",
+        "Alimentos",
+        "Bebidas",
+        "Eletrônicos",
+        "Roupas",
+        "Acessórios",
+        "Complementos",
+        "Embalagens",
+        "Outros"
+      ];
+      // Combinar categorias do banco com padrões (sem duplicatas)
+      const combined = [...new Set([...defaultCategories, ...categoriesFromContext])];
+      setCategories(combined);
+    } else {
+      // Se não há categorias no banco, usar apenas as padrão
+      const defaultCategories = [
+        "Geral",
         "Alimentos",
         "Bebidas",
         "Eletrônicos",
@@ -96,17 +155,116 @@ const Produtos = () => {
       ];
       setCategories(defaultCategories);
     }
-  }, []);
-  
-  // Salvar categorias no localStorage
-  useEffect(() => {
-    localStorage.setItem('flexi-categories', JSON.stringify(categories));
-  }, [categories]);
+  }, [categoriesFromContext]);
 
-  // Hooks
-  const { toast } = useToast();
-  const { isMobile } = useResponsive();
-  const { products, addProduct: addProductContext, updateProduct, deleteProduct: deleteProductContext, refreshProducts } = useData();
+  // Usar unidades do contexto
+  useEffect(() => {
+    setCustomUnits(customUnitsFromContext);
+  }, [customUnitsFromContext]);
+
+  // Formulário - Valores padrão simplificados
+  const form = useForm<ProductFormData>({
+    resolver: zodResolver(productSchema),
+    defaultValues: {
+      sku: "",
+      name: "",
+      unitOfMeasure: "",
+      category: "Geral",
+      managedByBatch: false,
+    },
+  });
+  
+  // Todas as unidades disponíveis (padrão + personalizadas)
+  const allUnits = [
+    ...defaultUnits,
+    ...customUnits.map(unit => ({
+      value: unit,
+      label: `📏 ${unit} (Personalizada)`
+    }))
+  ];
+  
+  // Função para adicionar unidade personalizada
+  const handleAddCustomUnit = async () => {
+    if (!newCustomUnit.trim()) {
+      toast({
+        title: "❌ Campo Vazio",
+        description: "Por favor, digite uma unidade de medida.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    const unitValue = newCustomUnit.trim().toUpperCase();
+    
+    // Verificar se já existe nas unidades padrão
+    const existsInDefault = defaultUnits.some(u => u.value === unitValue);
+    if (existsInDefault) {
+      toast({
+        title: "❌ Unidade Já Existe",
+        description: `A unidade "${unitValue}" já está cadastrada como unidade padrão.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    try {
+      // Salvar no banco de dados
+      await addCustomUnit(unitValue);
+      
+      setNewCustomUnit("");
+      setIsAddingCustomUnit(false);
+      
+      // Selecionar a nova unidade no campo
+      if (selectedUnitInput === "add" || selectedUnitInput === "edit") {
+        form.setValue("unitOfMeasure", unitValue);
+      }
+      
+      toast({
+        title: "✅ Unidade Adicionada!",
+        description: `A unidade "${unitValue}" foi adicionada com sucesso ao banco de dados.`,
+        variant: "default",
+      });
+    } catch (error: any) {
+      toast({
+        title: "❌ Erro ao Adicionar Unidade",
+        description: error.message || "Não foi possível adicionar a unidade. Tente novamente.",
+        variant: "destructive",
+      });
+    }
+  };
+  
+  // Função para deletar unidade personalizada
+  const handleDeleteCustomUnit = async (unitToDelete: string) => {
+    try {
+      // Deletar do banco de dados (a verificação de produtos já é feita no contexto)
+      await deleteCustomUnit(unitToDelete);
+      
+      setIsDeleteUnitDialogOpen(false);
+      setUnitToDelete(null);
+      
+      toast({
+        title: "✅ Unidade Excluída!",
+        description: `A unidade "${unitToDelete}" foi removida do banco de dados.`,
+        variant: "default",
+      });
+    } catch (error: any) {
+      toast({
+        title: "❌ Erro ao Excluir Unidade",
+        description: error.message || "Não foi possível excluir a unidade. Tente novamente.",
+        variant: "destructive",
+        duration: 6000,
+      });
+      setIsDeleteUnitDialogOpen(false);
+      setUnitToDelete(null);
+    }
+  };
+  
+  // Função para solicitar deleção (abre dialog de confirmação)
+  const requestDeleteUnit = (unit: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Evitar que o select seja fechado
+    setUnitToDelete(unit);
+    setIsDeleteUnitDialogOpen(true);
+  };
 
   // Controlar estado de carregamento
   useEffect(() => {
@@ -136,17 +294,6 @@ const Produtos = () => {
     
     return (numericSKUs[0] + 1).toString();
   };
-
-  // Formulário - Valores padrão simplificados
-  const form = useForm<ProductFormData>({
-    resolver: zodResolver(productSchema),
-    defaultValues: {
-      sku: "",
-      name: "",
-      unitOfMeasure: "",
-      managedByBatch: false,
-    },
-  });
 
   // Verificar SKU duplicado em tempo real
   const currentSku = form.watch('sku');
@@ -213,45 +360,40 @@ const Produtos = () => {
   const columns: TableColumn<Product>[] = [
     {
       key: 'name',
-      label: 'Nome',
+      label: 'Descrição',
       priority: 'high',
       render: (product) => (
         <div>
-          <div className="font-medium text-sm sm:text-base">{product.name}</div>
-          <div className="text-xs sm:text-sm text-muted-foreground">{product.sku}</div>
-          {isMobile && product.unitOfMeasure && (
-            <div className="text-xs sm:text-sm text-muted-foreground mt-1">Unidade: {product.unitOfMeasure}</div>
-          )}
+          <div className="font-medium text-sm sm:text-base">{product.name || product.description || 'Sem nome'}</div>
         </div>
       )
     },
     {
+      key: 'sku',
+      label: 'Código do Produto',
+      priority: 'high',
+      render: (product) => (
+        <span className="text-sm sm:text-base text-muted-foreground">{product.sku}</span>
+      )
+    },
+    {
       key: 'unitOfMeasure',
-      label: 'Unidade',
-      hideOnMobile: true,
-      priority: 'medium',
+      label: 'Unidade de Medida',
+      priority: 'high',
       render: (product) => (
         <span className="text-sm sm:text-base">{product.unitOfMeasure || 'UN'}</span>
       )
     },
     {
-      key: 'price',
-      label: 'Preço',
-      priority: 'high',
-      render: (product) => (
-        <span className="text-sm sm:text-base">R$ {(product.price || 0).toFixed(2).replace('.', ',')}</span>
-      )
-    },
-    {
       key: 'stock',
-      label: 'Estoque',
+      label: 'Quantidade no Estoque',
       priority: 'high',
       render: (product) => {
         const stock = product.stock || 0;
         const minStock = product.minStock || 0;
         return (
         <div className="flex items-center gap-2">
-            <span className={`text-sm sm:text-base ${stock <= minStock ? 'text-red-600 font-medium' : ''}`}>
+            <span className={`text-sm sm:text-base font-medium ${stock <= minStock && minStock > 0 ? 'text-red-600' : 'text-gray-900'}`}>
               {stock}
           </span>
             {stock <= minStock && minStock > 0 && (
@@ -264,49 +406,110 @@ const Produtos = () => {
       }
     },
     {
-      key: 'status',
-      label: 'Status',
-      hideOnMobile: true,
-      priority: 'low',
+      key: 'category',
+      label: 'Categoria',
+      priority: 'medium',
       render: (product) => (
-        <ResponsiveBadge variant={product.status === 'ativo' ? 'default' : 'secondary'}>
-          {product.status === 'ativo' ? 'Ativo' : 'Inativo'}
-        </ResponsiveBadge>
+        <span className="text-sm sm:text-base text-muted-foreground">
+          🏷️ {product.category || 'Geral'}
+        </span>
       )
+    },
+    {
+      key: 'managedByBatch',
+      label: 'Gerenciado por Lote',
+      priority: 'medium',
+      className: 'text-right sm:text-left px-4',
+      render: (product) => {
+        const managedByBatch = (product as any).managedByBatch || false;
+        return (
+          <div className="flex items-center justify-end sm:justify-start">
+            {managedByBatch ? (
+              <ResponsiveBadge variant="default" className="text-xs bg-indigo-100 text-indigo-700 whitespace-nowrap">
+                📅 Sim
+              </ResponsiveBadge>
+            ) : (
+              <span className="text-sm sm:text-base text-muted-foreground whitespace-nowrap">Não</span>
+            )}
+          </div>
+        );
+      }
     }
   ];
 
-  // Função para deletar categoria
-  const handleDeleteCategory = (categoryToDelete: string) => {
-    // Verificar se há produtos usando essa categoria
-    const productsUsingCategory = products.filter(p => p.category === categoryToDelete);
-    
-    if (productsUsingCategory.length > 0) {
+  // Função para adicionar nova categoria
+  const handleAddCategory = async () => {
+    if (!newCategoryName.trim()) {
       toast({
-        title: "⚠️ Não é possível excluir!",
-        description: `Existem ${productsUsingCategory.length} produto(s) usando essa categoria. Altere a categoria dos produtos primeiro.`,
+        title: "❌ Campo Vazio",
+        description: "Por favor, digite um nome para a categoria.",
         variant: "destructive",
-        duration: 6000,
       });
       return;
     }
     
-    setCategories(categories.filter(cat => cat !== categoryToDelete));
-    toast({
-      title: "✅ Categoria Excluída!",
-      description: `A categoria "${categoryToDelete}" foi removida.`,
-      variant: "default",
-    });
+    const categoryValue = newCategoryName.trim();
+    
+    try {
+      // Salvar no banco de dados
+      await addCategory(categoryValue);
+      
+      setNewCategoryName("");
+      setIsCreatingNewCategory(false);
+      
+      // Selecionar a nova categoria no campo
+      form.setValue("category", categoryValue);
+      
+      toast({
+        title: "✅ Categoria Adicionada!",
+        description: `A categoria "${categoryValue}" foi adicionada com sucesso ao banco de dados.`,
+        variant: "default",
+      });
+    } catch (error: any) {
+      toast({
+        title: "❌ Erro ao Adicionar Categoria",
+        description: error.message || "Não foi possível adicionar a categoria. Tente novamente.",
+        variant: "destructive",
+      });
+    }
+  };  // Função para deletar categoria
+  const handleDeleteCategory = async (categoryToDelete: string) => {
+    try {
+      // Deletar do banco de dados (a verificação de produtos já é feita no contexto)
+      await deleteCategory(categoryToDelete);
+      
+      // Se a categoria deletada estava selecionada, voltar para "Geral"
+      const currentCategory = form.getValues("category");
+      if (currentCategory === categoryToDelete) {
+        form.setValue("category", "Geral");
+      }
+      
+      toast({
+        title: "✅ Categoria Excluída!",
+        description: `A categoria "${categoryToDelete}" foi removida do banco de dados.`,
+        variant: "default",
+      });
+    } catch (error: any) {
+      toast({
+        title: "❌ Erro ao Excluir Categoria",
+        description: error.message || "Não foi possível excluir a categoria. Tente novamente.",
+        variant: "destructive",
+        duration: 6000,
+      });
+    }
   };
 
   // Funções CRUD (definidas antes de serem usadas)
   const openEditDialog = (product: Product) => {
     setEditingProduct(product);
+    // Obter valores do produto mapeado para garantir que managedByBatch seja preservado
+    const mappedProduct = mappedProducts.find(p => p.id === product.id) || product;
     form.reset({
-      sku: product.sku,
-      name: product.name,
-      unitOfMeasure: product.unitOfMeasure || "UN", // Usar unidade de medida ou padrão
-      managedByBatch: product.managedByBatch || false,
+      sku: mappedProduct.sku,
+      name: mappedProduct.name,
+      unitOfMeasure: (mappedProduct as any).unitOfMeasure || "UN", // Usar unidade de medida ou padrão
+      category: mappedProduct.category || "Geral",
+      managedByBatch: (mappedProduct as any).managedByBatch === true, // Garantir que seja boolean verdadeiro
     });
     setIsEditDialogOpen(true);
   };
@@ -325,13 +528,6 @@ const Produtos = () => {
   // Definição das ações da tabela
   // @ts-ignore - Conflito de tipos entre Product local e do DataContext
   const actions: TableAction<Product>[] = [
-    {
-      label: 'Lotes',
-      icon: <Calendar className="h-3 w-3 sm:h-4 sm:w-4" />,
-      onClick: openBatchManager,
-      variant: 'ghost',
-      className: 'text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50'
-    },
     {
       label: 'Editar',
       icon: <Edit className="h-3 w-3 sm:h-4 sm:w-4" />,
@@ -353,7 +549,7 @@ const Produtos = () => {
       sku: data.sku,
       name: data.name,
       description: data.name, // Usar o nome como descrição
-      category: "Geral", // Categoria padrão
+      category: data.category || "Geral", // Usar categoria do formulário ou padrão
       price: 0, // Preço inicial zerado
       stock: 0, // Estoque inicial zerado
       minStock: 0, // Estoque mínimo zerado
@@ -523,11 +719,20 @@ const Produtos = () => {
               sku: generateNextSKU(),
               name: "",
               unitOfMeasure: "",
+              category: "Geral",
               managedByBatch: false,
             });
             setSkuDuplicateError(""); // Limpar erro de SKU
+            setIsAddingCustomUnit(false); // Limpar estado de adicionar unidade
+            setNewCustomUnit(""); // Limpar input de unidade
+            setIsCreatingNewCategory(false); // Limpar estado de criar categoria
+            setNewCategoryName(""); // Limpar input de categoria
           } else {
             setSkuDuplicateError(""); // Limpar erro quando fechar
+            setIsAddingCustomUnit(false); // Limpar estado de adicionar unidade
+            setNewCustomUnit(""); // Limpar input de unidade
+            setIsCreatingNewCategory(false); // Limpar estado de criar categoria
+            setNewCategoryName(""); // Limpar input de categoria
           }
         }}>
           <DialogTrigger asChild>
@@ -536,7 +741,7 @@ const Produtos = () => {
               Novo Produto
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-sm">
+          <DialogContent className="max-w-md sm:max-w-lg">
             <DialogHeader className="space-y-2 pb-4 sm:pb-3">
               <DialogTitle className="text-base sm:text-xl font-bold text-neutral-900">
                 📦 Adicionar Novo Produto
@@ -598,28 +803,197 @@ const Produtos = () => {
                   name="unitOfMeasure"
                   render={({ field }) => (
                     <FormItem className="space-y-3">
-                      <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
-                        📏 Unidade de Medida
+                      <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700 flex items-center justify-between">
+                        <span>📏 Unidade de Medida</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setIsManagingUnits(true);
+                          }}
+                          className="h-7 text-xs text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50"
+                        >
+                          Gerenciar
+                        </Button>
                       </FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <Select 
+                        onValueChange={(value) => {
+                          field.onChange(value);
+                        }} 
+                        value={field.value || ""}
+                      >
                         <FormControl>
                           <SelectTrigger className="h-11 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
                             <SelectValue placeholder="Selecione a unidade de medida" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="UN">📦 UN (Unidade)</SelectItem>
-                          <SelectItem value="CX">📦 CX (Caixa)</SelectItem>
-                          <SelectItem value="KG">⚖️ KG (Quilo)</SelectItem>
-                          <SelectItem value="G">⚖️ G (Grama)</SelectItem>
-                          <SelectItem value="L">💧 L (Litro)</SelectItem>
-                          <SelectItem value="ML">💧 ML (Mililitro)</SelectItem>
-                          <SelectItem value="M">📏 M (Metro)</SelectItem>
-                          <SelectItem value="CM">📏 CM (Centímetro)</SelectItem>
-                          <SelectItem value="PAC">📦 PAC (Pacote)</SelectItem>
-                          <SelectItem value="SAC">📦 SAC (Saco)</SelectItem>
+                          {/* Unidades Padrão */}
+                          {defaultUnits.map((unit) => (
+                            <SelectItem 
+                              key={unit.value} 
+                              value={unit.value}
+                            >
+                              {unit.label}
+                            </SelectItem>
+                          ))}
+                          
+                          {/* Unidades Personalizadas */}
+                          {customUnits.length > 0 && (
+                            <>
+                              <SelectSeparator />
+                              {customUnits.map((unit) => (
+                                <SelectItem 
+                                  key={unit} 
+                                  value={unit}
+                                >
+                                  📏 {unit} (Personalizada)
+                                </SelectItem>
+                              ))}
+                            </>
+                          )}
                         </SelectContent>
                       </Select>
+                      
+                      {isAddingCustomUnit && selectedUnitInput === "add" && (
+                        <div className="mt-2 p-3 bg-indigo-50 border border-indigo-200 rounded-lg space-y-2">
+                          <div className="flex items-center gap-2">
+                            <Input
+                              placeholder="Ex: FD (Fardo), PL (Pote)..."
+                              value={newCustomUnit}
+                              onChange={(e) => setNewCustomUnit(e.target.value.toUpperCase())}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleAddCustomUnit();
+                                } else if (e.key === 'Escape') {
+                                  setIsAddingCustomUnit(false);
+                                  setNewCustomUnit("");
+                                }
+                              }}
+                              className="flex-1 h-9 text-sm"
+                              autoFocus
+                            />
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={handleAddCustomUnit}
+                              className="h-9 bg-indigo-600 hover:bg-indigo-700 text-white"
+                            >
+                              <Plus className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                setIsAddingCustomUnit(false);
+                                setNewCustomUnit("");
+                              }}
+                              className="h-9"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          <p className="text-xs text-indigo-600">Pressione Enter para adicionar</p>
+                        </div>
+                      )}
+                      
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="category"
+                  render={({ field }) => (
+                    <FormItem className="space-y-3">
+                      <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700 flex items-center justify-between">
+                        <span>🏷️ Categoria</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setIsManagingCategories(true);
+                          }}
+                          className="h-7 text-xs text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50"
+                        >
+                          Gerenciar
+                        </Button>
+                      </FormLabel>
+                      <Select 
+                        onValueChange={(value) => {
+                          field.onChange(value);
+                        }} 
+                        value={field.value || "Geral"}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="h-11 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                            <SelectValue placeholder="Selecione a categoria" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {/* Categorias existentes */}
+                          {categories.map((category) => (
+                            <SelectItem 
+                              key={category} 
+                              value={category}
+                            >
+                              🏷️ {category}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      
+                      {isCreatingNewCategory && (
+                        <div className="mt-2 p-3 bg-indigo-50 border border-indigo-200 rounded-lg space-y-2">
+                          <div className="flex items-center gap-2">
+                            <Input
+                              placeholder="Ex: Eletrônicos, Roupas..."
+                              value={newCategoryName}
+                              onChange={(e) => setNewCategoryName(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleAddCategory();
+                                } else if (e.key === 'Escape') {
+                                  setIsCreatingNewCategory(false);
+                                  setNewCategoryName("");
+                                }
+                              }}
+                              className="flex-1 h-9 text-sm"
+                              autoFocus
+                            />
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={handleAddCategory}
+                              className="h-9 bg-indigo-600 hover:bg-indigo-700 text-white"
+                            >
+                              <Plus className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                setIsCreatingNewCategory(false);
+                                setNewCategoryName("");
+                              }}
+                              className="h-9"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          <p className="text-xs text-indigo-600">Pressione Enter para adicionar</p>
+                        </div>
+                      )}
+                      
                       <FormMessage />
                     </FormItem>
                   )}
@@ -639,8 +1013,8 @@ const Produtos = () => {
                           <label className="relative inline-flex items-center cursor-pointer">
                             <input
                               type="checkbox"
-                              checked={field.value || false}
-                              onChange={field.onChange}
+                              checked={field.value === true}
+                              onChange={(e) => field.onChange(e.target.checked)}
                               className="sr-only peer"
                             />
                             <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
@@ -689,7 +1063,38 @@ const Produtos = () => {
             </div>
             <div className="text-right">
               <div className="text-2xl sm:text-3xl font-black">
-                R$ {products.reduce((sum, p) => sum + (p.price * p.stock), 0).toFixed(0)}
+                {(() => {
+                  const totalValue = mappedProducts.reduce((sum, product) => {
+                    // Buscar todas as entradas deste produto
+                    const productEntries = movements
+                      .filter(m => m.productId === product.id && m.type === 'entrada')
+                      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+                    
+                    let unitValue = 0;
+                    
+                    // Se há entradas, calcular custo médio ponderado
+                    if (productEntries.length > 0) {
+                      let totalCost = 0;
+                      let totalQuantity = 0;
+                      
+                      productEntries.forEach(entry => {
+                        totalCost += (entry.unitPrice * entry.quantity);
+                        totalQuantity += entry.quantity;
+                      });
+                      
+                      const averageCost = totalQuantity > 0 ? totalCost / totalQuantity : 0;
+                      // Usar custo médio se disponível, senão usar preço de venda
+                      unitValue = averageCost > 0 ? averageCost : (product.price || 0);
+                    } else {
+                      // Se não há entradas, usar preço de venda (ou 0 se não definido)
+                      unitValue = product.price || 0;
+                    }
+                    
+                    const stock = typeof product.stock === 'number' ? product.stock : parseFloat(String(product.stock || 0));
+                    return sum + (unitValue * stock);
+                  }, 0);
+                  return `R$ ${totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                })()}
               </div>
               <div className="text-sm sm:text-sm opacity-90">Valor</div>
             </div>
@@ -785,9 +1190,13 @@ const Produtos = () => {
               setIsEditDialogOpen(open);
               if (!open) {
                 setSkuDuplicateError(""); // Limpar erro ao fechar
+                setIsAddingCustomUnit(false); // Limpar estado de adicionar unidade
+                setNewCustomUnit(""); // Limpar input de unidade
+                setIsCreatingNewCategory(false); // Limpar estado de criar categoria
+                setNewCategoryName(""); // Limpar input de categoria
               }
             }}>
-              <DialogContent className="max-w-sm">
+              <DialogContent className="max-w-md sm:max-w-lg">
                 <DialogHeader className="space-y-2 pb-4 sm:pb-3">
                   <DialogTitle className="text-base sm:text-xl font-bold text-neutral-900">
                     ✏️ Editar Produto
@@ -848,28 +1257,198 @@ const Produtos = () => {
                       name="unitOfMeasure"
                       render={({ field }) => (
                         <FormItem className="space-y-3">
-                          <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
-                            📏 Unidade de Medida
+                          <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700 flex items-center justify-between">
+                            <span>📏 Unidade de Medida</span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                setIsManagingUnits(true);
+                              }}
+                              className="h-7 text-xs text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50"
+                            >
+                              Gerenciar
+                            </Button>
                           </FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <Select 
+                            onValueChange={(value) => {
+                              field.onChange(value);
+                            }} 
+                            value={field.value || ""}
+                          >
                             <FormControl>
                               <SelectTrigger className="h-11 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
                                 <SelectValue placeholder="Selecione a unidade de medida" />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="UN">📦 UN (Unidade)</SelectItem>
-                              <SelectItem value="CX">📦 CX (Caixa)</SelectItem>
-                              <SelectItem value="KG">⚖️ KG (Quilo)</SelectItem>
-                              <SelectItem value="G">⚖️ G (Grama)</SelectItem>
-                              <SelectItem value="L">💧 L (Litro)</SelectItem>
-                              <SelectItem value="ML">💧 ML (Mililitro)</SelectItem>
-                              <SelectItem value="M">📏 M (Metro)</SelectItem>
-                              <SelectItem value="CM">📏 CM (Centímetro)</SelectItem>
-                              <SelectItem value="PAC">📦 PAC (Pacote)</SelectItem>
-                              <SelectItem value="SAC">📦 SAC (Saco)</SelectItem>
+                              {/* Unidades Padrão */}
+                              {defaultUnits.map((unit) => (
+                                <SelectItem 
+                                  key={unit.value} 
+                                  value={unit.value}
+                                >
+                                  {unit.label}
+                                </SelectItem>
+                              ))}
+                              
+                              {/* Unidades Personalizadas */}
+                              {customUnits.length > 0 && (
+                                <>
+                                  <SelectSeparator />
+                                  {customUnits.map((unit) => (
+                                    <SelectItem 
+                                      key={unit} 
+                                      value={unit}
+                                    >
+                                      📏 {unit} (Personalizada)
+                                    </SelectItem>
+                                  ))}
+                                </>
+                              )}
+                              
                             </SelectContent>
                           </Select>
+                          
+                          {isAddingCustomUnit && selectedUnitInput === "edit" && (
+                            <div className="mt-2 p-3 bg-indigo-50 border border-indigo-200 rounded-lg space-y-2">
+                              <div className="flex items-center gap-2">
+                                <Input
+                                  placeholder="Ex: FD (Fardo), PL (Pote)..."
+                                  value={newCustomUnit}
+                                  onChange={(e) => setNewCustomUnit(e.target.value.toUpperCase())}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      handleAddCustomUnit();
+                                    } else if (e.key === 'Escape') {
+                                      setIsAddingCustomUnit(false);
+                                      setNewCustomUnit("");
+                                    }
+                                  }}
+                                  className="flex-1 h-9 text-sm"
+                                  autoFocus
+                                />
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  onClick={handleAddCustomUnit}
+                                  className="h-9 bg-indigo-600 hover:bg-indigo-700 text-white"
+                                >
+                                  <Plus className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => {
+                                    setIsAddingCustomUnit(false);
+                                    setNewCustomUnit("");
+                                  }}
+                                  className="h-9"
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
+                              <p className="text-xs text-indigo-600">Pressione Enter para adicionar</p>
+                            </div>
+                          )}
+                          
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="category"
+                      render={({ field }) => (
+                        <FormItem className="space-y-3">
+                          <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700 flex items-center justify-between">
+                            <span>🏷️ Categoria</span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                setIsManagingCategories(true);
+                              }}
+                              className="h-7 text-xs text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50"
+                            >
+                              Gerenciar
+                            </Button>
+                          </FormLabel>
+                          <Select 
+                            onValueChange={(value) => {
+                              field.onChange(value);
+                            }} 
+                            value={field.value || "Geral"}
+                          >
+                            <FormControl>
+                              <SelectTrigger className="h-11 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                                <SelectValue placeholder="Selecione a categoria" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {/* Categorias existentes */}
+                              {categories.map((category) => (
+                                <SelectItem 
+                                  key={category} 
+                                  value={category}
+                                >
+                                  🏷️ {category}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          
+                          {isCreatingNewCategory && (
+                            <div className="mt-2 p-3 bg-indigo-50 border border-indigo-200 rounded-lg space-y-2">
+                              <div className="flex items-center gap-2">
+                                <Input
+                                  placeholder="Ex: Eletrônicos, Roupas..."
+                                  value={newCategoryName}
+                                  onChange={(e) => setNewCategoryName(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      handleAddCategory();
+                                    } else if (e.key === 'Escape') {
+                                      setIsCreatingNewCategory(false);
+                                      setNewCategoryName("");
+                                    }
+                                  }}
+                                  className="flex-1 h-9 text-sm"
+                                  autoFocus
+                                />
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  onClick={handleAddCategory}
+                                  className="h-9 bg-indigo-600 hover:bg-indigo-700 text-white"
+                                >
+                                  <Plus className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => {
+                                    setIsCreatingNewCategory(false);
+                                    setNewCategoryName("");
+                                  }}
+                                  className="h-9"
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
+                              <p className="text-xs text-indigo-600">Pressione Enter para adicionar</p>
+                            </div>
+                          )}
+                          
                           <FormMessage />
                         </FormItem>
                       )}
@@ -889,8 +1468,8 @@ const Produtos = () => {
                               <label className="relative inline-flex items-center cursor-pointer">
                                 <input
                                   type="checkbox"
-                                  checked={field.value || false}
-                                  onChange={field.onChange}
+                                  checked={field.value === true}
+                                  onChange={(e) => field.onChange(e.target.checked)}
                                   className="sr-only peer"
                                 />
                                 <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
@@ -917,7 +1496,7 @@ const Produtos = () => {
 
             {/* Modal de Confirmação de Exclusão */}
             <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-              <DialogContent className="max-w-sm">
+              <DialogContent className="max-w-md sm:max-w-lg">
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl">
                     <Trash2 className="h-5 w-4 text-destructive" />
@@ -976,7 +1555,7 @@ const Produtos = () => {
 
             {/* Modal de Gerenciamento de Lotes */}
             <Dialog open={isBatchDialogOpen} onOpenChange={setIsBatchDialogOpen}>
-              <DialogContent className="max-w-sm">
+              <DialogContent className="max-w-md sm:max-w-lg">
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl">
                     <Calendar className="h-5 w-5 text-indigo-600" />
@@ -1013,8 +1592,250 @@ const Produtos = () => {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
-          </main>
-        );
-};
 
-export default Produtos;
+      {/* Modal de Confirmação de Exclusão de Unidade */}
+      <Dialog open={isDeleteUnitDialogOpen} onOpenChange={setIsDeleteUnitDialogOpen}>
+        <DialogContent className="max-w-md sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl">
+              <Trash2 className="h-5 w-5 text-red-600" />
+              Confirmar Exclusão de Unidade
+            </DialogTitle>
+            <DialogDescription className="text-sm sm:text-base">
+              Tem certeza que deseja excluir a unidade de medida "{unitToDelete}"? Esta ação não pode ser desfeita.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4">
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <h4 className="font-semibold text-sm mb-2 text-red-900">⚠️ Atenção:</h4>
+              <p className="text-xs sm:text-sm text-red-700">
+                Se houver produtos usando esta unidade, a exclusão será bloqueada para evitar problemas nos dados.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsDeleteUnitDialogOpen(false);
+                setUnitToDelete(null);
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (unitToDelete) {
+                  handleDeleteCustomUnit(unitToDelete);
+                }
+              }}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Excluir Unidade
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Gerenciamento de Categorias */}
+      <Dialog open={isManagingCategories} onOpenChange={setIsManagingCategories}>
+        <DialogContent className="max-w-md sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl">
+              🏷️ Gerenciar Categorias
+            </DialogTitle>
+            <DialogDescription className="text-sm sm:text-base">
+              Crie, edite e exclua categorias de produtos
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {/* Adicionar Nova Categoria */}
+            <div className="space-y-2">
+              <h4 className="text-sm font-semibold">Adicionar Nova Categoria</h4>
+              <div className="flex items-center gap-2">
+                <Input
+                  placeholder="Nome da categoria..."
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddCategory();
+                    }
+                  }}
+                  className="flex-1"
+                />
+                <Button
+                  type="button"
+                  onClick={handleAddCategory}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Adicionar
+                </Button>
+              </div>
+            </div>
+
+            {/* Lista de Categorias */}
+            <div className="space-y-2">
+              <h4 className="text-sm font-semibold">Categorias Existentes</h4>
+              <div className="max-h-64 overflow-y-auto border rounded-lg divide-y">
+                {categories.length === 0 ? (
+                  <div className="p-4 text-center text-sm text-gray-500">
+                    Nenhuma categoria cadastrada
+                  </div>
+                ) : (
+                  categories.map((category) => (
+                    <div
+                      key={category}
+                      className="flex items-center justify-between p-3 hover:bg-gray-50"
+                    >
+                      <span className="text-sm font-medium">🏷️ {category}</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setCategoryToDelete(category);
+                          handleDeleteCategory(category);
+                        }}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsManagingCategories(false);
+                setNewCategoryName("");
+              }}
+            >
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Gerenciamento de Unidades */}
+      <Dialog open={isManagingUnits} onOpenChange={setIsManagingUnits}>
+        <DialogContent className="max-w-md sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl">
+              📏 Gerenciar Unidades de Medida
+            </DialogTitle>
+            <DialogDescription className="text-sm sm:text-base">
+              Crie e exclua unidades de medida personalizadas
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {/* Adicionar Nova Unidade */}
+            <div className="space-y-2">
+              <h4 className="text-sm font-semibold">Adicionar Nova Unidade</h4>
+              <div className="flex items-center gap-2">
+                <Input
+                  placeholder="Ex: FD (Fardo), PL (Pote)..."
+                  value={newCustomUnit}
+                  onChange={(e) => setNewCustomUnit(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddCustomUnit();
+                      setNewCustomUnit("");
+                    }
+                  }}
+                  className="flex-1"
+                />
+                <Button
+                  type="button"
+                  onClick={() => {
+                    handleAddCustomUnit();
+                    setNewCustomUnit("");
+                  }}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Adicionar
+                </Button>
+              </div>
+            </div>
+
+            {/* Lista de Unidades Personalizadas */}
+            <div className="space-y-2">
+              <h4 className="text-sm font-semibold">Unidades Personalizadas</h4>
+              <div className="max-h-64 overflow-y-auto border rounded-lg divide-y">
+                {customUnits.length === 0 ? (
+                  <div className="p-4 text-center text-sm text-gray-500">
+                    Nenhuma unidade personalizada cadastrada
+                  </div>
+                ) : (
+                  customUnits.map((unit) => (
+                    <div
+                      key={unit}
+                      className="flex items-center justify-between p-3 hover:bg-gray-50"
+                    >
+                      <span className="text-sm font-medium">📏 {unit} (Personalizada)</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setUnitToDelete(unit);
+                          setIsDeleteUnitDialogOpen(true);
+                        }}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Unidades Padrão (somente leitura) */}
+            <div className="space-y-2">
+              <h4 className="text-sm font-semibold text-gray-600">Unidades Padrão (não podem ser excluídas)</h4>
+              <div className="max-h-32 overflow-y-auto border rounded-lg divide-y bg-gray-50">
+                {defaultUnits.map((unit) => (
+                  <div
+                    key={unit.value}
+                    className="flex items-center justify-between p-3"
+                  >
+                    <span className="text-sm text-gray-700">{unit.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsManagingUnits(false);
+                setNewCustomUnit("");
+              }}
+            >
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+        </main>
+      );
+    };
+    
+    export default Produtos;

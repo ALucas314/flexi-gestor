@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { 
   ShoppingCart, 
@@ -22,8 +23,10 @@ import {
 } from "lucide-react";
 import { useResponsive } from "@/hooks/use-responsive";
 import { useData } from "@/contexts/DataContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
 import { generateUniqueReceiptNumber } from "@/lib/utils";
+import { getBatchesByProduct, adjustBatchQuantity, Batch as BatchInfo } from "@/lib/batches";
 
 interface CartItem {
   id: string;
@@ -31,6 +34,8 @@ interface CartItem {
   price: number;
   quantity: number;
   sku: string;
+  selectedBatchId?: string;
+  selectedBatchNumber?: string;
 }
 
 interface ReceiptData {
@@ -43,12 +48,19 @@ interface ReceiptData {
 const PDV = () => {
   const { isMobile } = useResponsive();
   const { products, addMovement, refreshMovements, refreshProducts } = useData();
+  const { user } = useAuth();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [isProcessingSale, setIsProcessingSale] = useState(false);
   const [showReceipt, setShowReceipt] = useState(false);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [paymentMethod, setPaymentMethod] = useState<string>("avista");
+  const [installments, setInstallments] = useState<number>(1);
+  const [productBatches, setProductBatches] = useState<Record<string, BatchInfo[]>>({});
+  const [showBatchDialog, setShowBatchDialog] = useState(false);
+  const [productPendingBatch, setProductPendingBatch] = useState<any>(null);
+  const [selectedBatchForDialog, setSelectedBatchForDialog] = useState<string>("");
 
   // Controlar estado de carregamento
   useEffect(() => {
@@ -62,25 +74,122 @@ const PDV = () => {
   // Calcular total do carrinho
   const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
-  // Adicionar produto ao carrinho
-  const addToCart = (product: any) => {
-    const existingItem = cart.find(item => item.id === product.id);
+  // Adicionar produto ao carrinho (verifica se precisa selecionar lote)
+  const addToCart = async (product: any) => {
+    // Se o produto é gerenciado por lote, abrir diálogo para selecionar lote
+    if ((product as any)?.managedByBatch) {
+      // Carregar lotes se ainda não foram carregados
+      const batches = await loadBatchesForProduct(product.id);
+      
+      // Filtrar apenas lotes com estoque > 0
+      const availableBatches = batches.filter(b => b.quantity > 0);
+      
+      if (availableBatches.length === 0) {
+        toast({
+          title: "❌ Sem Lotes Disponível",
+          description: `O produto ${product.name} não possui lotes com estoque disponível`,
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // Verificar se já existe no carrinho com lote selecionado
+      const existingItem = cart.find(item => item.id === product.id && item.selectedBatchId);
+      if (existingItem) {
+        // Se já existe no carrinho com lote, apenas incrementar quantidade
+        setCart(cart.map(item => 
+          item.id === product.id && item.selectedBatchId === existingItem.selectedBatchId
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        ));
+        return;
+      }
+      
+      // Abrir diálogo para selecionar lote
+      setProductPendingBatch(product);
+      setSelectedBatchForDialog("");
+      setShowBatchDialog(true);
+    } else {
+      // Produto não gerenciado por lote: adicionar direto ao carrinho
+      const existingItem = cart.find(item => item.id === product.id);
+      
+      if (existingItem) {
+        setCart(cart.map(item => 
+          item.id === product.id 
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        ));
+      } else {
+        setCart([...cart, {
+          id: product.id,
+          name: product.name,
+          price: product.price,
+          quantity: 1,
+          sku: product.sku
+        }]);
+      }
+    }
+  };
+
+  // Confirmar seleção de lote e adicionar ao carrinho
+  const confirmBatchSelection = () => {
+    if (!productPendingBatch || !selectedBatchForDialog) {
+      toast({
+        title: "❌ Selecione um Lote",
+        description: "Por favor, selecione um lote antes de continuar",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    const batches = productBatches[productPendingBatch.id] || [];
+    const selectedBatch = batches.find(b => b.id === selectedBatchForDialog);
+    
+    if (!selectedBatch) {
+      toast({
+        title: "❌ Lote não encontrado",
+        description: "O lote selecionado não foi encontrado",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Verificar se já existe no carrinho com o mesmo lote
+    const existingItem = cart.find(
+      item => item.id === productPendingBatch.id && item.selectedBatchId === selectedBatchForDialog
+    );
     
     if (existingItem) {
       setCart(cart.map(item => 
-        item.id === product.id 
+        item.id === productPendingBatch.id && item.selectedBatchId === selectedBatchForDialog
           ? { ...item, quantity: item.quantity + 1 }
           : item
       ));
     } else {
       setCart([...cart, {
-        id: product.id,
-        name: product.name,
-        price: product.price,
+        id: productPendingBatch.id,
+        name: productPendingBatch.name,
+        price: productPendingBatch.price,
         quantity: 1,
-        sku: product.sku
+        sku: productPendingBatch.sku,
+        selectedBatchId: selectedBatch.id,
+        selectedBatchNumber: selectedBatch.batchNumber
       }]);
     }
+    
+    // Fechar diálogo
+    setShowBatchDialog(false);
+    setProductPendingBatch(null);
+    setSelectedBatchForDialog("");
+  };
+
+  // Carregar lotes de um produto quando necessário
+  const loadBatchesForProduct = async (productId: string) => {
+    if (!user?.id) return [];
+    if (productBatches[productId]) return productBatches[productId]; // já carregado
+    const batches = await getBatchesByProduct(productId, user.id);
+    setProductBatches(prev => ({ ...prev, [productId]: batches || [] }));
+    return batches || [];
   };
 
   // Remover item do carrinho
@@ -105,7 +214,7 @@ const PDV = () => {
     if (cart.length === 0) return;
     if (isProcessingSale) return;
     
-    // Validar estoque antes de processar
+    // Validar estoque e lotes antes de processar
     for (const item of cart) {
       const product = products.find(p => p.id === item.id);
       if (!product) {
@@ -134,6 +243,36 @@ const PDV = () => {
         });
         return;
       }
+
+      // Se gerenciado por lote, exigir lote selecionado e validar quantidade do lote
+      if ((product as any).managedByBatch) {
+        if (!item.selectedBatchId) {
+          toast({
+            title: "❌ Selecione o lote",
+            description: `Escolha o lote para o produto ${item.name} antes de finalizar`,
+            variant: "destructive",
+          });
+          return;
+        }
+        const batches = productBatches[item.id] || [];
+        const batch = batches.find(b => b.id === item.selectedBatchId);
+        if (!batch) {
+          toast({
+            title: "❌ Lote inválido",
+            description: `O lote selecionado para ${item.name} não foi encontrado`,
+            variant: "destructive",
+          });
+          return;
+        }
+        if (batch.quantity < item.quantity) {
+          toast({
+            title: "❌ Lote insuficiente",
+            description: `${item.name} - Lote ${batch.batchNumber}: apenas ${batch.quantity} disponíveis`,
+            variant: "destructive",
+          });
+          return;
+        }
+      }
     }
     
     setIsProcessingSale(true);
@@ -141,14 +280,23 @@ const PDV = () => {
     try {
       // Criar uma movimentação de saída para cada item do carrinho
       for (const item of cart) {
+        const product = products.find(p => p.id === item.id);
+        const paymentInfo = paymentMethod === 'parcelado' ? `Pagamento: parcelado em ${installments}x` : `Pagamento: à vista (${paymentMethod})`;
+        const loteInfo = (product as any)?.managedByBatch && item.selectedBatchNumber ? ` | Lote: ${item.selectedBatchNumber}` : '';
         await addMovement({
           type: 'saida',
           productId: item.id,
           quantity: item.quantity,
           unitPrice: item.price,
-          description: `Venda PDV - ${item.name} (${item.quantity} unidades)`,
+          description: `Venda PDV - ${item.name} (${item.quantity} unidades)${loteInfo} | ${paymentInfo}`,
+          paymentMethod: paymentMethod === 'parcelado' ? `parcelado-${installments}x` : paymentMethod,
           date: new Date()
         });
+
+        // Se houver lote selecionado, decrementar quantidade do lote
+        if ((product as any)?.managedByBatch && item.selectedBatchId && user?.id) {
+          await adjustBatchQuantity(item.selectedBatchId, -item.quantity, user.id);
+        }
       }
       
       // Dados já são recarregados automaticamente pelo addMovement
@@ -179,6 +327,8 @@ const PDV = () => {
       
       // Limpar carrinho
       setCart([]);
+      setPaymentMethod('avista');
+      setInstallments(1);
       
     } catch (error: any) {
       console.error('Erro ao finalizar venda:', error);
@@ -323,6 +473,39 @@ const PDV = () => {
                           </Button>
                         </div>
                         
+                        {/* Seleção de Lote (se gerenciado por lote) */}
+                        {(() => {
+                          const product = products.find(p => p.id === item.id) as any;
+                          if (product?.managedByBatch) {
+                            const batches = productBatches[item.id] || [];
+                            return (
+                              <div className="mb-3">
+                                <div className="text-xs text-gray-600 mb-1">Lote</div>
+                                <Select
+                                  onValueChange={async (val) => {
+                                    if (!productBatches[item.id]) {
+                                      await loadBatchesForProduct(item.id);
+                                    }
+                                    const selected = (productBatches[item.id] || []).concat(batches).find(b => b.id === val) || batches.find(b => b.id === val);
+                                    setCart(prev => prev.map(ci => ci.id === item.id ? { ...ci, selectedBatchId: val, selectedBatchNumber: selected?.batchNumber } : ci));
+                                  }}
+                                  value={item.selectedBatchId || undefined}
+                                >
+                                  <SelectTrigger className="h-9">
+                                    <SelectValue placeholder={batches.length ? "Selecione o lote" : "Carregando lotes..."} />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {(batches.length ? batches : []).map(b => (
+                                      <SelectItem key={b.id} value={b.id}>{b.batchNumber} · qtd {b.quantity}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
+
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <Button
@@ -361,6 +544,39 @@ const PDV = () => {
                       <span>Total:</span>
                       <span className="text-indigo-600">R$ {total.toFixed(2)}</span>
                     </div>
+                  </div>
+
+                  {/* Pagamento */}
+                  <div className="space-y-2 mb-4">
+                    <div className="text-sm font-medium text-gray-800">Forma de pagamento</div>
+                    <Select value={paymentMethod} onValueChange={(v) => { setPaymentMethod(v); if (v !== 'parcelado') setInstallments(1); }}>
+                      <SelectTrigger className="h-10">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="avista">À vista</SelectItem>
+                        <SelectItem value="pix">Pix</SelectItem>
+                        <SelectItem value="debito">Cartão débito</SelectItem>
+                        <SelectItem value="credito">Cartão crédito</SelectItem>
+                        <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                        <SelectItem value="parcelado">Parcelado</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {paymentMethod === 'parcelado' && (
+                      <div className="flex items-center gap-3">
+                        <div className="text-sm text-gray-700">Quantidade de parcelas</div>
+                        <Select value={String(installments)} onValueChange={(v) => setInstallments(Number(v))}>
+                          <SelectTrigger className="h-9 w-28">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from({ length: 12 }, (_, i) => i + 1).map(n => (
+                              <SelectItem key={n} value={String(n)}>{n}x</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
                   </div>
 
                   {/* Botões de Ação */}
@@ -413,7 +629,7 @@ const PDV = () => {
 
       {/* Modal de Receita */}
       <Dialog open={showReceipt} onOpenChange={setShowReceipt}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-green-600">
               <CheckCircle className="h-6 w-6" />
@@ -495,6 +711,97 @@ const PDV = () => {
               <div className="text-center text-xs text-gray-500 pt-2 border-t">
                 <p>Obrigado pela preferência!</p>
                 <p className="mt-1">💚 Flexi Gestor - Gestão Inteligente</p>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Seleção de Lote */}
+      <Dialog open={showBatchDialog} onOpenChange={setShowBatchDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>📦 Selecionar Lote</DialogTitle>
+          </DialogHeader>
+          
+          {productPendingBatch && (
+            <div className="space-y-4">
+              <div className="p-3 bg-indigo-50 rounded-lg">
+                <p className="font-semibold text-gray-900">{productPendingBatch.name}</p>
+                <p className="text-sm text-gray-600">SKU: {productPendingBatch.sku}</p>
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Selecione o lote:</label>
+                <Select
+                  value={selectedBatchForDialog}
+                  onValueChange={setSelectedBatchForDialog}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Escolha um lote disponível" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(() => {
+                      const batches = productBatches[productPendingBatch.id] || [];
+                      const availableBatches = batches.filter(b => b.quantity > 0);
+                      
+                      if (availableBatches.length === 0) {
+                        return (
+                          <SelectItem value="" disabled>
+                            Nenhum lote disponível
+                          </SelectItem>
+                        );
+                      }
+                      
+                      return availableBatches.map(batch => {
+                        const expiryDate = batch.expiryDate ? new Date(batch.expiryDate) : null;
+                        const daysUntilExpiry = expiryDate 
+                          ? Math.ceil((expiryDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+                          : null;
+                        
+                        const status = daysUntilExpiry !== null
+                          ? daysUntilExpiry < 0 
+                            ? '🔴 Vencido'
+                            : daysUntilExpiry <= 30
+                              ? '🟡 Vence em breve'
+                              : '🟢 OK'
+                          : '⚪ Sem validade';
+
+                        return (
+                          <SelectItem key={batch.id} value={batch.id}>
+                            <div>
+                              <div className="font-medium">{status} Lote {batch.batchNumber}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {batch.quantity} unidades disponíveis
+                                {batch.expiryDate && ` • Validade: ${new Date(batch.expiryDate).toLocaleDateString('pt-BR')}`}
+                              </div>
+                            </div>
+                          </SelectItem>
+                        );
+                      });
+                    })()}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="flex gap-2 justify-end pt-4 border-t">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowBatchDialog(false);
+                    setProductPendingBatch(null);
+                    setSelectedBatchForDialog("");
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={confirmBatchSelection}
+                  disabled={!selectedBatchForDialog}
+                  className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700"
+                >
+                  Adicionar ao Carrinho
+                </Button>
               </div>
             </div>
           )}

@@ -503,6 +503,7 @@ Compra registrada com sucesso!
                       <TableHead className="font-semibold text-slate-700 hidden sm:table-cell">🏷️ Tipo</TableHead>
                       <TableHead className="font-semibold text-slate-700">📦 Produto</TableHead>
                       <TableHead className="font-semibold text-slate-700 hidden lg:table-cell">📝 Descrição</TableHead>
+                      <TableHead className="font-semibold text-slate-700 hidden md:table-cell">💳 Pagamento</TableHead>
                       <TableHead className="font-semibold text-slate-700 hidden sm:table-cell">🔢 Qtd</TableHead>
                       <TableHead className="font-semibold text-slate-700">💰 Valor</TableHead>
                       <TableHead className="font-semibold text-slate-700">📄 Doc</TableHead>
@@ -549,6 +550,15 @@ Compra registrada com sucesso!
                           
                           <TableCell className="hidden lg:table-cell">
                             <span className="text-sm text-slate-600">{movement.description}</span>
+                          </TableCell>
+                          <TableCell className="hidden md:table-cell">
+                            {movement.paymentMethod ? (
+                              <Badge className="bg-violet-100 text-violet-800 border-violet-300 text-xs">
+                                {movement.paymentMethod.startsWith('parcelado-') ? movement.paymentMethod.replace('parcelado-', '') : movement.paymentMethod}
+                              </Badge>
+                            ) : (
+                              <span className="text-slate-400 text-sm">—</span>
+                            )}
                           </TableCell>
                           
                           <TableCell className="hidden sm:table-cell">
@@ -622,7 +632,7 @@ Compra registrada com sucesso!
 
       {/* Modal de Receita (Saída) */}
       <Dialog open={showReceipt} onOpenChange={setShowReceipt}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-green-600">
               <CheckCircle className="h-6 w-6" />
@@ -656,6 +666,14 @@ Compra registrada com sucesso!
                     <span className="text-gray-600">Tipo:</span>
                     <span className="font-semibold">Venda PDV</span>
                   </div>
+                  {selectedMovement.paymentMethod && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Pagamento:</span>
+                      <span className="font-semibold">
+                        {selectedMovement.paymentMethod.startsWith('parcelado-') ? selectedMovement.paymentMethod.replace('parcelado-', '') : selectedMovement.paymentMethod}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -738,7 +756,7 @@ Compra registrada com sucesso!
 
       {/* Modal de Compra (Entrada) */}
       <Dialog open={showPurchase} onOpenChange={setShowPurchase}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-blue-600">
               <CheckCircle className="h-6 w-6" />
