@@ -27,7 +27,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
-  register: (email: string, password: string, name: string) => Promise<boolean>;
+  register: (email: string, password: string, name: string, username?: string) => Promise<boolean>;
   updateProfile: (userData: Partial<User>) => Promise<void>;
   changePassword: (newPassword: string) => Promise<boolean>;
   resetPassword: (email: string) => Promise<boolean>;
@@ -225,7 +225,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             .insert([{
               id: authUser.id,
               email: authUser.email,
-              nome: authUser.user_metadata?.name || null,
+              nome: authUser.user_metadata?.username || authUser.user_metadata?.name || null,
               criado_em: new Date().toISOString(),
               atualizado_em: new Date().toISOString()
             }])
@@ -237,11 +237,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           }
           
           // Definir usuário local SEMPRE (mesmo se a criação falhar)
+          // Priorizar username do user_metadata sobre tudo
+          const usernameFromMetadata = authUser.user_metadata?.username;
           setUser({
             id: authUser.id,
             email: authUser.email || '',
             name: authUser.user_metadata?.name || null,
-            username: authUser.email?.split('@')[0],
+            username: usernameFromMetadata || authUser.email?.split('@')[0], // Username sempre do metadata
             role: 'user'
           });
         }
@@ -249,11 +251,57 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
 
       // Definir dados do usuário
+      // Buscar username do user_metadata (prioridade máxima)
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      
+      // Username vem APENAS do user_metadata, nunca do profile.nome
+      let usernameFromMetadata = authUser?.user_metadata?.username;
+      
+      // Se não tem username no metadata mas tem no perfil.nome (para contas antigas)
+      // e o profile.nome parece ser um username (sem espaços, tudo minúsculo/números)
+      if (!usernameFromMetadata && profile.nome) {
+        const nomeValue = profile.nome.trim();
+        // Se parece ser um username (sem espaços e não é muito longo)
+        if (!nomeValue.includes(' ') && nomeValue.length <= 20 && /^[a-z0-9_-]+$/i.test(nomeValue)) {
+          usernameFromMetadata = nomeValue;
+          // Atualizar user_metadata para ter o username
+          await supabase.auth.updateUser({
+            data: {
+              ...authUser?.user_metadata,
+              username: nomeValue
+            }
+          });
+        }
+      }
+      
+      const username = usernameFromMetadata || authUser?.email?.split('@')[0] || profile.email.split('@')[0];
+      
+      // Name pode vir do user_metadata.name ou profile.nome (se não for username)
+      // Não usar profile.nome como name se ele parece ser um username
+      let displayName = authUser?.user_metadata?.name;
+      if (!displayName && profile.nome) {
+        // Se profile.nome não é um username, usar como displayName
+        const nomeValue = profile.nome.trim();
+        if (nomeValue.includes(' ') || nomeValue.length > 20 || !/^[a-z0-9_-]+$/i.test(nomeValue)) {
+          displayName = nomeValue;
+        }
+      }
+      
+      // DEBUG: Log temporário para verificar valores
+      console.log('[AuthContext] Carregando perfil:', {
+        usernameFromMetadata,
+        profileNome: profile.nome,
+        userMetadataName: authUser?.user_metadata?.name,
+        usernameFinal: username,
+        displayNameFinal: displayName,
+        email: profile.email
+      });
+      
       setUser({
         id: profile.id,
         email: profile.email,
-        name: profile.nome,
-        username: profile.email.split('@')[0],
+        name: displayName,
+        username: username, // Sempre prioriza user_metadata.username
         role: 'user'
       });
     } catch (error) {
@@ -363,7 +411,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   // 📝 Função de registro com Supabase
-  const register = async (email: string, password: string, name: string): Promise<boolean> => {
+  const register = async (email: string, password: string, name: string, username?: string): Promise<boolean> => {
     try {
       setIsLoading(true);
       
@@ -372,7 +420,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         password,
         options: {
           data: {
-            name: name
+            name: name,
+            username: username || email.split('@')[0]
           }
         }
       });

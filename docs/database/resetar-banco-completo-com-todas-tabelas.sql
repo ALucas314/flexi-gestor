@@ -1,5 +1,5 @@
 -- ============================================
--- ☢️ LIMPAR TUDO - INCLUINDO USUÁRIOS
+-- ☢️ RESETAR BANCO COMPLETO - TODAS AS TABELAS
 -- ============================================
 -- Este script APAGA TUDO:
 -- - Todos os dados de TODAS as tabelas:
@@ -17,7 +17,7 @@
 -- ⚠️ VOCÊ PERDERÁ ACESSO À SUA CONTA!
 -- ⚠️ TERÁ QUE CRIAR UMA NOVA CONTA DEPOIS!
 -- ⚠️ TODOS OS DADOS SERÃO PERDIDOS PERMANENTEMENTE!
-
+--
 -- ============================================
 -- 1️⃣ DESABILITAR RLS TEMPORARIAMENTE
 -- ============================================
@@ -31,10 +31,10 @@ ALTER TABLE IF EXISTS public.produtos DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.perfis DISABLE ROW LEVEL SECURITY;
 
 -- ============================================
--- 2️⃣ DELETAR TODOS OS DADOS
+-- 2️⃣ DELETAR TODOS OS DADOS DAS TABELAS
 -- ============================================
 -- Ordem importante: deletar primeiro tabelas dependentes
--- Usando DELETE ao invés de TRUNCATE para evitar erros se tabela não existir
+-- Usando verificação condicional para evitar erros se tabela não existir
 
 -- Categorias
 DO $$ BEGIN
@@ -107,10 +107,9 @@ ALTER TABLE IF EXISTS public.produtos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.perfis ENABLE ROW LEVEL SECURITY;
 
 -- ============================================
--- ✅ CONCLUÍDO!
+-- 5️⃣ VERIFICAÇÃO FINAL
 -- ============================================
--- O banco está completamente VAZIO
--- Você precisará criar uma nova conta para acessar o sistema
+-- Confirma que todas as tabelas estão vazias
 
 SELECT 
   'categorias' as tabela, 
@@ -131,5 +130,20 @@ SELECT 'perfis', COUNT(*) FROM public.perfis
 UNION ALL
 SELECT 'auth.users', COUNT(*) FROM auth.users;
 
+-- ============================================
+-- ✅ CONCLUÍDO!
+-- ============================================
+-- O banco está completamente VAZIO
+-- 
 -- Resultado esperado: 0 registros em TODAS as tabelas
+--
+-- Próximos passos:
+-- 1. Criar uma nova conta no sistema
+-- 2. Executar os scripts de criação de tabelas novamente se necessário
+-- 3. Começar a usar o sistema do zero
+--
+-- Scripts úteis:
+-- - supabase-schema-completo.sql (criar estrutura)
+-- - criar-tabelas-categorias-unidades.sql (categorias e unidades)
+-- - schema-completo-com-compartilhamento.sql (compartilhamentos)
 

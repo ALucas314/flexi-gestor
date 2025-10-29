@@ -863,7 +863,7 @@ const Produtos = () => {
                             <Input
                               placeholder="Ex: FD (Fardo), PL (Pote)..."
                               value={newCustomUnit}
-                              onChange={(e) => setNewCustomUnit(e.target.value.toUpperCase())}
+                              onChange={(e) => setNewCustomUnit(e.target.value)}
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter') {
                                   e.preventDefault();
@@ -1318,7 +1318,7 @@ const Produtos = () => {
                                 <Input
                                   placeholder="Ex: FD (Fardo), PL (Pote)..."
                                   value={newCustomUnit}
-                                  onChange={(e) => setNewCustomUnit(e.target.value.toUpperCase())}
+                                  onChange={(e) => setNewCustomUnit(e.target.value)}
                                   onKeyDown={(e) => {
                                     if (e.key === 'Enter') {
                                       e.preventDefault();
@@ -1748,7 +1748,7 @@ const Produtos = () => {
                 <Input
                   placeholder="Ex: FD (Fardo), PL (Pote)..."
                   value={newCustomUnit}
-                  onChange={(e) => setNewCustomUnit(e.target.value.toUpperCase())}
+                  onChange={(e) => setNewCustomUnit(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault();

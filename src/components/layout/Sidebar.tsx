@@ -5,7 +5,6 @@ import {
   TrendingDown, 
   FileText, 
   DollarSign,
-  ShoppingCart,
   Users,
   Pin,
   PinOff
@@ -60,12 +59,6 @@ const navigationItems = [
     label: "Financeiro", 
     path: "/financeiro",
     description: "Controle financeiro"
-  },
-  { 
-    icon: ShoppingCart, 
-    label: "PDV", 
-    path: "/pdv",
-    description: "Ponto de Venda"
   },
   { 
     icon: Users, 

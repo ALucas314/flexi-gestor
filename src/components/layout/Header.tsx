@@ -249,7 +249,7 @@ export const Header = () => {
                     <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-green-500 border-2 border-white rounded-full"></div>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-900 truncate">{user?.username || user?.name}</p>
+                    <p className="text-sm font-semibold text-gray-900 truncate">{user?.username || user?.name || user?.email?.split('@')[0]}</p>
                     <p className="text-xs text-gray-600 truncate">{user?.email}</p>
                     <div className="flex items-center gap-1.5 mt-1.5">
                       <Shield className="w-3.5 h-3.5 text-indigo-600" />

@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, TrendingUp, TrendingDown, Package, ArrowRight, Settings, Edit, Trash2, Save, X, Receipt, DollarSign, BarChart3 } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, Package, ArrowRight, Settings, Edit, Trash2, Save, X, DollarSign, BarChart3 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useResponsive } from "@/hooks/use-responsive";
 
@@ -73,16 +73,6 @@ const defaultActions = [
     hoverColor: "from-amber-600 to-amber-700",
     path: "/financeiro",
     order: 4
-  },
-  {
-    id: "pdv",
-    title: "PDV",
-    description: "Ponto de Venda",
-    icon: "Receipt",
-    color: "from-indigo-500 to-indigo-600",
-    hoverColor: "from-indigo-600 to-indigo-700",
-    path: "/pdv",
-    order: 5
   }
 ];
 
@@ -117,12 +107,6 @@ const availablePages = [
     path: "/financeiro", 
     description: "Controle financeiro",
     icon: "DollarSign"
-  },
-  { 
-    name: "PDV", 
-    path: "/pdv", 
-    description: "Ponto de Venda",
-    icon: "Receipt"
   }
 ];
 
@@ -132,8 +116,7 @@ const iconMap = {
   TrendingUp: TrendingUp,
   TrendingDown: TrendingDown,
   BarChart3: BarChart3,
-  DollarSign: DollarSign,
-  Receipt: Receipt
+  DollarSign: DollarSign
 };
 
 // Cores disponíveis

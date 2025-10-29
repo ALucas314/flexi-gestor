@@ -270,3 +270,60 @@ export const adjustBatchQuantity = async (
   }
 };
 
+// Buscar todos os lotes disponíveis (com quantidade > 0) junto com informações do produto
+export interface BatchWithProduct extends Batch {
+  product: {
+    id: string;
+    name: string;
+    sku: string;
+    price: number;
+    stock: number;
+  };
+}
+
+export const getAllAvailableBatches = async (userId: string): Promise<BatchWithProduct[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('lotes')
+      .select(`
+        *,
+        produtos:produto_id (
+          id,
+          nome,
+          sku,
+          preco,
+          estoque
+        )
+      `)
+      .gt('quantidade', 0)
+      .order('criado_em', { ascending: false });
+
+    if (error) {
+      throw error;
+    }
+
+    return (data || [])
+      .filter((b: any) => b.produtos) // Filtrar lotes sem produto (caso raro)
+      .map((b: any) => ({
+        id: b.id,
+        productId: b.produto_id,
+        batchNumber: b.numero_lote,
+        quantity: b.quantidade,
+        unitCost: parseFloat(b.custo_unitario) || 0,
+        manufactureDate: undefined,
+        expiryDate: b.data_validade ? new Date(b.data_validade) : undefined,
+        createdAt: new Date(b.criado_em),
+        product: {
+          id: b.produtos.id,
+          name: b.produtos.nome,
+          sku: b.produtos.sku,
+          price: parseFloat(b.produtos.preco) || 0,
+          stock: parseFloat(b.produtos.estoque) || 0,
+        }
+      }));
+  } catch (error) {
+    console.error('Erro ao buscar lotes disponíveis:', error);
+    return [];
+  }
+};
+

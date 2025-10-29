@@ -106,7 +106,8 @@ const Login = () => {
       const success = await register(
         registerData.email,
         registerData.password,
-        registerData.name
+        registerData.name || registerData.username,
+        registerData.username
       );
       
       if (success) {

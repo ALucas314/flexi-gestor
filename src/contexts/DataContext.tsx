@@ -538,6 +538,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           metodo_pagamento: movement.paymentMethod || null,
           observacoes: movement.description,
           numero_recibo: receiptNumber,
+          status: movement.status || 'confirmado',
           usuario_id: workspaceAtivo.id // Usar ID do workspace ativo!
         }])
         .select(`

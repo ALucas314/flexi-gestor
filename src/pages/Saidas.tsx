@@ -35,7 +35,10 @@ interface StockExit {
   receiptNumber?: string; // Número único da receita
 }
 
-type StockExitFormData = Omit<StockExit, 'id' | 'productName' | 'productSku' | 'totalPrice' | 'receiptNumber'>;
+type StockExitFormData = Omit<StockExit, 'id' | 'productName' | 'productSku' | 'totalPrice' | 'receiptNumber'> & {
+  paymentMethod?: string;
+  installments?: number;
+};
 
 const Saidas = () => {
   // Estados
@@ -89,6 +92,8 @@ const Saidas = () => {
       exitDate: new Date(),
       notes: "",
       status: "pendente",
+      paymentMethod: "avista",
+      installments: 1,
     },
   });
 
@@ -157,38 +162,34 @@ const Saidas = () => {
     return selectedBatches.reduce((sum, batch) => sum + (batch.quantity || 0), 0);
   };
 
-  // Obter preço de venda do produto ou custo médio das entradas como fallback
+  // Obter preço de venda do produto ou preço da última entrada como fallback (igual ao PDV)
   const getProductPrice = (productId: string): number => {
-    const product = products.find(p => p.id === productId);
-    
-    // Se o produto tem preço definido (> 0), usar o preço de venda
-    if (product && product.price > 0) {
-      return product.price;
+    if (!productId || !movements || movements.length === 0) {
+      const product = products.find(p => p.id === productId);
+      return product?.price || 0;
     }
     
-    // Se não tem preço, calcular custo médio das entradas como fallback
-    const productEntries = movements.filter(m => 
-      m.type === 'entrada' && m.productId === productId
-    );
-
-    if (productEntries.length === 0) {
-      return 0;
-    }
-
-    // Calcular custo médio ponderado: (soma de todas as quantidades * preços) / quantidade total
-    let totalValue = 0;
-    let totalQuantity = 0;
-
-    productEntries.forEach(entry => {
-      totalValue += entry.quantity * entry.unitPrice;
-      totalQuantity += entry.quantity;
+    // Buscar preço baseado na entrada (última movimentação de entrada)
+    // Filtro mais robusto: verificar tipo e productId (pode ser string ou pode ter case diferente)
+    const productEntries = movements.filter(m => {
+      const typeStr = String(m.type || '').toLowerCase().trim();
+      const isEntry = typeStr === 'entrada';
+      const matchesProduct = String(m.productId || '') === String(productId || '');
+      return isEntry && matchesProduct;
+    }).sort((a, b) => {
+      const dateA = a.date instanceof Date ? a.date : new Date(a.date);
+      const dateB = b.date instanceof Date ? b.date : new Date(b.date);
+      return dateB.getTime() - dateA.getTime();
     });
 
-    if (totalQuantity === 0) {
-      return 0;
+    if (productEntries.length > 0 && productEntries[0].unitPrice > 0) {
+      // Retornar o preço unitário da última entrada
+      return productEntries[0].unitPrice;
     }
-
-    return totalValue / totalQuantity;
+    
+    // Se não houver entrada, buscar do produto
+    const product = products.find(p => p.id === productId);
+    return product?.price || 0;
   };
 
   // Verificar se algum lote excede a quantidade disponível
@@ -369,6 +370,13 @@ const Saidas = () => {
       }
     }
 
+    // Preparar informações de pagamento
+    const paymentMethod = data.paymentMethod || "avista";
+    const installments = data.installments || 1;
+    const paymentInfo = paymentMethod === "parcelado" 
+      ? `Pagamento: parcelado em ${installments}x`
+      : `Pagamento: à vista (${paymentMethod})`;
+    
     // Adicionar movimentação no contexto global (isso atualiza o estoque automaticamente e salva no Supabase)
     addMovement({
       type: 'saida',
@@ -376,8 +384,10 @@ const Saidas = () => {
       productName: product.name,
       quantity: totalQuantity,
       unitPrice: unitPrice,
-      description: `Saída de ${totalQuantity} unidades - ${data.customer}`,
+      description: `Saída de ${totalQuantity} unidades - ${data.customer} | ${paymentInfo}`,
       date: data.exitDate,
+      paymentMethod: paymentMethod === "parcelado" ? `parcelado-${installments}x` : paymentMethod,
+      status: "confirmado",
     });
 
     setIsAddDialogOpen(false);
@@ -613,7 +623,8 @@ const Saidas = () => {
                     customer: "",
                     exitDate: new Date(),
                     notes: "",
-                    status: "pendente",
+                    paymentMethod: "avista",
+                    installments: 1,
                   });
                 }
               }}>
@@ -804,7 +815,17 @@ const Saidas = () => {
                                             }
                                             const intValue = parseInt(value);
                                             if (!isNaN(intValue)) {
-                                              field.onChange(Math.min(intValue, selectedProduct?.stock || 0));
+                                              const maxStock = selectedProduct?.stock || 0;
+                                              if (intValue > maxStock) {
+                                                toast({
+                                                  title: "⚠️ Quantidade Maior que o Permitido!",
+                                                  description: `A quantidade máxima permitida é ${maxStock} unidades (estoque disponível).`,
+                                                  variant: "destructive",
+                                                });
+                                                field.onChange(maxStock);
+                                              } else {
+                                                field.onChange(intValue);
+                                              }
                                             }
                                           }}
                                           value={field.value === 0 ? '' : field.value}
@@ -972,15 +993,12 @@ const Saidas = () => {
                                                     if (intValue <= available) {
                                                       updateSelectedBatch(index, selectedBatch.batchId, intValue, selectedBatch.batchNumber);
                                                     } else {
-                                                      // Mostrar erro mas não bloquear completamente
                                                       toast({
-                                                        title: "⚠️ Quantidade Excede Disponível",
-                                                        description: `A quantidade ${intValue} excede o disponível de ${available} unidades. Máximo permitido: ${available} unidades.`,
+                                                        title: "⚠️ Quantidade Maior que o Permitido!",
+                                                        description: `A quantidade máxima permitida para o lote ${selectedBatch.batchNumber || ''} é ${available} unidades.`,
                                                         variant: "destructive",
-                                                        duration: 3000,
                                                       });
-                                                      // Ainda atualiza para mostrar o valor, mas mantém a validação visual
-                                                      updateSelectedBatch(index, selectedBatch.batchId, intValue, selectedBatch.batchNumber);
+                                                      updateSelectedBatch(index, selectedBatch.batchId, available, selectedBatch.batchNumber);
                                                     }
                                                   }
                                                 }}
@@ -1032,15 +1050,122 @@ const Saidas = () => {
                                         const totalStock = product?.stock || 0;
                                         const totalToExit = getTotalSelectedQuantity();
                                         const remaining = totalStock - totalToExit;
+                                        // Buscar entradas diretamente para calcular o preço
+                                        // Comparação mais robusta: normalizar IDs (pode ser UUID, string ou número)
+                                        const normalizeId = (id: any): string => {
+                                          if (!id) return '';
+                                          return String(id).trim().toLowerCase();
+                                        };
+                                        
+                                        const allMovementsForProduct = movements.filter(m => {
+                                          const mProductId = normalizeId(m.productId);
+                                          const selectedId = normalizeId(selectedProductId);
+                                          const matches = mProductId === selectedId;
+                                          return matches;
+                                        });
+                                        
+                                        // Buscar entradas (tipo pode estar em diferentes formatos)
+                                        const productEntries = allMovementsForProduct
+                                          .filter(m => {
+                                            const typeStr = String(m.type || '').toLowerCase().trim();
+                                            const isEntry = typeStr === 'entrada' || typeStr === 'entrada';
+                                            return isEntry;
+                                          })
+                                          .sort((a, b) => {
+                                            const dateA = a.date instanceof Date ? a.date : new Date(a.date);
+                                            const dateB = b.date instanceof Date ? b.date : new Date(b.date);
+                                            return dateB.getTime() - dateA.getTime();
+                                          });
+                                        
+                                        // Obter preço unitário da última entrada ou do produto
+                                        let unitPrice = 0;
+                                        if (productEntries.length > 0) {
+                                          // Pegar o primeiro (mais recente) e verificar se tem unitPrice válido
+                                          const latestEntry = productEntries[0];
+                                          if (latestEntry.unitPrice && latestEntry.unitPrice > 0) {
+                                            unitPrice = latestEntry.unitPrice;
+                                          } else if (latestEntry.total && latestEntry.quantity && latestEntry.quantity > 0) {
+                                            // Se não tiver unitPrice, calcular a partir do total e quantidade
+                                            unitPrice = latestEntry.total / latestEntry.quantity;
+                                          }
+                                        }
+                                        
+                                        // Fallback para preço do produto se não encontrou nas entradas
+                                        if (unitPrice === 0 && product && product.price > 0) {
+                                          unitPrice = product.price;
+                                        }
+                                        
+                                        const totalPrice = totalToExit * unitPrice;
+                                        
+                                        // Debug temporário - sempre logar quando houver produto selecionado
+                                        if (selectedProductId) {
+                                          console.log('=== DEBUG SAIDAS - PREÇO UNITÁRIO ===');
+                                          console.log('ProductId selecionado:', selectedProductId, `(tipo: ${typeof selectedProductId})`);
+                                          console.log('Produto encontrado:', product?.name, `(ID: ${product?.id})`);
+                                          console.log('Total de movimentações no sistema:', movements.length);
+                                          console.log('Movimentações do produto encontradas:', allMovementsForProduct.length);
+                                          console.log('Detalhes das movimentações:', allMovementsForProduct.map(m => ({
+                                            id: m.id,
+                                            type: m.type,
+                                            productId: m.productId,
+                                            productIdNormalized: normalizeId(m.productId),
+                                            productName: m.productName,
+                                            unitPrice: m.unitPrice,
+                                            total: m.total,
+                                            quantity: m.quantity,
+                                            date: m.date
+                                          })));
+                                          console.log('Entradas encontradas:', productEntries.length);
+                                          if (productEntries.length > 0) {
+                                            console.log('Detalhes da última entrada:', {
+                                              ...productEntries[0],
+                                              unitPriceCalculated: productEntries[0].unitPrice || (productEntries[0].total / productEntries[0].quantity)
+                                            });
+                                          } else {
+                                            console.log('⚠️ NENHUMA ENTRADA ENCONTRADA!');
+                                            console.log('Tipos de movimentações encontradas:', [...new Set(allMovementsForProduct.map(m => m.type))]);
+                                          }
+                                          console.log('Preço unitário final calculado:', unitPrice);
+                                          console.log('Valor total:', totalPrice);
+                                          console.log('=====================================');
+                                        }
+                                        
                                         return (
-                                          <div className="flex items-center justify-between pt-2 border-t border-red-200">
-                                            <span className="text-sm font-medium text-gray-900">
-                                              📦 Estoque Restante:
-                                            </span>
-                                            <span className={`text-lg font-bold ${remaining < 0 ? 'text-red-600' : remaining < (totalStock * 0.2) ? 'text-yellow-600' : 'text-green-600'}`}>
-                                              {Math.max(0, remaining)} unidades
-                                            </span>
-                                          </div>
+                                          <>
+                                            {totalToExit > 0 && (
+                                              <>
+                                                <div className="flex items-center justify-between pt-2 border-t border-red-200">
+                                                  <span className="text-sm font-medium text-gray-900">
+                                                    💵 Preço Unitário:
+                                                  </span>
+                                                  <span className="text-sm font-semibold text-gray-700">
+                                                    {unitPrice > 0 ? `R$ ${unitPrice.toFixed(2).replace('.', ',')}` : 'Não encontrado'}
+                                                  </span>
+                                                </div>
+                                                <div className="flex items-center justify-between pt-2 border-t border-red-200">
+                                                  <span className="text-sm font-medium text-gray-900">
+                                                    💰 Valor Total:
+                                                  </span>
+                                                  <span className="text-lg font-bold text-blue-600">
+                                                    R$ {totalPrice.toFixed(2).replace('.', ',')}
+                                                  </span>
+                                                </div>
+                                                {unitPrice === 0 && productEntries.length === 0 && (
+                                                  <div className="pt-2 text-xs text-orange-600 bg-orange-50 p-2 rounded border border-orange-200">
+                                                    ⚠️ Este produto não possui entradas registradas. O preço será R$ 0,00. Por favor, cadastre uma entrada no módulo "Entradas".
+                                                  </div>
+                                                )}
+                                              </>
+                                            )}
+                                            <div className="flex items-center justify-between pt-2 border-t border-red-200">
+                                              <span className="text-sm font-medium text-gray-900">
+                                                📦 Estoque Restante:
+                                              </span>
+                                              <span className={`text-lg font-bold ${remaining < 0 ? 'text-red-600' : remaining < (totalStock * 0.2) ? 'text-yellow-600' : 'text-green-600'}`}>
+                                                {Math.max(0, remaining)} unidades
+                                              </span>
+                                            </div>
+                                          </>
                                         );
                                       })()}
                                     </CardContent>
@@ -1052,7 +1177,7 @@ const Saidas = () => {
                         );
                       })()}
                       
-                        {/* Segunda linha - Data de Saída e Status */}
+                        {/* Segunda linha - Data de Saída e Forma de Pagamento */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-3">
                           <FormField
                             control={form.control}
@@ -1077,22 +1202,30 @@ const Saidas = () => {
                           />
                           <FormField
                             control={form.control}
-                            name="status"
+                            name="paymentMethod"
                             render={({ field }) => (
                               <FormItem className="space-y-3">
                                 <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
-                                  🎯 Status
+                                  💳 Forma de Pagamento
                                 </FormLabel>
-                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                <Select onValueChange={(v) => {
+                                  field.onChange(v);
+                                  if (v !== "parcelado") {
+                                    form.setValue("installments", 1);
+                                  }
+                                }} defaultValue={field.value || "avista"}>
                                   <FormControl>
                                     <SelectTrigger className="h-12 sm:h-10 border-neutral-200 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 text-base sm:text-sm">
                                       <SelectValue />
                                     </SelectTrigger>
                                   </FormControl>
                                   <SelectContent>
-                                    <SelectItem value="pendente">⏳ Pendente</SelectItem>
-                                    <SelectItem value="confirmado">✅ Confirmado</SelectItem>
-                                    <SelectItem value="cancelado">❌ Cancelado</SelectItem>
+                                    <SelectItem value="avista">À vista</SelectItem>
+                                    <SelectItem value="pix">Pix</SelectItem>
+                                    <SelectItem value="debito">Cartão débito</SelectItem>
+                                    <SelectItem value="credito">Cartão crédito</SelectItem>
+                                    <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                                    <SelectItem value="parcelado">Parcelado</SelectItem>
                                   </SelectContent>
                                 </Select>
                                 <FormMessage />
@@ -1100,6 +1233,41 @@ const Saidas = () => {
                             )}
                           />
                         </div>
+                        
+                        {/* Terceira linha - Parcelas (se parcelado) */}
+                        {form.watch("paymentMethod") === "parcelado" && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-3">
+                            <FormField
+                              control={form.control}
+                              name="installments"
+                              render={({ field }) => (
+                                <FormItem className="space-y-3">
+                                  <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
+                                    📊 Parcelas
+                                  </FormLabel>
+                                  <Select 
+                                    value={String(field.value || 1)} 
+                                    onValueChange={(v) => field.onChange(Number(v))}
+                                  >
+                                    <FormControl>
+                                      <SelectTrigger className="h-12 sm:h-10 border-neutral-200 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 text-base sm:text-sm">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                      {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
+                                        <SelectItem key={n} value={String(n)}>
+                                          {n}x
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+                        )}
                         
                         {/* Campo de Observações */}
                         <FormField
@@ -1141,7 +1309,8 @@ const Saidas = () => {
                               customer: "",
                               exitDate: new Date(),
                               notes: "",
-                              status: "pendente",
+                              paymentMethod: "avista",
+                              installments: 1,
                             });
                           }}
                           className="w-full sm:w-auto border-2 border-neutral-300 text-neutral-700 hover:bg-neutral-50 h-9 text-sm"
