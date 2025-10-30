@@ -20,6 +20,7 @@ import { getBatchesByProduct, updateBatchQuantity } from "@/lib/batches";
 import { useAuth } from "@/contexts/AuthContext";
 import { printReceipt, downloadReceipt } from "@/lib/receiptPDF";
 import { StockExitCart } from "@/components/saidas/StockExitCart";
+import { supabase } from "@/lib/supabase";
 
 // Interface da saída de estoque
 interface StockExit {
@@ -66,6 +67,9 @@ const Saidas = () => {
   const [productSearchOpen, setProductSearchOpen] = useState(false);
   const [isCartPanelOpen, setIsCartPanelOpen] = useState(false);
   const cartToggleRef = React.useRef<HTMLButtonElement | null>(null);
+  const [customerSearchTerm, setCustomerSearchTerm] = useState("");
+  const [customers, setCustomers] = useState<Array<{id: string, code: string, name: string}>>([]);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
 
   // Carrinho de vendas
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
@@ -859,6 +863,29 @@ const Saidas = () => {
     } catch {}
   }, [cartItems]);
 
+  // Carregar clientes do banco de dados
+  useEffect(() => {
+    const loadCustomers = async () => {
+      if (!user?.id) return;
+      try {
+        const { data, error } = await supabase
+          .from('clientes')
+          .select('id, codigo, nome')
+          .order('nome', { ascending: true });
+        if (error) throw error;
+        const mapped = (data || []).map((c: any) => ({
+          id: c.id,
+          code: String(c.codigo ?? c.code ?? ''),
+          name: c.nome ?? c.name,
+        }));
+        setCustomers(mapped);
+      } catch (error: any) {
+        console.error('Erro ao carregar clientes:', error);
+      }
+    };
+    loadCustomers();
+  }, [user?.id]);
+
 
   // Filtros
   const filteredExits = exits.filter(exit =>
@@ -912,6 +939,8 @@ const Saidas = () => {
             setSelectedBatches([]);
             setProductSearchTerm("");
             setProductSearchOpen(false);
+            setSelectedCustomerId("");
+            setCustomerSearchTerm("");
             form.reset({
               productId: "",
               quantity: 0,
@@ -1069,21 +1098,104 @@ const Saidas = () => {
                           <FormField
                             control={form.control}
                             name="customer"
-                            render={({ field }) => (
-                              <FormItem className="space-y-3">
-                                <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
-                                  👤 Cliente
-                                </FormLabel>
-                                <FormControl>
-                                  <Input 
-                                    placeholder="Nome do cliente" 
-                                    {...field} 
-                                    className="h-12 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 text-base sm:text-sm"
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
+                            render={({ field }) => {
+                              const selectedCustomer = customers.find(c => c.id === selectedCustomerId);
+                              const filteredCustomers = customers.filter(customer =>
+                                customer.name.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
+                                customer.code.toLowerCase().includes(customerSearchTerm.toLowerCase())
+                              );
+
+                              return (
+                                <FormItem className="space-y-3">
+                                  <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
+                                    👤 Cliente
+                                  </FormLabel>
+                                  <div className="relative">
+                                    {selectedCustomer ? (
+                                      <div className="flex items-center gap-2">
+                                        <Input
+                                          value={selectedCustomer.name}
+                                          readOnly
+                                          className="h-12 sm:h-10 border-2 border-neutral-200 rounded-xl pr-10 cursor-pointer"
+                                          onClick={() => {
+                                            setCustomerSearchTerm("");
+                                            setSelectedCustomerId("");
+                                            field.onChange("");
+                                          }}
+                                        />
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => {
+                                            setCustomerSearchTerm("");
+                                            setSelectedCustomerId("");
+                                            field.onChange("");
+                                          }}
+                                          className="absolute right-2 h-7 w-7 p-0"
+                                        >
+                                          <X className="h-4 w-4" />
+                                        </Button>
+                                      </div>
+                                    ) : (
+                                      <>
+                                        <div className="relative">
+                                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                          <Input
+                                            placeholder="Digite o código ou nome do cliente..."
+                                            value={customerSearchTerm}
+                                            onChange={(e) => {
+                                              setCustomerSearchTerm(e.target.value);
+                                              if (e.target.value === '') {
+                                                setSelectedCustomerId("");
+                                                field.onChange("");
+                                              }
+                                            }}
+                                            onKeyDown={(e) => {
+                                              if (e.key === 'Enter' && filteredCustomers.length === 1) {
+                                                setSelectedCustomerId(filteredCustomers[0].id);
+                                                field.onChange(filteredCustomers[0].name);
+                                                setCustomerSearchTerm("");
+                                              } else if (e.key === 'Escape') {
+                                                setCustomerSearchTerm("");
+                                              }
+                                            }}
+                                            className="h-12 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 pl-10 text-base sm:text-sm"
+                                          />
+                                        </div>
+                                        
+                                        {customerSearchTerm.trim() !== '' && (
+                                          <div className="absolute z-50 w-full mt-1 bg-white border-2 border-neutral-200 rounded-xl shadow-lg max-h-[300px] overflow-y-auto">
+                                            {filteredCustomers.length === 0 ? (
+                                              <div className="p-4 text-center text-sm text-muted-foreground">
+                                                Nenhum cliente encontrado
+                                              </div>
+                                            ) : (
+                                              filteredCustomers.slice(0, 5).map(customer => (
+                                                <button
+                                                  key={customer.id}
+                                                  type="button"
+                                                  className="w-full px-4 py-3 text-left hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus:outline-none border-b last:border-b-0 transition-colors"
+                                                  onClick={() => {
+                                                    setSelectedCustomerId(customer.id);
+                                                    field.onChange(customer.name);
+                                                    setCustomerSearchTerm("");
+                                                  }}
+                                                >
+                                                  <div className="font-medium">{customer.name}</div>
+                                                  <div className="text-xs text-muted-foreground">Código: {customer.code}</div>
+                                                </button>
+                                              ))
+                                            )}
+                                          </div>
+                                        )}
+                                      </>
+                                    )}
+                                  </div>
+                                  <FormMessage />
+                                </FormItem>
+                              );
+                            }}
                           />
                         </div>
 
@@ -2149,7 +2261,7 @@ const Saidas = () => {
               {/* Botões de Ação */}
               <div className="space-y-2 pt-2">
                 <Button 
-                  className="w-full bg-green-600 hover:bg-green-700"
+                  className="w-full bg-green-600 hover:bg-green-700 text-white"
                   onClick={() => handleDownloadReceipt(selectedExit)}
                 >
                   <Share2 className="mr-2 h-4 w-4" />

@@ -7,6 +7,7 @@ import {
   DollarSign,
   Users,
   Truck,
+  UserCircle,
   Settings,
   Pin,
   PinOff
@@ -43,6 +44,12 @@ const navigationItems = [
     label: "Fornecedores", 
     path: "/fornecedores",
     description: "Cadastro de fornecedores"
+  },
+  { 
+    icon: UserCircle, 
+    label: "Clientes", 
+    path: "/clientes",
+    description: "Cadastro de clientes"
   },
   { 
     icon: TrendingUp, 
