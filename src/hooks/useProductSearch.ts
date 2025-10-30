@@ -18,7 +18,8 @@ export const useProductSearch = (products: Product[]) => {
     const term = searchTerm.toLowerCase().trim();
     return products.filter(
       (product) =>
-        !product.managedByBatch &&
+        // Removido filtro que excluía produtos gerenciados por lote.
+        // Agora devolvemos qualquer produto com estoque > 0 que case nome ou SKU.
         product.stock &&
         product.stock > 0 &&
         (product.name.toLowerCase().includes(term) ||
