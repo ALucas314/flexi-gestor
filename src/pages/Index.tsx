@@ -1,4 +1,4 @@
-import { Package, DollarSign, TrendingUp, AlertTriangle, BarChart3, Users, ShoppingCart, ArrowRight, Eye, EyeOff } from "lucide-react";
+import { Package, DollarSign, TrendingUp, AlertTriangle, BarChart3, Users, ShoppingCart, ArrowRight, Eye, EyeOff, TrendingDown, Bell, Clock, Activity, Info, CheckCircle, AlertCircle, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatsCard } from "@/components/dashboard/StatsCard";
 import { RecentMovements } from "@/components/dashboard/RecentMovements";
@@ -7,16 +7,24 @@ import { SalesChart } from "@/components/dashboard/SalesChart";
 import { ProductsChart } from "@/components/dashboard/ProductsChart";
 import { useData } from "@/contexts/DataContext";
 import { useResponsive } from "@/hooks/use-responsive";
+import { useNavigate } from "react-router-dom";
 import React from "react";
 
 const Index = () => {
-  const { getDashboardStats, movements, products } = useData();
+  const { getDashboardStats, movements, products, notifications } = useData();
   const { isMobile, isTablet, screenWidth } = useResponsive();
+  const navigate = useNavigate();
   const [stats, setStats] = React.useState(getDashboardStats());
   const [showQuickActions, setShowQuickActions] = React.useState(() => {
     const saved = localStorage.getItem('flexi-gestor-show-quick-actions');
     return saved !== null ? JSON.parse(saved) : true;
   });
+
+  // Pegar última notificação
+  const lastNotification = React.useMemo(() => {
+    const sorted = [...notifications].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    return sorted[0] || null;
+  }, [notifications]);
 
   // Quantidade de vendas (saídas) realizadas hoje
   const todaySalesCount = React.useMemo(() => {
@@ -39,8 +47,9 @@ const Index = () => {
     localStorage.setItem('flexi-gestor-show-quick-actions', JSON.stringify(showQuickActions));
   }, [showQuickActions]);
 
-  // Pegar movimentações mais recentes
+  // Pegar movimentações mais recentes (apenas entradas e saídas)
   const recentMovements = movements
+    .filter(m => m.type === 'entrada' || m.type === 'saida') // Filtrar apenas entradas e saídas
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice(0, 4);
 
@@ -52,19 +61,21 @@ const Index = () => {
 
   return (
     <main className={`flex-1 ${isMobile ? 'p-2 xs:p-3' : 'p-3 sm:p-6'} ${isMobile ? 'space-y-4' : 'space-y-6 sm:space-y-10'} bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 min-h-screen`}>
-      {/* Hero Section com Design Profissional - Responsivo */}
+      {/* Hero Section com Design Profissional e Informações Detalhadas - Responsivo */}
       <div className={`relative ${isMobile ? 'rounded-xl mt-6' : 'rounded-2xl sm:rounded-3xl mt-0'} overflow-hidden bg-gradient-to-br from-blue-300 via-indigo-400 via-purple-400 to-pink-300 text-slate-800 ${isMobile ? 'shadow-lg' : 'shadow-xl sm:shadow-2xl'} border border-slate-200/50`}>
-        {/* Padrão geométrico moderno em vez da imagem */}
+        {/* Padrão geométrico moderno */}
         <div className="absolute inset-0 opacity-10">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_80%,rgba(120,119,198,0.3)_0%,transparent_50%)]"></div>
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(255,119,198,0.3)_0%,transparent_50%)]"></div>
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_40%_40%,rgba(120,198,255,0.2)_0%,transparent_50%)]"></div>
         </div>
         <div className="absolute inset-0 bg-gradient-to-r from-blue-200/50 via-purple-200/40 to-pink-200/50" />
+        
         <div className={`relative ${isMobile ? 'p-3 xs:p-4' : 'p-4 sm:p-8 md:p-12'}`}>
-          <div className="max-w-5xl">
-            <div className={`flex items-center ${isMobile ? 'space-x-2' : 'space-x-4'} ${isMobile ? 'mb-3' : 'mb-4 sm:mb-6'}`}>
-              <div>
+          <div className="max-w-7xl mx-auto space-y-6">
+            {/* Header */}
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+              <div className="flex-1">
                 <h1 className={`${isMobile ? 'text-2xl xs:text-3xl' : 'text-3xl sm:text-4xl md:text-5xl lg:text-6xl'} font-black ${isMobile ? 'mb-2' : 'mb-3 sm:mb-4'} tracking-tight bg-gradient-to-r from-slate-800 via-blue-700 to-purple-700 bg-clip-text text-transparent`}>
                   🚀 Flexi Gestor
                 </h1>
@@ -73,24 +84,109 @@ const Index = () => {
                 </p>
               </div>
             </div>
-            
-            {/* Quick Stats no Hero com Design Melhorado - Responsivo */}
-            <div className={`grid ${isMobile ? 'grid-cols-2' : 'grid-cols-2 md:grid-cols-4'} ${isMobile ? 'gap-2' : 'gap-3 sm:gap-6'} ${isMobile ? 'mt-4' : 'mt-6 sm:mt-10'}`}>
-              <div className={`bg-white/60 backdrop-blur-md ${isMobile ? 'rounded-lg p-2' : 'rounded-xl sm:rounded-2xl p-3 sm:p-6'} text-center border border-white/40 hover:bg-white/80 transition-all duration-300 hover:scale-105 shadow-md overflow-hidden`}>
-                <div className={`${isMobile ? 'text-lg' : 'text-xl sm:text-2xl md:text-3xl'} font-black ${isMobile ? 'mb-1' : 'mb-1 sm:mb-2'} text-slate-800 truncate`}>{stats.totalProducts}</div>
-                <div className="text-[10px] xs:text-xs sm:text-sm font-medium opacity-90 text-slate-700 leading-tight px-1 break-words hyphens-auto">Produtos</div>
+
+            {/* Cards de Informações Detalhadas */}
+            <div className={`grid ${isMobile ? 'grid-cols-1' : 'grid-cols-2 lg:grid-cols-3'} gap-3 sm:gap-4`}>
+              {/* Card: Total de Movimentações */}
+              <div className={`relative bg-white/30 backdrop-blur-md ${isMobile ? 'rounded-lg p-3' : 'rounded-xl p-4 sm:p-5'} border border-white/40 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.02] group`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className={`${isMobile ? 'w-8 h-8' : 'w-10 h-10'} bg-gradient-to-br from-blue-500 to-blue-600 ${isMobile ? 'rounded-lg' : 'rounded-xl'} flex items-center justify-center shadow-md group-hover:shadow-lg transition-all duration-300`}>
+                        <Activity className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'} text-white`} />
+                      </div>
+                      <span className={`${isMobile ? 'text-xs' : 'text-sm'} font-semibold text-slate-700 uppercase tracking-wide`}>Total Movimentações</span>
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <span className={`${isMobile ? 'text-2xl' : 'text-3xl sm:text-4xl'} font-black text-slate-800`}>{movements.length}</span>
+                      <span className={`${isMobile ? 'text-xs' : 'text-sm'} text-slate-600 opacity-75`}>registros</span>
+                    </div>
+                    <div className={`${isMobile ? 'mt-2' : 'mt-3'} flex items-center gap-2 ${isMobile ? 'text-xs' : 'text-sm'} text-slate-600`}>
+                      <div className="flex items-center gap-1">
+                        <TrendingUp className={`${isMobile ? 'w-3 h-3' : 'w-4 h-4'} text-emerald-600`} />
+                        <span className="font-medium text-emerald-700">{movements.filter(m => m.type === 'entrada').length} entradas</span>
+                      </div>
+                      <span className="text-slate-400">•</span>
+                      <div className="flex items-center gap-1">
+                        <TrendingDown className={`${isMobile ? 'w-3 h-3' : 'w-4 h-4'} text-red-600`} />
+                        <span className="font-medium text-red-700">{movements.filter(m => m.type === 'saida').length} saídas</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div className={`bg-white/60 backdrop-blur-md ${isMobile ? 'rounded-lg p-2' : 'rounded-xl sm:rounded-2xl p-3 sm:p-6'} text-center border border-white/40 hover:bg-white/80 transition-all duration-300 hover:scale-105 shadow-md overflow-hidden`}>
-                <div className={`${isMobile ? 'text-lg' : 'text-xl sm:text-2xl md:text-3xl'} font-black ${isMobile ? 'mb-1' : 'mb-1 sm:mb-2'} text-slate-800 truncate`}>{movements.length}</div>
-                <div className="text-[10px] xs:text-xs sm:text-sm font-medium opacity-90 text-slate-700 leading-tight px-1 break-words hyphens-auto line-clamp-2">Movimentações</div>
+
+              {/* Card: Última Atividade */}
+              <div className={`relative bg-white/30 backdrop-blur-md ${isMobile ? 'rounded-lg p-3' : 'rounded-xl p-4 sm:p-5'} border border-white/40 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.02] group`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className={`${isMobile ? 'w-8 h-8' : 'w-10 h-10'} bg-gradient-to-br from-purple-500 to-purple-600 ${isMobile ? 'rounded-lg' : 'rounded-xl'} flex items-center justify-center shadow-md group-hover:shadow-lg transition-all duration-300`}>
+                        <Clock className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'} text-white`} />
+                      </div>
+                      <span className={`${isMobile ? 'text-xs' : 'text-sm'} font-semibold text-slate-700 uppercase tracking-wide`}>Última Atividade</span>
+                    </div>
+                    {recentMovements[0] ? (
+                      <>
+                        <div className={`flex items-baseline gap-2 mb-2`}>
+                          <span className={`${isMobile ? 'text-sm' : 'text-base'} font-bold text-slate-800 truncate`}>
+                            {recentMovements[0].productName || 'Sem nome'}
+                          </span>
+                        </div>
+                        <div className={`flex items-center gap-2 ${isMobile ? 'text-xs' : 'text-sm'} text-slate-600`}>
+                          <span className={`px-2 py-0.5 ${recentMovements[0].type === 'entrada' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'} ${isMobile ? 'rounded' : 'rounded-md'} font-medium`}>
+                            {recentMovements[0].type === 'entrada' ? '📥 Entrada' : '📤 Saída'}
+                          </span>
+                          <span className="text-slate-600">
+                            {new Date(recentMovements[0].date).toLocaleString('pt-BR', { 
+                              day: '2-digit', 
+                              month: '2-digit', 
+                              hour: '2-digit', 
+                              minute: '2-digit' 
+                            })}
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <p className={`${isMobile ? 'text-xs' : 'text-sm'} text-slate-500 italic`}>Nenhuma movimentação registrada</p>
+                    )}
+                  </div>
+                </div>
               </div>
-              <div className={`bg-white/60 backdrop-blur-md ${isMobile ? 'rounded-lg p-2' : 'rounded-xl sm:rounded-2xl p-3 sm:p-6'} text-center border border-white/40 hover:bg-white/80 transition-all duration-300 hover:scale-105 shadow-md overflow-hidden`}>
-                <div className={`${isMobile ? 'text-lg' : 'text-xl sm:text-2xl md:text-3xl'} font-black ${isMobile ? 'mb-1' : 'mb-1 sm:mb-2'} text-slate-800 truncate`}>R$ {stats.stockValue.toFixed(0)}</div>
-                <div className="text-[10px] xs:text-xs sm:text-sm font-medium opacity-90 text-slate-700 leading-tight px-1 break-words hyphens-auto">Valor Estoque</div>
-              </div>
-              <div className={`bg-white/60 backdrop-blur-md ${isMobile ? 'rounded-lg p-2' : 'rounded-xl sm:rounded-2xl p-3 sm:p-6'} text-center border border-white/40 hover:bg-white/80 transition-all duration-300 hover:scale-105 shadow-md overflow-hidden`}>
-                <div className={`${isMobile ? 'text-lg' : 'text-xl sm:text-2xl md:text-3xl'} font-black ${isMobile ? 'mb-1' : 'mb-1 sm:mb-2'} text-slate-800 truncate`}>{stats.lowStockCount}</div>
-                <div className="text-[10px] xs:text-xs sm:text-sm font-medium opacity-90 text-slate-700 leading-tight px-1 break-words hyphens-auto">Estoque Baixo</div>
+
+              {/* Card: Última Notificação */}
+              <div className={`relative bg-white/30 backdrop-blur-md ${isMobile ? 'rounded-lg p-3' : 'rounded-xl p-4 sm:p-5'} border border-white/40 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.02] group ${isMobile ? 'col-span-1' : 'lg:col-span-1 lg:col-start-3'}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className={`${isMobile ? 'w-8 h-8' : 'w-10 h-10'} bg-gradient-to-br from-amber-500 to-amber-600 ${isMobile ? 'rounded-lg' : 'rounded-xl'} flex items-center justify-center shadow-md group-hover:shadow-lg transition-all duration-300`}>
+                        <Bell className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'} text-white`} />
+                      </div>
+                      <span className={`${isMobile ? 'text-xs' : 'text-sm'} font-semibold text-slate-700 uppercase tracking-wide`}>Última Notificação</span>
+                    </div>
+                    {lastNotification ? (
+                      <>
+                        <div className={`flex items-center gap-2 mb-2`}>
+                          {lastNotification.type === 'success' && <CheckCircle className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'} text-emerald-600 flex-shrink-0`} />}
+                          {lastNotification.type === 'error' && <XCircle className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'} text-red-600 flex-shrink-0`} />}
+                          {lastNotification.type === 'warning' && <AlertCircle className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'} text-amber-600 flex-shrink-0`} />}
+                          {lastNotification.type === 'info' && <Info className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'} text-blue-600 flex-shrink-0`} />}
+                          <span className={`${isMobile ? 'text-xs' : 'text-sm'} font-bold text-slate-800 line-clamp-1`}>
+                            {lastNotification.title}
+                          </span>
+                        </div>
+                        <p className={`${isMobile ? 'text-xs' : 'text-sm'} text-slate-600 line-clamp-2 mb-2`}>
+                          {lastNotification.message}
+                        </p>
+                        <p className={`${isMobile ? 'text-xs' : 'text-xs'} text-slate-500`}>
+                          {new Date(lastNotification.timestamp).toLocaleString('pt-BR')}
+                        </p>
+                      </>
+                    ) : (
+                      <p className={`${isMobile ? 'text-xs' : 'text-sm'} text-slate-500 italic`}>Nenhuma notificação</p>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
