@@ -1361,11 +1361,7 @@ const Entradas = () => {
                     return (
                     <Card className="border-2 border-indigo-200">
                       <CardHeader className="pb-3">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <CardTitle className="text-lg font-semibold text-gray-900">📅 Lotes do Produto</CardTitle>
-                            <p className="text-sm text-gray-600">{selectedProduct?.name || 'Produto selecionado'}</p>
-                          </div>
+                        <div className="flex items-center justify-end">
                           <Button
                             type="button"
                             size="sm"
@@ -1920,7 +1916,7 @@ const Entradas = () => {
             <div className="relative flex-1 max-w-md w-full">
               <Search className="absolute left-3 sm:left-4 top-1/2 transform -translate-y-1/2 text-neutral-400 w-4 h-4 sm:w-5 sm:h-5" />
               <Input
-                placeholder="🔍 Buscar entradas por produto ou fornecedor..."
+                placeholder="Buscar entradas por produto ou fornecedor..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10 sm:pl-12 h-11 sm:h-14 border-2 border-neutral-200 rounded-xl sm:rounded-2xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-neutral-50"

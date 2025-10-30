@@ -1125,12 +1125,13 @@ const Produtos = () => {
       {/* Busca e Filtros */}
       <Card className="p-3 sm:p-6">
         <div className="flex gap-2 sm:gap-3">
-          <div className="flex-1">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 sm:left-4 top-1/2 transform -translate-y-1/2 text-neutral-400 w-4 h-4 sm:w-5 sm:h-5" />
             <Input
-              placeholder="🔍 Buscar por código ou nome do produto..."
+              placeholder="Buscar por código ou nome do produto..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="h-10 sm:h-10 text-base sm:text-sm"
+              className="pl-10 sm:pl-12 h-10 sm:h-10 text-base sm:text-sm"
             />
           </div>
         </div>

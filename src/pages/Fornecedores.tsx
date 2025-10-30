@@ -8,7 +8,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Plus, Trash2, Edit, Phone, User2, Hash, Truck } from 'lucide-react';
+import { Plus, Trash2, Edit, Phone, User2, Hash, Truck, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabase';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
@@ -82,6 +82,7 @@ const Fornecedores = () => {
   const [editing, setEditing] = useState<Supplier | null>(null);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [supplierToDelete, setSupplierToDelete] = useState<Supplier | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const form = useForm<SupplierFormData>({
     resolver: zodResolver(supplierSchema),
@@ -89,6 +90,45 @@ const Fornecedores = () => {
   });
 
   const nextCode = useMemo(() => generateNextSupplierCode(suppliers), [suppliers]);
+
+  // Filtrar fornecedores baseado no termo de busca (código e nome)
+  const filteredSuppliers = useMemo(() => {
+    // Se não há termo de busca, retorna todos os fornecedores
+    const search = searchTerm?.trim() || '';
+    if (search === '') {
+      return suppliers;
+    }
+    
+    const term = search.toLowerCase().trim();
+    
+    if (!suppliers || suppliers.length === 0) {
+      return [];
+    }
+    
+    return suppliers.filter((s) => {
+      if (!s) return false;
+      
+      // Busca por código
+      const code = s.code;
+      if (code !== null && code !== undefined && code !== '') {
+        const codeStr = String(code).trim().toLowerCase();
+        // Compara diretamente ou se começa com o termo
+        if (codeStr === term || codeStr.startsWith(term)) {
+          return true;
+        }
+      }
+      
+      // Busca por nome - busca parcial
+      if (s.name) {
+        const name = String(s.name).toLowerCase().trim();
+        if (name.includes(term)) {
+          return true;
+        }
+      }
+      
+      return false;
+    });
+  }, [suppliers, searchTerm]);
 
   // Carrega fornecedores do Supabase
   const loadSuppliers = async () => {
@@ -192,19 +232,37 @@ const Fornecedores = () => {
     <main className="flex-1 p-2 sm:p-6 space-y-3 sm:space-y-6">
       {/* Header */}
       <div className="flex flex-col items-center sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 mt-4 sm:mt-0">
-        <div className="text-center sm:text-left">
+        <div className="text-center sm:text-left w-full sm:w-auto">
           <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent flex items-center gap-2 justify-center sm:justify-start">
             <Truck className="w-8 h-8 text-blue-600" />
             Fornecedores
           </h1>
           <p className="text-xs sm:text-base text-muted-foreground">Gerencie seus fornecedores cadastrados</p>
         </div>
-        <div className="ml-auto">
-          <Button onClick={onOpenAdd} className="bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-xl sm:rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-200 transform hover:scale-105">
-            <Plus className="h-4 w-4 mr-2" /> Novo Fornecedor
+        <div className="w-full sm:w-auto">
+          <Button onClick={onOpenAdd} className="w-full sm:w-auto bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-xl sm:rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-200 transform hover:scale-105">
+            <Plus className="h-4 w-4 sm:h-5 sm:w-5 mr-2" /> Novo Fornecedor
           </Button>
         </div>
       </div>
+
+      {/* Campo de Busca */}
+      <Card className="shadow-lg">
+        <CardContent className="p-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-500 w-5 h-5" />
+            <Input
+              type="text"
+              placeholder="Buscar por código ou nome..."
+              value={searchTerm || ''}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+              }}
+              className="pl-10 bg-white border-slate-300"
+            />
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Tabela */}
       <Card className="shadow-lg">
@@ -225,12 +283,14 @@ const Fornecedores = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {suppliers.length === 0 ? (
+                {filteredSuppliers.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-10 text-neutral-500">Nenhum fornecedor cadastrado</TableCell>
+                    <TableCell colSpan={5} className="text-center py-10 text-neutral-500">
+                      {suppliers.length === 0 ? 'Nenhum fornecedor cadastrado' : 'Nenhum fornecedor encontrado'}
+                    </TableCell>
                   </TableRow>
                 ) : (
-                  suppliers.map((s) => (
+                  filteredSuppliers.map((s) => (
                     <TableRow key={s.id} className="border-neutral-100 hover:bg-neutral-50 transition-colors duration-150">
                       <TableCell className="px-4 py-3 font-mono text-sm">{s.code}</TableCell>
                       <TableCell className="px-4 py-3">{s.name}</TableCell>
@@ -346,7 +406,9 @@ const Fornecedores = () => {
               />
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>Cancelar</Button>
-                <Button type="submit">Salvar</Button>
+                <Button type="submit" className="bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-xl sm:rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-200 transform hover:scale-105">
+                  Salvar
+                </Button>
               </DialogFooter>
             </form>
           </Form>

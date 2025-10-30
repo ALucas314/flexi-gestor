@@ -275,12 +275,7 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
     <>
     <div className="space-y-4">
       {/* Cabeçalho com botão de adicionar */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold text-gray-900">📅 Lotes do Produto</h3>
-          <p className="text-sm text-gray-600">{productName}</p>
-        </div>
-        
+      <div className="flex items-center justify-end">
         <Button 
           onClick={async () => {
             setIsDialogOpen(!isDialogOpen);

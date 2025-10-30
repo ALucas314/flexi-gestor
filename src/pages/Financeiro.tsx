@@ -439,7 +439,7 @@ Compra registrada com sucesso!
             <CardHeader className="pb-4">
               <CardTitle className="flex items-center gap-2 text-slate-800">
                 <Filter className="w-5 h-5 text-slate-600" />
-                🔍 Filtros e Busca
+                Filtros e Busca
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -448,7 +448,7 @@ Compra registrada com sucesso!
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-500 w-5 h-5" />
                   <Input
-                    placeholder="🔍 Buscar movimentações..."
+                    placeholder="Buscar movimentações..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="pl-10 bg-white border-slate-300"
