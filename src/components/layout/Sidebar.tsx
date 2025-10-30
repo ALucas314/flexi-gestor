@@ -6,6 +6,7 @@ import {
   FileText, 
   DollarSign,
   Users,
+  Settings,
   Pin,
   PinOff
 } from "lucide-react";
@@ -65,6 +66,12 @@ const navigationItems = [
     label: "Compartilhar", 
     path: "/compartilhar",
     description: "Gerenciar acesso"
+  },
+  { 
+    icon: Settings, 
+    label: "Configurações", 
+    path: "/configuracoes",
+    description: "Configurações do sistema"
   }
 ];
 
@@ -95,8 +102,8 @@ export const Sidebar = ({ className, variant = 'overlay', onNavigate }: SidebarP
         return true;
       }
       
-      // Compartilhar NUNCA disponível em workspace compartilhado
-      if (item.path === '/compartilhar') {
+      // Compartilhar e Configurações NUNCA disponível em workspace compartilhado
+      if (item.path === '/compartilhar' || item.path === '/configuracoes') {
         return false;
       }
       
@@ -138,12 +145,7 @@ export const Sidebar = ({ className, variant = 'overlay', onNavigate }: SidebarP
   }, []);
 
   return (
-    <div className={cn(
-      "flex flex-col bg-gradient-to-br from-indigo-50 via-indigo-100/60 to-indigo-100 shadow-xl h-full",
-      isMobile ? "w-full max-w-sm" : isTablet ? "w-72" : "w-80",
-      className
-    )}>
-      
+    <div className="flex flex-col h-full">
       {/* Header do Sidebar - Responsivo */}
       <div className="p-3 sm:p-4 md:p-6 border-b border-neutral-200 bg-gradient-to-br from-indigo-50 to-indigo-100">
         <div className="flex items-center space-x-2 sm:space-x-3">
@@ -223,7 +225,7 @@ export const Sidebar = ({ className, variant = 'overlay', onNavigate }: SidebarP
       </nav>
 
       {/* Footer do Sidebar - Responsivo */}
-      <div className={`${isMobile ? 'p-3' : 'p-4'} border-t border-indigo-200 bg-gradient-to-br from-indigo-100 to-indigo-200`}>
+      <div className={`mt-auto ${isMobile ? 'p-3' : 'p-4'} border-t border-indigo-200 bg-gradient-to-br from-indigo-100 to-indigo-200`}>
         <div className="text-center">
           <p className={`${isMobile ? 'text-xs' : 'text-xs'} text-indigo-700 font-semibold ${isMobile ? 'mb-0.5' : 'mb-1'}`}>Versão 2.0.0</p>
           <p className={`${isMobile ? 'text-xs' : 'text-xs'} text-indigo-600 font-medium`}>© 2024 Flexi Gestor</p>

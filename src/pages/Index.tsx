@@ -8,10 +8,34 @@ import { ProductsChart } from "@/components/dashboard/ProductsChart";
 import { useData } from "@/contexts/DataContext";
 import { useResponsive } from "@/hooks/use-responsive";
 import { useNavigate } from "react-router-dom";
+import { useConfig } from "@/contexts/ConfigContext";
 import React from "react";
 
 const Index = () => {
   const { getDashboardStats, movements, products, notifications } = useData();
+  const { formatarMoeda, traduzir, converterMoeda, moeda } = useConfig();
+  
+  // Debug: verificar valor de stockValue
+  React.useEffect(() => {
+    const stats = getDashboardStats();
+    console.log('🔍 Stock Value em BRL:', stats.stockValue);
+    console.log('🔍 Convertido para USD:', converterMoeda(stats.stockValue));
+  }, [products, movements, moeda, getDashboardStats, converterMoeda]);
+  
+  // Obter símbolo da moeda
+  const getSimboloMoeda = () => {
+    const simbolos: Record<string, string> = {
+      'BRL': 'R$',
+      'USD': '$',
+      'EUR': '€',
+      'GBP': '£',
+      'JPY': '¥',
+      'CAD': 'C$',
+      'AUD': 'A$',
+      'CHF': 'CHF',
+    };
+    return simbolos[moeda] || moeda;
+  };
   const { isMobile, isTablet, screenWidth } = useResponsive();
   const navigate = useNavigate();
   const [stats, setStats] = React.useState(getDashboardStats());
@@ -80,7 +104,7 @@ const Index = () => {
                   🚀 Flexi Gestor
                 </h1>
                 <p className={`${isMobile ? 'text-sm xs:text-base' : 'text-base sm:text-lg md:text-xl lg:text-2xl'} opacity-90 max-w-3xl leading-relaxed font-medium text-slate-700`}>
-                  Sistema completo de gestão empresarial para controlar estoque, vendas e finanças com precisão e eficiência
+                  {traduzir('Sistema completo de gestão empresarial para controlar estoque, vendas e finanças com precisão e eficiência')}
                 </p>
               </div>
             </div>
@@ -95,21 +119,21 @@ const Index = () => {
                       <div className={`${isMobile ? 'w-8 h-8' : 'w-10 h-10'} bg-gradient-to-br from-blue-500 to-blue-600 ${isMobile ? 'rounded-lg' : 'rounded-xl'} flex items-center justify-center shadow-md group-hover:shadow-lg transition-all duration-300`}>
                         <Activity className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'} text-white`} />
                       </div>
-                      <span className={`${isMobile ? 'text-xs' : 'text-sm'} font-semibold text-slate-700 uppercase tracking-wide`}>Total Movimentações</span>
+                      <span className={`${isMobile ? 'text-xs' : 'text-sm'} font-semibold text-slate-700 uppercase tracking-wide`}>{traduzir('Total Movimentações')}</span>
                     </div>
                     <div className="flex items-baseline gap-2">
                       <span className={`${isMobile ? 'text-2xl' : 'text-3xl sm:text-4xl'} font-black text-slate-800`}>{movements.length}</span>
-                      <span className={`${isMobile ? 'text-xs' : 'text-sm'} text-slate-600 opacity-75`}>registros</span>
+                      <span className={`${isMobile ? 'text-xs' : 'text-sm'} text-slate-600 opacity-75`}>{traduzir('registros')}</span>
                     </div>
                     <div className={`${isMobile ? 'mt-2' : 'mt-3'} flex items-center gap-2 ${isMobile ? 'text-xs' : 'text-sm'} text-slate-600`}>
                       <div className="flex items-center gap-1">
                         <TrendingUp className={`${isMobile ? 'w-3 h-3' : 'w-4 h-4'} text-emerald-600`} />
-                        <span className="font-medium text-emerald-700">{movements.filter(m => m.type === 'entrada').length} entradas</span>
+                        <span className="font-medium text-emerald-700">{movements.filter(m => m.type === 'entrada').length} {traduzir('entradas')}</span>
                       </div>
                       <span className="text-slate-400">•</span>
                       <div className="flex items-center gap-1">
                         <TrendingDown className={`${isMobile ? 'w-3 h-3' : 'w-4 h-4'} text-red-600`} />
-                        <span className="font-medium text-red-700">{movements.filter(m => m.type === 'saida').length} saídas</span>
+                        <span className="font-medium text-red-700">{movements.filter(m => m.type === 'saida').length} {traduzir('saídas')}</span>
                       </div>
                     </div>
                   </div>
@@ -124,7 +148,7 @@ const Index = () => {
                       <div className={`${isMobile ? 'w-8 h-8' : 'w-10 h-10'} bg-gradient-to-br from-purple-500 to-purple-600 ${isMobile ? 'rounded-lg' : 'rounded-xl'} flex items-center justify-center shadow-md group-hover:shadow-lg transition-all duration-300`}>
                         <Clock className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'} text-white`} />
                       </div>
-                      <span className={`${isMobile ? 'text-xs' : 'text-sm'} font-semibold text-slate-700 uppercase tracking-wide`}>Última Atividade</span>
+                      <span className={`${isMobile ? 'text-xs' : 'text-sm'} font-semibold text-slate-700 uppercase tracking-wide`}>{traduzir('Última Atividade')}</span>
                     </div>
                     {recentMovements[0] ? (
                       <>
@@ -148,7 +172,7 @@ const Index = () => {
                         </div>
                       </>
                     ) : (
-                      <p className={`${isMobile ? 'text-xs' : 'text-sm'} text-slate-500 italic`}>Nenhuma movimentação registrada</p>
+                      <p className={`${isMobile ? 'text-xs' : 'text-sm'} text-slate-500 italic`}>{traduzir('Nenhuma movimentação registrada')}</p>
                     )}
                   </div>
                 </div>
@@ -162,7 +186,7 @@ const Index = () => {
                       <div className={`${isMobile ? 'w-8 h-8' : 'w-10 h-10'} bg-gradient-to-br from-amber-500 to-amber-600 ${isMobile ? 'rounded-lg' : 'rounded-xl'} flex items-center justify-center shadow-md group-hover:shadow-lg transition-all duration-300`}>
                         <Bell className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'} text-white`} />
                       </div>
-                      <span className={`${isMobile ? 'text-xs' : 'text-sm'} font-semibold text-slate-700 uppercase tracking-wide`}>Última Notificação</span>
+                      <span className={`${isMobile ? 'text-xs' : 'text-sm'} font-semibold text-slate-700 uppercase tracking-wide`}>{traduzir('Última Notificação')}</span>
                     </div>
                     {lastNotification ? (
                       <>
@@ -183,7 +207,7 @@ const Index = () => {
                         </p>
                       </>
                     ) : (
-                      <p className={`${isMobile ? 'text-xs' : 'text-sm'} text-slate-500 italic`}>Nenhuma notificação</p>
+                      <p className={`${isMobile ? 'text-xs' : 'text-sm'} text-slate-500 italic`}>{traduzir('Nenhuma notificação')}</p>
                     )}
                   </div>
                 </div>
@@ -202,11 +226,11 @@ const Index = () => {
             </div>
             <div className="text-right">
               <div className={`${isMobile ? 'text-xl' : 'text-2xl sm:text-3xl'} font-black`}>{stats.totalProducts}</div>
-              <div className={`${isMobile ? 'text-xs' : 'text-xs sm:text-sm'} opacity-90`}>Total</div>
+              <div className={`${isMobile ? 'text-xs' : 'text-xs sm:text-sm'} opacity-90`}>{traduzir('Total')}</div>
             </div>
           </div>
-          <h3 className={`${isMobile ? 'text-sm' : 'text-base sm:text-lg'} font-semibold ${isMobile ? 'mb-1' : 'mb-2'}`}>📦 Total de Produtos</h3>
-          <p className={`${isMobile ? 'text-xs' : 'text-xs sm:text-sm'} opacity-80`}>+0 este mês</p>
+          <h3 className={`${isMobile ? 'text-sm' : 'text-base sm:text-lg'} font-semibold ${isMobile ? 'mb-1' : 'mb-2'}`}>📦 {traduzir('Total de Produtos')}</h3>
+          <p className={`${isMobile ? 'text-xs' : 'text-xs sm:text-sm'} opacity-80`}>+0 {traduzir('este mês')}</p>
         </div>
 
         <div className={`group bg-gradient-to-br from-green-100 to-green-200 ${isMobile ? 'rounded-xl p-3' : 'rounded-2xl sm:rounded-3xl p-4 sm:p-6'} text-green-800 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 border border-green-200/50`}>
@@ -215,12 +239,12 @@ const Index = () => {
               <DollarSign className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5 sm:w-6 sm:h-6'} text-green-700`} />
             </div>
             <div className="text-right">
-              <div className={`${isMobile ? 'text-xl' : 'text-2xl sm:text-3xl'} font-black`}>R$ {stats.stockValue.toFixed(0)}</div>
-              <div className={`${isMobile ? 'text-xs' : 'text-xs sm:text-sm'} opacity-90`}>Valor</div>
+              <div className={`${isMobile ? 'text-xl' : 'text-2xl sm:text-3xl'} font-black`}>{formatarMoeda(stats.stockValue)}</div>
+              <div className={`${isMobile ? 'text-xs' : 'text-xs sm:text-sm'} opacity-90`}>{traduzir('Valor')}</div>
             </div>
           </div>
-          <h3 className={`${isMobile ? 'text-sm' : 'text-base sm:text-lg'} font-semibold ${isMobile ? 'mb-1' : 'mb-2'}`}>💰 Valor do Estoque</h3>
-          <p className={`${isMobile ? 'text-xs' : 'text-xs sm:text-sm'} opacity-80`}>+0% este mês</p>
+          <h3 className={`${isMobile ? 'text-sm' : 'text-base sm:text-lg'} font-semibold ${isMobile ? 'mb-1' : 'mb-2'}`}>💰 {traduzir('Valor do Estoque')}</h3>
+          <p className={`${isMobile ? 'text-xs' : 'text-xs sm:text-sm'} opacity-80`}>+0% {traduzir('este mês')}</p>
         </div>
 
         <div className={`group bg-gradient-to-br from-purple-100 to-purple-200 ${isMobile ? 'rounded-xl p-3' : 'rounded-2xl sm:rounded-3xl p-4 sm:p-6'} text-purple-800 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 border border-purple-200/50`}>
@@ -229,12 +253,12 @@ const Index = () => {
               <TrendingUp className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5 sm:w-6 sm:h-6'} text-purple-700`} />
             </div>
             <div className="text-right">
-              <div className={`${isMobile ? 'text-xl' : 'text-2xl sm:text-3xl'} font-black`}>R$ {stats.todaySales.toFixed(0)}</div>
-              <div className={`${isMobile ? 'text-xs' : 'text-xs sm:text-sm'} opacity-90`}>Hoje</div>
+              <div className={`${isMobile ? 'text-xl' : 'text-2xl sm:text-3xl'} font-black`}>{formatarMoeda(stats.todaySales)}</div>
+              <div className={`${isMobile ? 'text-xs' : 'text-xs sm:text-sm'} opacity-90`}>{traduzir('Hoje')}</div>
             </div>
           </div>
-          <h3 className={`${isMobile ? 'text-sm' : 'text-base sm:text-lg'} font-semibold ${isMobile ? 'mb-1' : 'mb-2'}`}>📈 Vendas Hoje</h3>
-          <p className={`${isMobile ? 'text-xs' : 'text-xs sm:text-sm'} opacity-80`}>{todaySalesCount} vendas realizadas</p>
+          <h3 className={`${isMobile ? 'text-sm' : 'text-base sm:text-lg'} font-semibold ${isMobile ? 'mb-1' : 'mb-2'}`}>📈 {traduzir('Vendas Hoje')}</h3>
+          <p className={`${isMobile ? 'text-xs' : 'text-xs sm:text-sm'} opacity-80`}>{todaySalesCount} {traduzir('vendas realizadas')}</p>
         </div>
 
         <div className={`group bg-gradient-to-br from-orange-100 to-orange-200 ${isMobile ? 'rounded-xl p-3' : 'rounded-2xl sm:rounded-3xl p-4 sm:p-6'} text-orange-800 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 border border-orange-200/50`}>
@@ -244,11 +268,11 @@ const Index = () => {
             </div>
             <div className="text-right">
               <div className={`${isMobile ? 'text-xl' : 'text-2xl sm:text-3xl'} font-black`}>{stats.lowStockCount}</div>
-              <div className={`${isMobile ? 'text-xs' : 'text-xs sm:text-sm'} opacity-90`}>Baixo</div>
+              <div className={`${isMobile ? 'text-xs' : 'text-xs sm:text-sm'} opacity-90`}>{traduzir('Baixo')}</div>
             </div>
           </div>
-          <h3 className={`${isMobile ? 'text-sm' : 'text-base sm:text-lg'} font-semibold ${isMobile ? 'mb-1' : 'mb-2'}`}>⚠️ Estoque Baixo</h3>
-          <p className={`${isMobile ? 'text-xs' : 'text-xs sm:text-sm'} opacity-80`}>Produtos com estoque mínimo</p>
+          <h3 className={`${isMobile ? 'text-sm' : 'text-base sm:text-lg'} font-semibold ${isMobile ? 'mb-1' : 'mb-2'}`}>⚠️ {traduzir('Estoque Baixo')}</h3>
+          <p className={`${isMobile ? 'text-xs' : 'text-xs sm:text-sm'} opacity-80`}>{traduzir('Produtos com estoque mínimo')}</p>
         </div>
       </div>
 
@@ -258,7 +282,7 @@ const Index = () => {
         <div className="flex items-center justify-between">
           <h2 className={`${isMobile ? 'text-lg' : 'text-xl sm:text-2xl'} font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent flex items-center gap-2`}>
             <ShoppingCart className={`${isMobile ? 'w-5 h-5' : 'w-6 h-6'} text-indigo-600`} />
-            Ações Rápidas
+            {traduzir('Ações Rápidas')}
           </h2>
           <Button
             onClick={() => setShowQuickActions(!showQuickActions)}
@@ -269,12 +293,12 @@ const Index = () => {
             {showQuickActions ? (
               <>
                 <EyeOff className="mr-2 h-4 w-4" />
-                {!isMobile && 'Ocultar'}
+                {!isMobile && traduzir('Ocultar')}
               </>
             ) : (
               <>
                 <Eye className="mr-2 h-4 w-4" />
-                {!isMobile && 'Mostrar'}
+                {!isMobile && traduzir('Mostrar')}
               </>
             )}
           </Button>
@@ -293,7 +317,7 @@ const Index = () => {
               <div className={`${isMobile ? 'w-7 h-7' : 'w-8 h-8 sm:w-10 sm:h-10'} bg-gradient-to-br from-blue-300 to-blue-400 ${isMobile ? 'rounded-lg' : 'rounded-lg sm:rounded-xl'} flex items-center justify-center`}>
                 <Users className={`${isMobile ? 'w-3 h-3' : 'w-4 h-4 sm:w-5 sm:h-5'} text-blue-700`} />
               </div>
-              <span>Resumo do Sistema</span>
+              <span>{traduzir('Resumo do Sistema')}</span>
             </h3>
           </div>
           <div className={`${isMobile ? 'p-3' : 'p-4 sm:p-6'} ${isMobile ? 'space-y-2' : 'space-y-3 sm:space-y-4'}`}>
@@ -302,7 +326,7 @@ const Index = () => {
                 <div className={`${isMobile ? 'w-6 h-6' : 'w-8 h-8 sm:w-10 sm:h-10'} bg-gradient-to-br from-blue-300 to-blue-400 ${isMobile ? 'rounded-lg' : 'rounded-lg sm:rounded-xl'} flex items-center justify-center flex-shrink-0`}>
                   <Package className={`${isMobile ? 'w-3 h-3' : 'w-4 h-4 sm:w-5 sm:h-5'} text-blue-700`} />
                 </div>
-                <span className={`${isMobile ? 'text-xs' : 'text-xs sm:text-sm'} font-semibold text-slate-700 truncate`}>Produtos Ativos</span>
+                <span className={`${isMobile ? 'text-xs' : 'text-xs sm:text-sm'} font-semibold text-slate-700 truncate`}>{traduzir('Produtos Ativos')}</span>
               </div>
               <span className={`${isMobile ? 'text-base' : 'text-lg sm:text-xl'} font-black text-blue-700 flex-shrink-0 whitespace-nowrap`}>{stats.totalProducts}</span>
             </div>
@@ -312,7 +336,7 @@ const Index = () => {
                 <div className={`${isMobile ? 'w-6 h-6' : 'w-8 h-8 sm:w-10 sm:h-10'} bg-gradient-to-br from-blue-300 to-blue-400 ${isMobile ? 'rounded-lg' : 'rounded-lg sm:rounded-xl'} flex items-center justify-center flex-shrink-0`}>
                   <ShoppingCart className={`${isMobile ? 'w-3 h-3' : 'w-4 h-4 sm:w-5 sm:h-5'} text-blue-700`} />
                 </div>
-                <span className={`${isMobile ? 'text-xs' : 'text-xs sm:text-sm'} font-semibold text-slate-700 truncate`}>Movimentações</span>
+                <span className={`${isMobile ? 'text-xs' : 'text-xs sm:text-sm'} font-semibold text-slate-700 truncate`}>{traduzir('Movimentações')}</span>
               </div>
               <span className={`${isMobile ? 'text-base' : 'text-lg sm:text-xl'} font-black text-blue-700 flex-shrink-0 whitespace-nowrap`}>{movements.length}</span>
             </div>
@@ -322,16 +346,16 @@ const Index = () => {
                 <div className={`${isMobile ? 'w-6 h-6' : 'w-8 h-8 sm:w-10 sm:h-10'} bg-gradient-to-br from-purple-300 to-purple-400 ${isMobile ? 'rounded-lg' : 'rounded-lg sm:rounded-xl'} flex items-center justify-center flex-shrink-0`}>
                   <DollarSign className={`${isMobile ? 'w-3 h-3' : 'w-4 h-4 sm:w-5 sm:h-5'} text-purple-700`} />
                 </div>
-                <span className={`${isMobile ? 'text-xs' : 'text-xs sm:text-sm'} font-semibold text-slate-700 truncate`}>Valor Total</span>
+                <span className={`${isMobile ? 'text-xs' : 'text-xs sm:text-sm'} font-semibold text-slate-700 truncate`}>{traduzir('Valor Total')}</span>
               </div>
-              <span className={`${isMobile ? 'text-base' : 'text-lg sm:text-xl'} font-black text-purple-700 flex-shrink-0 whitespace-nowrap`}>R$ {stats.stockValue.toFixed(0)}</span>
+              <span className={`${isMobile ? 'text-base' : 'text-lg sm:text-xl'} font-black text-purple-700 flex-shrink-0 whitespace-nowrap`}>{formatarMoeda(stats.stockValue)}</span>
             </div>
             
             {/* Top 5 Produtos - Responsivo */}
             <div className={`${isMobile ? 'mt-3 pt-3' : 'mt-4 pt-4'} border-t border-slate-200`}>
               <h4 className={`${isMobile ? 'text-xs' : 'text-sm'} font-semibold text-slate-700 ${isMobile ? 'mb-2' : 'mb-3'} flex items-center ${isMobile ? 'gap-1.5' : 'gap-2'}`}>
                 <TrendingUp className={`${isMobile ? 'w-3.5 h-3.5' : 'w-4 h-4'} text-indigo-600`} />
-                🏆 Top 5 Produtos
+                🏆 {traduzir('Top 5 Produtos')}
               </h4>
               {products.length > 0 ? (
                 <div className={`${isMobile ? 'space-y-1.5' : 'space-y-2'}`}>
@@ -373,15 +397,15 @@ const Index = () => {
                             <div className="flex-1 min-w-0">
                               <p className={`font-semibold text-gray-900 ${isMobile ? 'text-xs' : 'text-xs'} truncate`}>{product.name}</p>
                               <div className={`flex items-center ${isMobile ? 'gap-0.5' : 'gap-1'} mt-0.5 flex-wrap`}>
-                                <span className={`${isMobile ? 'text-xs' : 'text-xs'} text-blue-600 font-medium whitespace-nowrap`}>{product.stock} un</span>
+                                <span className={`${isMobile ? 'text-xs' : 'text-xs'} text-blue-600 font-medium whitespace-nowrap`}>{product.stock} {traduzir('un')}</span>
                                 <span className={`${isMobile ? 'text-xs' : 'text-xs'} text-gray-400`}>×</span>
-                                <span className={`${isMobile ? 'text-xs' : 'text-xs'} text-gray-600 whitespace-nowrap`}>R$ {effectivePrice.toFixed(2)}</span>
+                                <span className={`${isMobile ? 'text-xs' : 'text-xs'} text-gray-600 whitespace-nowrap`}>{getSimboloMoeda()} {converterMoeda(effectivePrice).toFixed(2)}</span>
                               </div>
                             </div>
                           </div>
                           <div className="text-right flex-shrink-0">
                             <p className={`font-bold text-green-600 ${isMobile ? 'text-xs' : 'text-sm'} whitespace-nowrap`}>
-                              R$ {totalValue.toFixed(2)}
+                              {getSimboloMoeda()} {converterMoeda(totalValue).toFixed(2)}
                             </p>
                           </div>
                         </div>

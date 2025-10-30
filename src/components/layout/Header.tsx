@@ -72,7 +72,7 @@ export const Header = () => {
               </SheetTrigger>
               <SheetContent 
                 side="left" 
-                className={`p-0 bg-gradient-to-br from-indigo-50 via-indigo-100/60 to-indigo-100 ${!isMobile ? '!w-80' : ''}`}
+                className={`p-0 bg-gradient-to-br from-indigo-50 via-indigo-100/60 to-indigo-100 flex flex-col ${!isMobile ? '!w-80' : ''}`}
                 showPin={showPinButton}
                 onPinClick={() => {
                   togglePin();

@@ -5,7 +5,7 @@
  * Todos os dados são isolados por usuário usando Row Level Security (RLS).
  */
 
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from './AuthContext';
 import { useWorkspace } from './WorkspaceContext';
@@ -223,6 +223,21 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       // Silencioso
     }
   }, [user?.id]);
+
+  // 🔄 Escutar mudanças de workspace para recarregar dados
+  useEffect(() => {
+    const handleWorkspaceChanged = async () => {
+      console.log('🔄 Workspace mudou, recarregando dados...');
+      await refreshData();
+      loadNotificationsFromLocalStorage();
+    };
+
+    window.addEventListener('workspace-changed', handleWorkspaceChanged);
+
+    return () => {
+      window.removeEventListener('workspace-changed', handleWorkspaceChanged);
+    };
+  }, [refreshData, loadNotificationsFromLocalStorage]);
 
   // 🔄 Carregar dados do Supabase quando o usuário estiver autenticado OU mudar workspace
   useEffect(() => {
@@ -730,12 +745,18 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         const averageCost = totalQuantity > 0 ? totalCost / totalQuantity : 0;
         // Usar custo médio se disponível, senão usar preço de venda
         const unitValue = averageCost > 0 ? averageCost : product.price;
-        return sum + (unitValue * product.stock);
+        // Arredondar para evitar erros de precisão
+        const productValue = Number((unitValue * product.stock).toFixed(2));
+        return sum + productValue;
       } else {
         // Se não há entradas, usar preço de venda (ou 0 se não definido)
-        return sum + (product.price * product.stock);
+        const productValue = Number((product.price * product.stock).toFixed(2));
+        return sum + productValue;
       }
     }, 0);
+    
+    // Arredondar o valor total do estoque para garantir precisão
+    const finalStockValue = Number(stockValue.toFixed(2));
     
     const lowStockCount = products.filter(p => p.stock <= p.minStock).length;
     
@@ -755,7 +776,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
     return {
       totalProducts,
-      stockValue,
+      stockValue: finalStockValue,
       lowStockCount,
       todaySales,
     };
@@ -916,35 +937,65 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [user?.id, workspaceAtivo?.id, refreshCategories, refreshCustomUnits]);
 
+  // Memoizar o value do provider para evitar re-renders desnecessários
+  const value = useMemo(() => ({
+    products,
+    movements,
+    notifications,
+    categories,
+    customUnits,
+    isLoading,
+    addProduct,
+    updateProduct,
+    deleteProduct,
+    addMovement,
+    deleteMovement,
+    addNotification,
+    markNotificationAsRead,
+    removeNotification,
+    clearAllNotifications,
+    addCategory,
+    deleteCategory,
+    refreshCategories,
+    addCustomUnit,
+    deleteCustomUnit,
+    refreshCustomUnits,
+    searchGlobal,
+    getDashboardStats,
+    refreshData,
+    refreshProducts,
+    refreshMovements,
+  }), [
+    products,
+    movements,
+    notifications,
+    categories,
+    customUnits,
+    isLoading,
+    addProduct,
+    updateProduct,
+    deleteProduct,
+    addMovement,
+    deleteMovement,
+    addNotification,
+    markNotificationAsRead,
+    removeNotification,
+    clearAllNotifications,
+    addCategory,
+    deleteCategory,
+    refreshCategories,
+    addCustomUnit,
+    deleteCustomUnit,
+    refreshCustomUnits,
+    searchGlobal,
+    getDashboardStats,
+    refreshData,
+    refreshProducts,
+    refreshMovements,
+  ]);
+
   return (
-    <DataContext.Provider value={{
-      products,
-      movements,
-      notifications,
-      categories,
-      customUnits,
-      isLoading,
-      addProduct,
-      updateProduct,
-      deleteProduct,
-      addMovement,
-      deleteMovement,
-      addNotification,
-      markNotificationAsRead,
-      removeNotification,
-      clearAllNotifications,
-      addCategory,
-      deleteCategory,
-      refreshCategories,
-      addCustomUnit,
-      deleteCustomUnit,
-      refreshCustomUnits,
-      searchGlobal,
-      getDashboardStats,
-      refreshData,
-      refreshProducts,
-      refreshMovements,
-    }}>
+    <DataContext.Provider value={value}>
       {children}
     </DataContext.Provider>
   );
