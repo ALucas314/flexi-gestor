@@ -89,15 +89,24 @@ export const WorkspaceProvider = ({ children }: { children: ReactNode }) => {
 
         setWorkspacesDisponiveis(workspaces);
 
-        // Restaurar workspace ativo do localStorage
+        // Restaurar workspace ativo do localStorage, mas validar se ainda existe
         const savedId = localStorage.getItem('flexi_workspace_ativo');
-        const workspace = workspaces.find(w => w.id === savedId) || workspaces[0];
+        const workspace = workspaces.find(w => w.id === savedId);
         
-        if (workspace) {
+        // Se o workspace salvo não existe mais (foi removido) ou não foi encontrado,
+        // voltar para o próprio workspace (sempre será o primeiro da lista)
+        if (!workspace || (workspace.tipo === 'compartilhado' && !workspace.compartilhamentoId)) {
+          const meuWorkspace = workspaces[0]; // Sempre será o próprio workspace
+          if (meuWorkspace) {
+            setWorkspaceAtivo(meuWorkspace);
+            localStorage.setItem('flexi_workspace_ativo', meuWorkspace.id);
+            console.log('🔄 Workspace inválido detectado, voltando para workspace próprio');
+          } else {
+            console.error('❌ Nenhum workspace disponível');
+          }
+        } else {
           setWorkspaceAtivo(workspace);
           localStorage.setItem('flexi_workspace_ativo', workspace.id);
-        } else {
-          console.error('❌ Nenhum workspace disponível');
         }
 
       } catch (error) {

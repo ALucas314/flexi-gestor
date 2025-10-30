@@ -37,10 +37,10 @@ const DialogContent = React.forwardRef<
       ref={ref}
       className={cn(
         "fixed z-50 gap-3 border bg-background shadow-xl duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
-        // Mobile: margens iguais dos dois lados, scroll habilitado
+        // Mobile: margens iguais dos dois lados (1rem = 16px de cada lado)
         "inset-x-4 top-[5%] bottom-[5%] max-h-[90vh] overflow-y-auto rounded-xl p-4",
-        // Desktop: centralizado normalmente
-        "sm:inset-x-auto sm:left-[50%] sm:right-auto sm:top-[50%] sm:bottom-auto sm:w-full sm:max-w-sm sm:-translate-x-1/2 sm:-translate-y-1/2 sm:overflow-visible sm:p-5",
+        // Desktop (acima de 768px): mantém espaçamento simétrico, move ligeiramente para direita
+        "md:left-[calc(50%-0.5rem)] md:right-4 md:top-[50%] md:bottom-auto md:max-h-[90vh] md:max-w-lg md:-translate-x-1/2 md:-translate-y-1/2 md:overflow-visible md:p-5",
         // Animações
         "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
         className
