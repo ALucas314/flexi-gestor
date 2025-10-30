@@ -17,8 +17,29 @@ import { useToast } from "@/hooks/use-toast";
 import { useData } from "@/contexts/DataContext";
 import { getBatchesByProduct, createBatch, updateBatchQuantity, checkBatchNumberExists, generateNextAvailableBatchNumber } from "@/lib/batches";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/lib/supabase";
 import { Label } from "@/components/ui/label";
 import { generateReceiptNumber } from "@/lib/utils";
+
+// Converte diferença em dias para string humanizada (anos, meses, semanas, dias)
+function humanizeDaysDiff(diffDays: number): string {
+  const abs = Math.abs(diffDays);
+  const years = Math.floor(abs / 365);
+  let rem = abs % 365;
+  const months = Math.floor(rem / 30);
+  rem = rem % 30;
+  const weeks = Math.floor(rem / 7);
+  const days = rem % 7;
+
+  const parts: string[] = [];
+  if (years) parts.push(`${years}a`);
+  if (months) parts.push(`${months}m`);
+  if (!years && !months && weeks) parts.push(`${weeks}s`); // só mostra semanas se < 1 mês
+  if (!years && days && (months === 0 || weeks === 0)) parts.push(`${days}d`);
+
+  if (parts.length === 0) return '0d';
+  return parts.slice(0, 2).join(' '); // no máx. 2 unidades
+}
 
 // Interface da entrada de estoque
 interface StockEntry {
@@ -60,6 +81,7 @@ const Entradas = () => {
   const [batchNumberErrors, setBatchNumberErrors] = useState<{[key: number]: string}>({});
   const [quantityErrors, setQuantityErrors] = useState<{[key: number]: string}>({});
   const [selectedProductForBatch, setSelectedProductForBatch] = useState<{id: string, name: string, sku: string, stock: number} | null>(null);
+  const [supplierSuggestion, setSupplierSuggestion] = useState<{ id: string; code?: string; name: string } | null>(null);
 
   // Hooks
   const { toast } = useToast();
@@ -81,7 +103,28 @@ const Entradas = () => {
       } else if (m.status === 'confirmado') {
         entryStatus = 'aprovado';
       }
-      
+      // Extrair datas de FAB/EXP da descrição, se presentes (formatos FAB/EXP: YYYY-MM-DD ou DD/MM/YYYY)
+      let parsedExpiry: Date | undefined = undefined;
+      let parsedManufacture: Date | undefined = undefined;
+      try {
+        const desc = m.description || '';
+        const expIso = desc.match(/EXP:(\d{4}-\d{2}-\d{2})/);
+        const expBr = desc.match(/EXP:(\d{2}\/\d{2}\/\d{4})/);
+        if (expIso && expIso[1]) parsedExpiry = new Date(expIso[1]);
+        else if (expBr && expBr[1]) {
+          const [d, mo, y] = expBr[1].split('/');
+          parsedExpiry = new Date(parseInt(y), parseInt(mo) - 1, parseInt(d));
+        }
+
+        const fabIso = desc.match(/FAB:(\d{4}-\d{2}-\d{2})/);
+        const fabBr = desc.match(/FAB:(\d{2}\/\d{2}\/\d{4})/);
+        if (fabIso && fabIso[1]) parsedManufacture = new Date(fabIso[1]);
+        else if (fabBr && fabBr[1]) {
+          const [d, mo, y] = fabBr[1].split('/');
+          parsedManufacture = new Date(parseInt(y), parseInt(mo) - 1, parseInt(d));
+        }
+      } catch (_) { /* silencioso */ }
+
       return {
         id: m.id,
         productId: m.productId,
@@ -94,7 +137,9 @@ const Entradas = () => {
         entryDate: m.date,
         notes: m.description,
         status: entryStatus,
-        receiptNumber: m.receiptNumber
+        receiptNumber: m.receiptNumber,
+        ...(parsedExpiry ? { expiryDate: parsedExpiry } as any : {}),
+        ...(parsedManufacture ? { manufactureDate: parsedManufacture } as any : {})
       };
     });
 
@@ -515,13 +560,27 @@ const Entradas = () => {
 
         // Adicionar movimentação no contexto global (usar custo médio quando há lotes) - salva no Supabase
         const averageCost = totalCost / totalQuantity;
+        // Calcular menor validade e fabricação entre os lotes (se houver)
+        const minExpiry = selectedBatches
+          .map(b => b.expiryDate)
+          .filter(Boolean)
+          .map(d => d as Date)
+          .sort((a, b) => a.getTime() - b.getTime())[0];
+        const minManu = selectedBatches
+          .map(b => b.manufactureDate)
+          .filter(Boolean)
+          .map(d => d as Date)
+          .sort((a, b) => a.getTime() - b.getTime())[0];
+
         addMovement({
           type: 'entrada',
           productId: data.productId,
           productName: product.name,
           quantity: totalQuantity,
           unitPrice: averageCost,
-          description: `Entrada de ${totalQuantity} unidades em ${selectedBatches.length} lote(s) - ${data.supplier}`,
+          description: `Entrada de ${totalQuantity} unidades em ${selectedBatches.length} lote(s) - ${data.supplier}` 
+            + (minManu ? ` | FAB:${minManu.toISOString().split('T')[0]}` : '')
+            + (minExpiry ? ` | EXP:${minExpiry.toISOString().split('T')[0]}` : ''),
           date: data.entryDate,
         });
 
@@ -564,13 +623,15 @@ const Entradas = () => {
       };
 
       // Adicionar movimentação no contexto global - salva no Supabase
+      const manu = (data as any).manufactureDate as Date | undefined;
+      const exp = (data as any).expiryDate as Date | undefined;
       addMovement({
         type: 'entrada',
         productId: data.productId,
         productName: product.name,
         quantity: data.quantity,
         unitPrice: data.unitCost,
-        description: `Entrada de ${data.quantity} unidades - ${data.supplier}`,
+        description: `Entrada de ${data.quantity} unidades - ${data.supplier}` + (manu ? ` | FAB:${manu.toISOString().split('T')[0]}` : '') + (exp ? ` | EXP:${exp.toISOString().split('T')[0]}` : ''),
         date: data.entryDate,
       });
 
@@ -1014,11 +1075,105 @@ const Entradas = () => {
                             🏢 Fornecedor
                           </FormLabel>
                           <FormControl>
-                            <Input 
-                              placeholder="Nome do fornecedor" 
-                              {...field} 
-                              className="h-11 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-base sm:text-sm"
-                            />
+                            <div className="relative">
+                              <Input 
+                                placeholder="Código ou nome do fornecedor" 
+                                value={field.value}
+                                onChange={async (e) => {
+                                  const value = e.target.value;
+                                  field.onChange(value);
+                                  setSupplierSuggestion(null);
+                                  const trimmed = value.trim();
+                                  if (trimmed.length < 1) return; // permite 1+ para código
+                                  try {
+                                    const term = trimmed.replace(/[%_]/g, '');
+                                    const isNumeric = /^\d+$/.test(term);
+
+                                    if (isNumeric) {
+                                      // Prioridade para CÓDIGO quando só dígitos
+                                      let byCode = await supabase
+                                        .from('fornecedores')
+                                        .select('id, codigo, nome')
+                                        .eq('codigo', term)
+                                        .limit(1);
+                                      if (!byCode.error && byCode.data && byCode.data.length === 1) {
+                                        setSupplierSuggestion({ id: byCode.data[0].id, code: String(byCode.data[0].codigo ?? ''), name: byCode.data[0].nome });
+                                        return;
+                                      }
+                                      let codeStarts = await supabase
+                                        .from('fornecedores')
+                                        .select('id, codigo, nome')
+                                        .ilike('codigo', `${term}%`)
+                                        .limit(1);
+                                      if (!codeStarts.error && codeStarts.data && codeStarts.data.length === 1) {
+                                        setSupplierSuggestion({ id: codeStarts.data[0].id, code: String(codeStarts.data[0].codigo ?? ''), name: codeStarts.data[0].nome });
+                                        return;
+                                      }
+                                    } else {
+                                      // Prioridade para NOME quando tem letras
+                                      let nameStarts = await supabase
+                                        .from('fornecedores')
+                                        .select('id, codigo, nome')
+                                        .ilike('nome', `${term}%`)
+                                        .limit(1);
+                                      if (!nameStarts.error && nameStarts.data && nameStarts.data.length === 1) {
+                                        setSupplierSuggestion({ id: nameStarts.data[0].id, code: String(nameStarts.data[0].codigo ?? ''), name: nameStarts.data[0].nome });
+                                        return;
+                                      }
+                                      let nameContains = await supabase
+                                        .from('fornecedores')
+                                        .select('id, codigo, nome')
+                                        .ilike('nome', `%${term}%`)
+                                        .limit(1);
+                                      if (!nameContains.error && nameContains.data && nameContains.data.length === 1) {
+                                        setSupplierSuggestion({ id: nameContains.data[0].id, code: String(nameContains.data[0].codigo ?? ''), name: nameContains.data[0].nome });
+                                        return;
+                                      }
+                                    }
+
+                                    // Alternativas de colunas (code/name)
+                                    let startsAlt = await supabase
+                                      .from('fornecedores')
+                                      .select('id, code, name')
+                                      .ilike(isNumeric ? 'code' : 'name', `${term}%`)
+                                      .limit(1);
+                                    if (!startsAlt.error && startsAlt.data && startsAlt.data.length === 1) {
+                                      setSupplierSuggestion({ id: startsAlt.data[0].id, code: String(startsAlt.data[0].code ?? ''), name: startsAlt.data[0].name });
+                                      return;
+                                    }
+                                    let containsAlt = await supabase
+                                      .from('fornecedores')
+                                      .select('id, code, name')
+                                      .ilike(isNumeric ? 'code' : 'name', `%${term}%`)
+                                      .limit(1);
+                                    if (!containsAlt.error && containsAlt.data && containsAlt.data.length === 1) {
+                                      setSupplierSuggestion({ id: containsAlt.data[0].id, code: String(containsAlt.data[0].code ?? ''), name: containsAlt.data[0].name });
+                                      return;
+                                    }
+
+                                    setSupplierSuggestion(null);
+                                  } catch (_) {
+                                    setSupplierSuggestion(null);
+                                  }
+                                }}
+                                className="h-11 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-base sm:text-sm"
+                              />
+                              {supplierSuggestion && (
+                                <div className="absolute z-10 mt-1 w-full bg-white border border-neutral-200 rounded-lg shadow-lg overflow-hidden">
+                                  <button
+                                    type="button"
+                                    className="w-full px-4 py-3 text-left hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus:outline-none border-b last:border-b-0 transition-colors"
+                                    onClick={() => {
+                                      field.onChange(supplierSuggestion.name);
+                                      setSupplierSuggestion(null);
+                                    }}
+                                  >
+                                    <div className="font-medium">{supplierSuggestion.name}</div>
+                                    <div className="text-xs text-muted-foreground">{supplierSuggestion.code ? `Código: ${supplierSuggestion.code}` : 'Código: —'}</div>
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -1111,6 +1266,82 @@ const Entradas = () => {
                                 )}
                               />
                             </div>
+
+                            {/* Datas e Vencimento (para produtos sem lote) */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              <FormField
+                                control={form.control}
+                                name="manufactureDate"
+                                render={({ field }) => (
+                                  <FormItem className="space-y-2">
+                                    <FormLabel className="text-sm font-semibold text-neutral-700">
+                                      🏭 Data de Fabricação
+                                    </FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        type="date"
+                                        {...field}
+                                        value={field.value instanceof Date ? field.value.toISOString().split('T')[0] : (field.value || '')}
+                                        onChange={(e) => field.onChange(e.target.value ? new Date(e.target.value) : undefined)}
+                                        className="h-11 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-base sm:text-sm"
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={form.control}
+                                name="expiryDate"
+                                render={({ field }) => (
+                                  <FormItem className="space-y-2">
+                                    <FormLabel className="text-sm font-semibold text-neutral-700">
+                                      ⏰ Data de Validade
+                                    </FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        type="date"
+                                        {...field}
+                                        value={field.value instanceof Date ? field.value.toISOString().split('T')[0] : (field.value || '')}
+                                        onChange={(e) => field.onChange(e.target.value ? new Date(e.target.value) : undefined)}
+                                        className="h-11 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-base sm:text-sm"
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <div className="flex items-end">
+                                {(() => {
+                                  const expiry = form.watch('expiryDate') as Date | undefined;
+                                  if (!expiry) return null;
+                                  const today = new Date();
+                                  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+                                  const end = new Date(expiry.getFullYear(), expiry.getMonth(), expiry.getDate()).getTime();
+                                  const diffDays = Math.round((end - start) / (1000 * 60 * 60 * 24));
+                                  const isExpired = diffDays < 0;
+                                  const isToday = diffDays === 0;
+                                  const badgeClass = isExpired
+                                    ? 'bg-red-100 text-red-700 border-red-200'
+                                    : isToday
+                                      ? 'bg-amber-100 text-amber-700 border-amber-200'
+                                      : diffDays <= 7
+                                        ? 'bg-orange-100 text-orange-700 border-orange-200'
+                                        : 'bg-emerald-100 text-emerald-700 border-emerald-200';
+                                  const label = isExpired
+                                    ? `Vencido há ${humanizeDaysDiff(diffDays)}`
+                                    : isToday
+                                      ? 'Vence hoje'
+                                      : `Faltam ${humanizeDaysDiff(diffDays)}`;
+                                  return (
+                                    <div className={`inline-flex items-center px-3 py-2 rounded-lg border text-sm font-medium ${badgeClass}`}>
+                                      {isExpired ? '❌' : isToday ? '⚠️' : '⏳'}
+                                      <span className="ml-2">{label}</span>
+                                    </div>
+                                  );
+                                })()}
+                              </div>
+                            </div>
                             {form.watch('quantity') > 0 && form.watch('unitCost') > 0 && (
                               <div className="pt-3 border-t border-indigo-200">
                                 <div className="flex items-center justify-between">
@@ -1168,50 +1399,7 @@ const Entradas = () => {
                                         <Label htmlFor={`batch-${index}`} className="text-sm font-medium">
                                           📦 Número do Lote
                                         </Label>
-                                        {availableBatches.length > 0 ? (
-                                          <Popover>
-                                            <PopoverTrigger asChild>
-                                              <Button 
-                                                type="button" 
-                                                variant="ghost" 
-                                                size="sm" 
-                                                className="h-7 text-xs text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 flex-shrink-0"
-                                              >
-                                                <Package className="h-3 w-3 mr-1" />
-                                                Usar Existente
-                                              </Button>
-                                            </PopoverTrigger>
-                                            <PopoverContent className="w-64 p-2" align="start">
-                                              <div className="max-h-[200px] overflow-y-auto space-y-1">
-                                                {availableBatches.map(b => (
-                                                  <button
-                                                    key={b.id}
-                                                    type="button"
-                                                    className="w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus:outline-none border-b last:border-b-0 rounded"
-                                                    onClick={() => {
-                                                      updateBatchData(index, 'batchNumber', b.batchNumber);
-                                                      
-                                                      // Se for um lote existente, carregar suas datas
-                                                      if (b.manufactureDate) {
-                                                        updateBatchData(index, 'manufactureDate', new Date(b.manufactureDate));
-                                                      }
-                                                      if (b.expiryDate) {
-                                                        updateBatchData(index, 'expiryDate', new Date(b.expiryDate));
-                                                      }
-                                                    }}
-                                                  >
-                                                    <div className="font-medium">📦 {b.batchNumber}</div>
-                                                    {b.quantity > 0 && (
-                                                      <div className="text-xs text-muted-foreground">{b.quantity} unidades</div>
-                                                    )}
-                                                  </button>
-                                                ))}
-                                              </div>
-                                            </PopoverContent>
-                                          </Popover>
-                                        ) : (
-                                          <span className="h-7" />
-                                        )}
+                                        <span className="h-7" />
                                       </div>
                                       <Input
                                         id={`batch-${index}`}
@@ -1231,14 +1419,6 @@ const Entradas = () => {
                                           const batchNumberMatch = newBatchNumber.match(/\d+/);
                                           const batchNumberValue = batchNumberMatch ? batchNumberMatch[0] : newBatchNumber;
                                           
-                                          // Verificar duplicata nos lotes disponíveis (comparando números extraídos)
-                                          const isDuplicatedInAvailable = availableBatches.some(b => {
-                                            if (!b.batchNumber) return false;
-                                            const bMatch = b.batchNumber.match(/\d+/);
-                                            const bValue = bMatch ? bMatch[0] : b.batchNumber;
-                                            return bValue === batchNumberValue && batchNumberValue !== '';
-                                          });
-                                          
                                           // Verificar duplicata nos lotes selecionados (exceto o atual)
                                           const isDuplicatedInSelected = selectedBatches.some((b, i) => {
                                             if (i === index || !b.batchNumber) return false;
@@ -1247,15 +1427,15 @@ const Entradas = () => {
                                             return bValue === batchNumberValue && batchNumberValue !== '';
                                           });
                                           
-                                          // Se houver duplicata na lista, mostrar erro imediatamente
-                                          if (isDuplicatedInAvailable || isDuplicatedInSelected) {
+                                          // Se houver duplicata na lista atual, mostrar erro imediatamente
+                                          if (isDuplicatedInSelected) {
                                             setBatchNumberErrors(prev => ({
                                               ...prev,
                                               [index]: `⚠️ O número "${newBatchNumber}" já está em uso. Escolha outro número.`
                                             }));
                                             toast({
                                               title: "⚠️ Lote Duplicado!",
-                                              description: `O número "${newBatchNumber}" já está em uso nesta lista. Escolha outro número.`,
+                                              description: `O número "${newBatchNumber}" já está em uso nesta lista de lotes. Escolha outro número.`,
                                               variant: "destructive",
                                               duration: 3000,
                                             });
@@ -1263,30 +1443,23 @@ const Entradas = () => {
                                             return;
                                           }
                                           
-                                          // Verificar no banco de dados (só se houver valor)
-                                          if (newBatchNumber && selectedProductId && user?.id) {
-                                            try {
-                                              // Normalizar para comparação - verificar se o número extraído já existe
-                                              const existsInDatabase = await checkBatchNumberExists(newBatchNumber, selectedProductId, user.id);
-                                              
-                                              if (existsInDatabase) {
-                                                setBatchNumberErrors(prev => ({
-                                                  ...prev,
-                                                  [index]: `⚠️ O número "${newBatchNumber}" já existe no banco de dados para este produto. Escolha outro número.`
-                                                }));
-                                                toast({
-                                                  title: "⚠️ Lote Duplicado!",
-                                                  description: `O número "${newBatchNumber}" já existe no banco de dados. Escolha outro número.`,
-                                                  variant: "destructive",
-                                                  duration: 3000,
-                                                });
-                                              }
-                                            } catch (error) {
-                                              // Silencioso - erro na verificação
+                                          updateBatchData(index, 'batchNumber', newBatchNumber);
+
+                                          // Se número corresponde a um lote existente, preencher datas
+                                          const matched = availableBatches.find(b => {
+                                            if (!b.batchNumber) return false;
+                                            const bMatch = b.batchNumber.match(/\d+/);
+                                            const bValue = bMatch ? bMatch[0] : b.batchNumber;
+                                            return bValue === batchNumberValue && batchNumberValue !== '';
+                                          });
+                                          if (matched) {
+                                            if (matched.manufactureDate) {
+                                              updateBatchData(index, 'manufactureDate', new Date(matched.manufactureDate));
+                                            }
+                                            if (matched.expiryDate) {
+                                              updateBatchData(index, 'expiryDate', new Date(matched.expiryDate));
                                             }
                                           }
-                                          
-                                          updateBatchData(index, 'batchNumber', newBatchNumber);
                                         }}
                                         onBlur={async () => {
                                           // Se o campo estiver vazio ao perder o foco, gerar automaticamente
@@ -1309,9 +1482,16 @@ const Entradas = () => {
                                           {batchNumberErrors[index]}
                                         </p>
                                       ) : (
-                                        <p className="text-xs text-gray-500">
-                                          💡 Gerado automaticamente. Você pode editar se necessário.
-                                        </p>
+                                        <>
+                                          <p className="text-xs text-gray-500">
+                                            💡 Gerado automaticamente. Você pode editar se necessário.
+                                          </p>
+                                          {existingBatch && (
+                                            <p className="text-xs text-emerald-700 bg-emerald-50 p-2 rounded-md border border-emerald-200">
+                                              ✅ Lote encontrado: {existingBatch.batchNumber}
+                                            </p>
+                                          )}
+                                        </>
                                       )}
                                     </div>
                                     {/* Campo Quantidade */}
@@ -1782,6 +1962,7 @@ const Entradas = () => {
               <TableHeader className="bg-neutral-50">
                 <TableRow className="border-neutral-200 hover:bg-neutral-100">
                   <TableHead className="font-semibold text-neutral-700 py-4 sm:py-6 px-2 sm:px-4 text-xs sm:text-sm">Produto</TableHead>
+                  <TableHead className="font-semibold text-neutral-700 py-4 sm:py-6 px-2 sm:px-4 text-xs sm:text-sm">Validade</TableHead>
                   <TableHead className="font-semibold text-neutral-700 py-4 sm:py-6 px-2 sm:px-4 text-xs sm:text-sm hidden sm:table-cell">Fornecedor</TableHead>
                   <TableHead className="font-semibold text-neutral-700 py-4 sm:py-6 px-2 sm:px-4 text-xs sm:text-sm">Qtd</TableHead>
                   <TableHead className="font-semibold text-neutral-700 py-4 sm:py-6 px-2 sm:px-4 text-xs sm:text-sm hidden md:table-cell">Custo Unit.</TableHead>
@@ -1819,13 +2000,62 @@ const Entradas = () => {
                   </TableRow>
                 ) : (
                   filteredEntries.map((entry) => (
-                    <TableRow key={entry.id} className="border-neutral-100 hover:bg-neutral-50 transition-colors duration-150">
+                  <TableRow key={entry.id} className="border-neutral-100 hover:bg-neutral-50 transition-colors duration-150">
                       <TableCell className="py-4 sm:py-6 px-2 sm:px-4">
                         <div className="space-y-1 sm:space-y-2">
                           <div className="font-semibold text-neutral-900 text-sm sm:text-base">{entry.productName}</div>
                           <div className="text-xs sm:text-sm text-neutral-500 font-mono">{entry.productSku}</div>
                         </div>
                       </TableCell>
+                    <TableCell className="py-4 sm:py-6 px-2 sm:px-4">
+                      {(() => {
+                        const rawExpiry = (entry as any).expiryDate as Date | string | undefined;
+                        const rawManu = (entry as any).manufactureDate as Date | string | undefined;
+                        if (!rawExpiry) return <span className="text-neutral-400 text-sm">—</span>;
+                        const expiryDate = rawExpiry instanceof Date ? rawExpiry : new Date(rawExpiry);
+                        if (isNaN(expiryDate.getTime())) return <span className="text-neutral-400 text-sm">—</span>;
+                        const manuDate = rawManu ? (rawManu instanceof Date ? rawManu : new Date(rawManu)) : undefined;
+
+                        // Se tiver FAB e EXP, exibir prazo total (EXP - FAB). Caso contrário, exibir restante até hoje
+                        let badgeClass = 'bg-emerald-100 text-emerald-700 border-emerald-200';
+                        let label = '';
+                        if (manuDate && !isNaN(manuDate.getTime())) {
+                          const startFab = new Date(manuDate.getFullYear(), manuDate.getMonth(), manuDate.getDate()).getTime();
+                          const endExp = new Date(expiryDate.getFullYear(), expiryDate.getMonth(), expiryDate.getDate()).getTime();
+                          const diffDaysTotal = Math.round((endExp - startFab) / (1000 * 60 * 60 * 24));
+                          label = `Validade: ${humanizeDaysDiff(diffDaysTotal)}`;
+                          // cor neutra/positiva para prazo total
+                          badgeClass = 'bg-blue-100 text-blue-700 border-blue-200';
+                        } else {
+                          const today = new Date();
+                          const start = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+                          const end = new Date(expiryDate.getFullYear(), expiryDate.getMonth(), expiryDate.getDate()).getTime();
+                          const diffDays = Math.round((end - start) / (1000 * 60 * 60 * 24));
+                          const isExpired = diffDays < 0;
+                          const isToday = diffDays === 0;
+                          badgeClass = isExpired
+                            ? 'bg-red-100 text-red-700 border-red-200'
+                            : isToday
+                              ? 'bg-amber-100 text-amber-700 border-amber-200'
+                              : diffDays <= 7
+                                ? 'bg-orange-100 text-orange-700 border-orange-200'
+                                : 'bg-emerald-100 text-emerald-700 border-emerald-200';
+                          label = isExpired
+                            ? `Vencido há ${humanizeDaysDiff(diffDays)}`
+                            : isToday
+                              ? 'Vence hoje'
+                              : `Faltam ${humanizeDaysDiff(diffDays)}`;
+                        }
+                        return (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-neutral-600">{expiryDate.toLocaleDateString('pt-BR')}</span>
+                            <span className={`inline-flex items-center px-2 py-1 rounded-md border text-[11px] font-medium ${badgeClass}`}>
+                              <span className="ml-1">{label}</span>
+                            </span>
+                          </div>
+                        );
+                      })()}
+                    </TableCell>
                       <TableCell className="py-4 sm:py-6 px-2 sm:px-4 hidden sm:table-cell">
                         <span className="font-medium text-neutral-700 text-sm sm:text-base">{entry.supplier}</span>
                       </TableCell>
@@ -1925,12 +2155,12 @@ const Entradas = () => {
             >
               Cancelar
             </Button>
-            <Button
-              type="button"
-              onClick={confirmDeleteEntry}
-              disabled={isDeleting}
-              className="bg-red-600 hover:bg-red-700 text-white focus:ring-red-600"
-            >
+              <Button
+                type="button"
+                onClick={confirmDeleteEntry}
+                disabled={isDeleting}
+                className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 bg-red-600 hover:bg-red-700 text-white h-10 px-4 py-2"
+              >
               {isDeleting ? (
                 <>
                   <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
@@ -1939,7 +2169,7 @@ const Entradas = () => {
               ) : (
                 <>
                   <Trash2 className="h-4 w-4 mr-2" />
-                  Excluir Entrada
+                    Excluir Entrada
                 </>
               )}
             </Button>

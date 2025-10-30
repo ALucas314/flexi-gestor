@@ -9,6 +9,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { supabase } from '@/lib/supabase';
 import { useAuth } from './AuthContext';
 import { useWorkspace } from './WorkspaceContext';
+import { checkSupabaseStorageCapacityOnce } from '@/lib/storageCapacity';
 
 // Interfaces dos dados
 interface Product {
@@ -60,7 +61,7 @@ interface DataContextType {
   addProduct: (product: Omit<Product, 'id'>) => Promise<void>;
   updateProduct: (id: string, product: Partial<Product>) => Promise<void>;
   deleteProduct: (id: string) => Promise<void>;
-  addMovement: (movement: Omit<Movement, 'id' | 'total'>) => Promise<void>;
+  addMovement: (movement: Omit<Movement, 'id' | 'total'> & { receiptNumber?: string }) => Promise<void>;
   deleteMovement: (id: string) => Promise<void>;
   addNotification: (title: string, message: string, type: 'success' | 'error' | 'warning' | 'info') => Promise<void>;
   markNotificationAsRead: (id: string) => Promise<void>;
@@ -98,6 +99,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [categories, setCategories] = useState<string[]>([]);
   const [customUnits, setCustomUnits] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [storageChecked, setStorageChecked] = useState(false);
 
   const { isAuthenticated, user } = useAuth();
   const { workspaceAtivo } = useWorkspace();
@@ -246,6 +248,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       const loadData = async () => {
         await refreshData();
         loadNotificationsFromLocalStorage();
+        if (!storageChecked) {
+          // Verifica capacidade do Storage uma vez após carregar dados
+          checkSupabaseStorageCapacityOnce().finally(() => setStorageChecked(true));
+        }
       };
       loadData();
 
@@ -312,11 +318,18 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
       // 🔄 Health check que detecta desconexão e reconecta
       // Verifica a cada 30 segundos se a última conexão foi há mais de 2 minutos
-      const healthCheckInterval = setInterval(() => {
+      const healthCheckInterval = setInterval(async () => {
         const timeSinceLastConnection = Date.now() - lastSuccessfulConnection;
         // Se não houve conexão bem-sucedida nos últimos 2 minutos, fazer reload
         if (timeSinceLastConnection > 120000) {
-          window.location.reload();
+          try {
+            // Tentar reconectar silenciosamente, sem recarregar a página
+            reconfigureSubscriptions();
+            await refreshData();
+            lastSuccessfulConnection = Date.now();
+          } catch (e) {
+            // Silencioso: mantém a UI estável
+          }
         }
       }, 30000); // Verifica a cada 30 segundos
 
@@ -516,7 +529,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   };
 
   // 📊 Adicionar movimentação
-  const addMovement = async (movement: Omit<Movement, 'id' | 'total'>) => {
+  const addMovement = async (movement: Omit<Movement, 'id' | 'total'> & { receiptNumber?: string }) => {
     if (!user?.id || !workspaceAtivo?.id) {
       throw new Error('Usuário não autenticado');
     }
@@ -525,21 +538,23 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       // Calcular total
       const total = movement.quantity * movement.unitPrice;
 
-      // Gerar número de recibo se for saída
-      let receiptNumber = null;
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const day = String(now.getDate()).padStart(2, '0');
-      const hours = String(now.getHours()).padStart(2, '0');
-      const minutes = String(now.getMinutes()).padStart(2, '0');
-      const seconds = String(now.getSeconds()).padStart(2, '0');
-      const milliseconds = String(now.getMilliseconds()).padStart(3, '0');
-      
-      if (movement.type === 'saida') {
-        receiptNumber = `REC-${year}${month}${day}-${hours}${minutes}${seconds}${milliseconds}`;
-      } else if (movement.type === 'entrada') {
-        receiptNumber = `NFC-${year}${month}${day}-${hours}${minutes}${seconds}${milliseconds}`;
+      // Gerar número de recibo se não fornecido ou se for saída/entrada
+      let receiptNumber = movement.receiptNumber || null;
+      if (!receiptNumber) {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        const seconds = String(now.getSeconds()).padStart(2, '0');
+        const milliseconds = String(now.getMilliseconds()).padStart(3, '0');
+        
+        if (movement.type === 'saida') {
+          receiptNumber = `REC-${year}${month}${day}-${hours}${minutes}${seconds}${milliseconds}`;
+        } else if (movement.type === 'entrada') {
+          receiptNumber = `NFC-${year}${month}${day}-${hours}${minutes}${seconds}${milliseconds}`;
+        }
       }
       
       const { data, error } = await supabase

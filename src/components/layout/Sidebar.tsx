@@ -6,6 +6,7 @@ import {
   FileText, 
   DollarSign,
   Users,
+  Truck,
   Settings,
   Pin,
   PinOff
@@ -35,7 +36,13 @@ const navigationItems = [
     icon: Package, 
     label: "Produtos", 
     path: "/produtos",
-    description: "Gestão de produtos"
+    description: "Cadastro de produtos"
+  },
+  { 
+    icon: Truck, 
+    label: "Fornecedores", 
+    path: "/fornecedores",
+    description: "Cadastro de fornecedores"
   },
   { 
     icon: TrendingUp, 

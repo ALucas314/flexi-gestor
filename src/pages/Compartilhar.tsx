@@ -38,7 +38,7 @@ const PAGINAS_DISPONIVEIS = [
   { id: 'saidas', label: 'Saídas', icon: '📤' },
   { id: 'relatorios', label: 'Relatórios', icon: '📊' },
   { id: 'financeiro', label: 'Financeiro', icon: '💰' },
-  { id: 'pdv', label: 'PDV', icon: '🛒' }
+  { id: 'fornecedores', label: 'Fornecedores', icon: '🏢' }
 ];
 
 const Compartilhar = () => {
@@ -48,7 +48,7 @@ const Compartilhar = () => {
   const { confirm, dialogState, closeDialog, handleConfirm } = useConfirmDialog();
   const [emailCompartilhar, setEmailCompartilhar] = useState('');
   const [permissoesSelecionadas, setPermissoesSelecionadas] = useState<string[]>([
-    'produtos', 'entradas', 'saidas', 'relatorios', 'financeiro', 'pdv'
+    'produtos', 'entradas', 'saidas', 'relatorios', 'financeiro', 'fornecedores'
   ]);
   const [compartilhamentos, setCompartilhamentos] = useState<Compartilhamento[]>([]);
   const [compartilhadosComigo, setCompartilhadosComigo] = useState<Compartilhamento[]>([]);
@@ -343,10 +343,10 @@ const Compartilhar = () => {
           
           carregarCompartilhamentos();
           
-          // Recarregar após um momento para atualizar o header e o WorkspaceSelector
+          // Atualizar header/WorkspaceSelector sem reload forçando evento global
           setTimeout(() => {
-            window.location.reload();
-          }, 1000);
+            window.dispatchEvent(new Event('workspace-changed'));
+          }, 300);
         } catch (error) {
           console.error('Erro ao remover compartilhamento:', error);
           toast.error('Erro ao remover acesso');
@@ -397,10 +397,10 @@ const Compartilhar = () => {
       // Atualizar a lista de compartilhamentos
       carregarCompartilhamentos();
       
-      // Recarregar após um momento para atualizar o header
+      // Atualizar header sem reload: emite evento global
       setTimeout(() => {
-        window.location.reload();
-      }, 1000);
+        window.dispatchEvent(new Event('workspace-changed'));
+      }, 300);
         } catch (error) {
           toast.error('Erro ao remover acesso');
         }

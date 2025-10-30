@@ -11,6 +11,7 @@ import Entradas from "./pages/Entradas";
 import Saidas from "./pages/Saidas";
 import Relatorios from "./pages/Relatorios";
 import Financeiro from "./pages/Financeiro";
+import Fornecedores from "./pages/Fornecedores";
 import Perfil from "./pages/Perfil";
 import AlterarSenha from "./pages/AlterarSenha";
 import Compartilhar from "./pages/Compartilhar";
@@ -82,6 +83,7 @@ const App = () => (
                         <Route path="/saidas" element={<Saidas />} />
                         <Route path="/relatorios" element={<Relatorios />} />
                         <Route path="/financeiro" element={<Financeiro />} />
+                        <Route path="/fornecedores" element={<Fornecedores />} />
                         <Route path="/perfil" element={<Perfil />} />
                         <Route path="/alterar-senha" element={<AlterarSenha />} />
                         <Route path="/compartilhar" element={<Compartilhar />} />

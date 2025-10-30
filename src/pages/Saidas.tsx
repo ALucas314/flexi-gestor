@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Plus, TrendingDown, Package, Search, Trash2, Calendar, DollarSign, ShoppingCart, Receipt, CheckCircle, Printer, Share2, Edit, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ import { useData } from "@/contexts/DataContext";
 import { getBatchesByProduct, updateBatchQuantity } from "@/lib/batches";
 import { useAuth } from "@/contexts/AuthContext";
 import { printReceipt, downloadReceipt } from "@/lib/receiptPDF";
+import { StockExitCart } from "@/components/saidas/StockExitCart";
 
 // Interface da saída de estoque
 interface StockExit {
@@ -40,6 +42,10 @@ type StockExitFormData = Omit<StockExit, 'id' | 'productName' | 'productSku' | '
   installments?: number;
 };
 
+// Carrinho
+interface CartBatchItem { batchId?: string; batchNumber?: string; quantity: number }
+interface CartItem { productId: string; productName: string; productSku: string; managedByBatch: boolean; quantity: number; unitPrice: number; batches?: CartBatchItem[] }
+
 const Saidas = () => {
   // Estados
   const [searchTerm, setSearchTerm] = useState("");
@@ -58,6 +64,11 @@ const Saidas = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [productSearchTerm, setProductSearchTerm] = useState("");
   const [productSearchOpen, setProductSearchOpen] = useState(false);
+  const [isCartPanelOpen, setIsCartPanelOpen] = useState(false);
+  const cartToggleRef = React.useRef<HTMLButtonElement | null>(null);
+
+  // Carrinho de vendas
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
 
   // Hooks
   const { toast } = useToast();
@@ -101,7 +112,6 @@ const Saidas = () => {
   const loadBatchesForProduct = async (productId: string) => {
     try {
       if (!user?.id) return;
-      
       setSelectedProductId(productId);
       setSelectedBatches([]);
       
@@ -191,6 +201,273 @@ const Saidas = () => {
     const product = products.find(p => p.id === productId);
     return product?.price || 0;
   };
+
+  // Adicionar item ao carrinho (suporta com/sem lote)
+  const addCurrentSelectionToCart = () => {
+    const selectedProduct = products.find(p => p.id === selectedProductId);
+    if (!selectedProduct) {
+      toast({ title: 'Selecione um produto', variant: 'destructive' });
+      return;
+    }
+    const managedByBatch = (selectedProduct as any)?.managedByBatch === true;
+    const unitPrice = getProductPrice(selectedProduct.id);
+
+    if (managedByBatch) {
+      const totalQty = getTotalSelectedQuantity();
+      if (totalQty <= 0) {
+        toast({ title: 'Selecione lotes com quantidade', variant: 'destructive' });
+        return;
+      }
+      const batches: CartBatchItem[] = selectedBatches
+        .filter(b => (b.quantity || 0) > 0 && b.batchId)
+        .map(b => ({ batchId: b.batchId, batchNumber: b.batchNumber, quantity: b.quantity }));
+      if (batches.length === 0) {
+        toast({ title: 'Selecione lotes válidos', variant: 'destructive' });
+        return;
+      }
+      setCartItems(prev => [...prev, {
+        productId: selectedProduct.id,
+        productName: selectedProduct.name,
+        productSku: selectedProduct.sku,
+        managedByBatch: true,
+        quantity: totalQty,
+        unitPrice,
+        batches
+      }]);
+      setIsCartPanelOpen(true);
+      setTimeout(() => {
+        try { cartToggleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' }); } catch {}
+      }, 0);
+    } else {
+      const qty = form.getValues('quantity') || 0;
+      if (qty <= 0) {
+        toast({ title: 'Informe a quantidade', variant: 'destructive' });
+        return;
+      }
+      setCartItems(prev => [...prev, {
+        productId: selectedProduct.id,
+        productName: selectedProduct.name,
+        productSku: selectedProduct.sku,
+        managedByBatch: false,
+        quantity: qty,
+        unitPrice
+      }]);
+      setIsCartPanelOpen(true);
+      setTimeout(() => {
+        try { cartToggleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' }); } catch {}
+      }, 0);
+    }
+
+    // Limpar seleção atual para permitir selecionar outro produto
+    setSelectedProductId('');
+    setSelectedBatches([]);
+    form.setValue('productId', '');
+    form.setValue('quantity', 0);
+    setProductSearchTerm('');
+    setProductSearchOpen(false);
+    toast({ title: 'Adicionado ao carrinho', description: selectedProduct.name });
+  };
+
+  const removeCartItem = (index: number) => {
+    setCartItems(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const updateCartItemQuantity = (index: number, newQuantity: number) => {
+    setCartItems(prev => prev.map((item, i) => {
+      if (i !== index) return item;
+      const targetQty = Math.max(1, newQuantity);
+
+      // Sem gerenciamento por lote: apenas ajusta a quantidade
+      if (!item.managedByBatch || !item.batches || item.batches.length === 0) {
+        return { ...item, quantity: targetQty };
+      }
+
+      // Com gerenciamento por lote: ajustar quantidades dentro dos lotes
+      const delta = targetQty - (item.quantity || 0);
+      let batches = [...(item.batches || [])];
+
+      if (delta > 0) {
+        // Aumentar: distribuir +1 por unidade começando do primeiro lote que tiver disponibilidade
+        let unitsToAdd = delta;
+        while (unitsToAdd > 0 && batches.length > 0) {
+          let adjusted = false;
+          for (let b = 0; b < batches.length && unitsToAdd > 0; b++) {
+            const batchEntry = batches[b];
+            const available = availableBatches.find(x => x.id === batchEntry.batchId)?.quantity ?? 0;
+            const currentUsed = batchEntry.quantity || 0;
+            if (currentUsed < available) {
+              batches[b] = { ...batchEntry, quantity: currentUsed + 1 };
+              unitsToAdd -= 1;
+              adjusted = true;
+            }
+          }
+          if (!adjusted) {
+            // Sem disponibilidade adicional em nenhum lote
+            break;
+          }
+        }
+      } else if (delta < 0) {
+        // Diminuir: remover unidades dos lotes do último para o primeiro
+        let unitsToRemove = -delta;
+        for (let b = batches.length - 1; b >= 0 && unitsToRemove > 0; b--) {
+          const current = batches[b].quantity || 0;
+          if (current > 0) {
+            const remove = Math.min(current, unitsToRemove);
+            batches[b] = { ...batches[b], quantity: current - remove };
+            unitsToRemove -= remove;
+          }
+        }
+        // Remover lotes zerados
+        batches = batches.filter(b => (b.quantity || 0) > 0);
+      }
+
+      const recomputedQty = batches.reduce((sum, b) => sum + (b.quantity || 0), 0);
+      // Garante pelo menos 1
+      const finalQty = Math.max(1, recomputedQty);
+      return { ...item, quantity: finalQty, batches };
+    }));
+  };
+
+  const clearCartNow = () => {
+    try {
+      setCartItems([]);
+      localStorage.removeItem('fg_cart_items');
+      setIsCartPanelOpen(false);
+      toast({ title: 'Carrinho esvaziado' });
+    } catch {}
+  };
+
+  // Carrinho renderizado dentro do Dialog (evita conflitos de overlay/fora)
+
+  const getCartTotal = () => cartItems.reduce((sum, i) => sum + (i.quantity * i.unitPrice), 0);
+
+  // Processar todos itens do carrinho como uma única saída
+  const processCartSale = async () => {
+    if (cartItems.length === 0) {
+      toast({ title: 'Carrinho vazio', variant: 'destructive' });
+      return;
+    }
+    
+    try {
+      // Obter dados do formulário (cliente, data, método de pagamento, observações)
+      const formData = form.getValues();
+      const customer = formData.customer || 'Cliente Genérico';
+      const exitDate = formData.exitDate || new Date();
+      const paymentMethod = formData.paymentMethod || 'avista';
+      const installments = formData.installments || 1;
+      const notes = formData.notes || '';
+      
+      // Gerar um único número de recibo para toda a venda
+      const receiptNumber = generateReceiptNumber();
+      
+      // Calcular total geral e salvar informações antes de limpar
+      const totalGeral = getCartTotal();
+      const totalQuantity = cartItems.reduce((sum, item) => sum + item.quantity, 0);
+      const totalProducts = cartItems.length;
+      
+      // Preparar informações de pagamento
+      const paymentInfo = paymentMethod === "parcelado" 
+        ? `Pagamento: parcelado em ${installments}x`
+        : `Pagamento: à vista (${paymentMethod})`;
+      
+      // Lista de produtos para descrição
+      const productsList = cartItems.map(item => 
+        `${item.quantity}x ${item.productName}`
+      ).join(', ');
+      
+      // Validar estoque de todos os itens antes de processar
+      for (const item of cartItems) {
+        const product = products.find(p => p.id === item.productId);
+        if (!product) {
+          toast({ title: `Produto não encontrado: ${item.productName}`, variant: 'destructive' });
+          return;
+        }
+
+        // Verificar estoque
+        if ((product.stock || 0) < item.quantity) {
+          toast({ title: `Estoque insuficiente: ${product.name}`, variant: 'destructive' });
+          return;
+        }
+      }
+
+      // Processar todos os itens com o mesmo número de recibo
+      for (const item of cartItems) {
+        const product = products.find(p => p.id === item.productId);
+        if (!product) continue;
+
+        // Atualizar lotes quando houver
+        if (item.managedByBatch && user?.id && item.batches && item.batches.length > 0) {
+          for (const b of item.batches) {
+            const batch = availableBatches.find(x => x.id === b.batchId);
+            if (batch) {
+              const newQty = Math.max(0, (batch.quantity || 0) - b.quantity);
+              await updateBatchQuantity(batch.id, newQty, user.id);
+            }
+          }
+        }
+
+        // Registrar movimentação com o mesmo número de recibo
+        await addMovement({
+          type: 'saida',
+          productId: item.productId,
+          productName: item.productName,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          description: `Venda múltiplos itens - ${item.productName} | ${paymentInfo}${notes ? ' | Obs: ' + notes : ''}`,
+          date: exitDate,
+          status: 'confirmado',
+          paymentMethod: paymentMethod === "parcelado" ? `parcelado-${installments}x` : paymentMethod,
+          receiptNumber: receiptNumber // Mesmo número de recibo para todos os itens
+        });
+      }
+
+      // Limpar carrinho e fechar modal
+      setCartItems([]);
+      setIsCartPanelOpen(false);
+      setIsAddDialogOpen(false);
+      
+      // Limpar formulário
+      form.reset({
+        productId: "",
+        quantity: 0,
+        unitPrice: 0,
+        customer: customer, // Manter o cliente para próxima venda
+        exitDate: new Date(),
+        notes: "",
+        paymentMethod: "avista",
+        installments: 1,
+      });
+      
+      // Toast com informações agregadas
+      toast({ 
+        title: '✅ Venda Registrada!', 
+        description: `${totalProducts} produto(s) totalizando ${totalQuantity} unidades por R$ ${totalGeral.toFixed(2).replace('.', ',')}. Recibo: ${receiptNumber}`,
+        variant: 'default'
+      });
+      
+      // Adicionar notificação
+      addNotification(
+        '🛒 Venda Múltiplos Produtos',
+        `Produtos: ${productsList}\nQuantidade Total: ${totalQuantity} unidades\nCliente: ${customer}\nTotal: R$ ${totalGeral.toFixed(2)}\nRecibo: ${receiptNumber}`,
+        'success'
+      );
+    } catch (e: any) {
+      toast({ title: 'Erro ao processar venda', description: e?.message || String(e), variant: 'destructive' });
+    }
+  };
+
+  // Carrinho (novo componente)
+  const RenderCart = ({ compact = false }: { compact?: boolean }) => (
+    <StockExitCart
+      items={cartItems}
+      total={getCartTotal()}
+      onRemove={removeCartItem}
+      onQuantityChange={updateCartItemQuantity}
+      onClear={clearCartNow}
+      onFinalize={processCartSale}
+      compact={compact}
+    />
+  );
 
   // Verificar se algum lote excede a quantidade disponível
   const hasExceedingBatches = () => {
@@ -556,6 +833,17 @@ const Saidas = () => {
 
   // Carregar dados do Supabase
   useEffect(() => {
+    // Restaurar carrinho do storage
+    try {
+      const raw = localStorage.getItem('fg_cart_items');
+      if (raw) {
+        const parsed: CartItem[] = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          setCartItems(parsed);
+          setIsCartPanelOpen(parsed.length > 0);
+        }
+      }
+    } catch {}
     // Simular carregamento inicial
     const timer = setTimeout(() => {
       setIsLoading(false);
@@ -563,6 +851,13 @@ const Saidas = () => {
     
     return () => clearTimeout(timer);
   }, []);
+
+  // Persistir carrinho no storage a cada mudança
+  useEffect(() => {
+    try {
+      localStorage.setItem('fg_cart_items', JSON.stringify(cartItems));
+    } catch {}
+  }, [cartItems]);
 
 
   // Filtros
@@ -608,33 +903,48 @@ const Saidas = () => {
           </h1>
           <p className="text-muted-foreground">Registre vendas e saídas do sistema</p>
         </div>
-              <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
-                setIsAddDialogOpen(open);
-                if (!open) {
-                  // Limpar estados ao fechar
-                  setSelectedProductId("");
-                  setSelectedBatches([]);
-                  setProductSearchTerm("");
-                  setProductSearchOpen(false);
-                  form.reset({
-                    productId: "",
-                    quantity: 0,
-                    unitPrice: 0,
-                    customer: "",
-                    exitDate: new Date(),
-                    notes: "",
-                    paymentMethod: "avista",
-                    installments: 1,
-                  });
-                }
-              }}>
-                <DialogTrigger asChild>
-                  <Button className="w-full sm:w-auto bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-xl sm:rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-200 transform hover:scale-105">
-                    <Plus className="w-5 h-5 sm:w-6 sm:h-6 mr-2 sm:mr-3" />
-                    Nova Saída
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-md sm:max-w-lg md:max-w-2xl max-h-[90vh] flex flex-col p-0">
+      <div className="relative flex items-center gap-4 flex-wrap">
+        <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
+          setIsAddDialogOpen(open);
+          if (!open) {
+            // Limpar estados ao fechar
+            setSelectedProductId("");
+            setSelectedBatches([]);
+            setProductSearchTerm("");
+            setProductSearchOpen(false);
+            form.reset({
+              productId: "",
+              quantity: 0,
+              unitPrice: 0,
+              customer: "",
+              exitDate: new Date(),
+              notes: "",
+              paymentMethod: "avista",
+              installments: 1,
+            });
+          }
+        }}>
+          <DialogTrigger asChild>
+            <Button className="w-full sm:w-auto bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-xl sm:rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-200 transform hover:scale-105">
+              <Plus className="w-5 h-5 sm:w-6 sm:h-6 mr-2 sm:mr-3" />
+              Nova Saída
+            </Button>
+          </DialogTrigger>
+                <DialogContent
+                  className="max-w-md sm:max-w-lg md:max-w-2xl max-h-[90vh] flex flex-col p-0"
+                  onInteractOutside={(e) => {
+                    const cart = document.getElementById('cart-panel');
+                    // Radix repassa o evento original em e.detail.originalEvent
+                    const original = (e as any)?.detail?.originalEvent as Event | undefined;
+                    const path = original && (original as any).composedPath ? (original as any).composedPath() as EventTarget[] : [];
+                    if (cart) {
+                      const isInCart = path.includes(cart) || (e.target instanceof Node && cart.contains(e.target as Node));
+                      if (isInCart) {
+                        e.preventDefault();
+                      }
+                    }
+                  }}
+                >
                   <DialogHeader className="space-y-2 pb-4 px-6 pt-6 border-b">
                     <DialogTitle className="text-base sm:text-xl font-bold text-neutral-900">
                       📤 Registrar Nova Saída
@@ -751,6 +1061,7 @@ const Saidas = () => {
                                     )}
                                   </div>
                                   <FormMessage />
+                                  {/* Botão de adicionar ao carrinho movido para o footer */}
                                 </FormItem>
                               );
                             }}
@@ -839,6 +1150,8 @@ const Saidas = () => {
                                     </FormItem>
                                   )}
                                 />
+
+                                {/* Datas removidas para saída de produtos sem lote */}
                                 
                                 {form.watch('quantity') > 0 && selectedProduct && (() => {
                                   const unitPrice = getProductPrice(selectedProduct.id);
@@ -1292,62 +1605,84 @@ const Saidas = () => {
                         />
                       </div>
                       
-                      {/* Footer do Modal */}
-                      <DialogFooter className="px-6 py-4 border-t border-neutral-200 bg-neutral-50/50 flex flex-col sm:flex-row gap-2">
-                        <Button 
-                          type="button" 
-                          variant="outline" 
-                          onClick={() => {
-                            setIsAddDialogOpen(false);
-                            setProductSearchTerm("");
-                            setSelectedProductId("");
-                            setSelectedBatches([]);
-                            form.reset({
-                              productId: "",
-                              quantity: 0,
-                              unitPrice: 0,
-                              customer: "",
-                              exitDate: new Date(),
-                              notes: "",
-                              paymentMethod: "avista",
-                              installments: 1,
-                            });
-                          }}
-                          className="w-full sm:w-auto border-2 border-neutral-300 text-neutral-700 hover:bg-neutral-50 h-9 text-sm"
-                        >
-                          ❌ Cancelar
-                        </Button>
-                        <Button 
-                          type="submit"
-                          className="w-full sm:w-auto bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white shadow-lg hover:shadow-xl transition-all duration-200 h-9 text-sm"
-                          disabled={(() => {
-                            const selectedProduct = products.find(p => p.id === selectedProductId);
-                            const managedByBatch = (selectedProduct as any)?.managedByBatch === true;
-                            if (managedByBatch) {
-                              return hasExceedingBatches();
-                            } else {
-                              // Se não gerencia por lote, verificar se quantidade é válida
-                              const quantity = form.getValues('quantity');
-                              return !quantity || quantity <= 0;
-                            }
-                          })()}
-                        >
-                          {(() => {
-                            const selectedProduct = products.find(p => p.id === selectedProductId);
-                            const managedByBatch = (selectedProduct as any)?.managedByBatch === true;
-                            if (managedByBatch) {
-                              return hasExceedingBatches() ? '⚠️ Quantidade Excedida' : '📤 Registrar Saída';
-                            } else {
-                              const quantity = form.getValues('quantity');
-                              return (!quantity || quantity <= 0) ? '⚠️ Informe a Quantidade' : '📤 Registrar Saída';
-                            }
-                          })()}
-                        </Button>
-                      </DialogFooter>
+                      {/* Carrinho dentro do Dialog */}
+                      <div className="px-6 pt-2 pb-4">
+                        <RenderCart compact={true} />
+                      </div>
+
+                        {/* Footer do Modal */}
+                        <DialogFooter className="px-6 py-4 border-t border-neutral-200 bg-neutral-50/50 flex flex-col sm:flex-row gap-2">
+                          <Button 
+                            type="button" 
+                            variant="outline" 
+                            onClick={() => {
+                              setIsAddDialogOpen(false);
+                              setProductSearchTerm("");
+                              setSelectedProductId("");
+                              setSelectedBatches([]);
+                              form.reset({
+                                productId: "",
+                                quantity: 0,
+                                unitPrice: 0,
+                                customer: "",
+                                exitDate: new Date(),
+                                notes: "",
+                                paymentMethod: "avista",
+                                installments: 1,
+                              });
+                            }}
+                            className="w-full sm:w-auto border-2 border-neutral-300 text-neutral-700 hover:bg-neutral-50 h-9 text-sm"
+                          >
+                            ❌ Cancelar
+                          </Button>
+                          <Button
+                            type="button"
+                            onClick={addCurrentSelectionToCart}
+                            className="w-auto px-4 h-9 text-sm rounded-md bg-green-600 hover:bg-green-700 text-white"
+                            disabled={(() => {
+                              const selectedProduct = products.find(p => p.id === selectedProductId);
+                              if (!selectedProduct) return true;
+                              const managedByBatch = (selectedProduct as any)?.managedByBatch === true;
+                              if (managedByBatch) {
+                                const totalQty = selectedBatches.reduce((s, b) => s + (b.quantity || 0), 0);
+                                return totalQty <= 0;
+                              }
+                              return (form.getValues('quantity') || 0) <= 0;
+                            })()}
+                          >
+                            ➕ Adicionar ao Carrinho
+                          </Button>
+                          <Button 
+                            type="button"
+                            onClick={() => {
+                              if (cartItems.length > 0) {
+                                processCartSale();
+                              } else {
+                                form.handleSubmit(handleAddExit)();
+                              }
+                            }}
+                            className="w-full sm:w-auto bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white shadow-lg hover:shadow-xl transition-all duration-200 h-9 text-sm"
+                            disabled={(() => {
+                              if (cartItems.length > 0) return false;
+                              const selectedProduct = products.find(p => p.id === selectedProductId);
+                              if (!selectedProduct) return true;
+                              const managedByBatch = (selectedProduct as any)?.managedByBatch === true;
+                              if (managedByBatch) {
+                                const totalQty = selectedBatches.reduce((s, b) => s + (b.quantity || 0), 0);
+                                return totalQty <= 0;
+                              }
+                              return (form.getValues('quantity') || 0) <= 0;
+                            })()}
+                          >
+                            📤 Registrar Saída
+                          </Button>
+                        </DialogFooter>
                     </form>
                   </Form>
                 </DialogContent>
-              </Dialog>
+        </Dialog>
+        
+      </div>
             </div>
             
             {/* Cards de Estatísticas */}
@@ -1548,10 +1883,10 @@ const Saidas = () => {
                                   variant="ghost" 
                                   size="sm"
                                   onClick={() => handleDeleteExit(exit)}
-                                  className="hover:bg-red-50 hover:text-red-600 transition-colors"
+                                  className="text-red-600 hover:text-red-700 hover:bg-red-50 transition-colors rounded-md h-8 w-8 sm:h-9 sm:w-9 p-0"
                                   title="Excluir saída"
                                 >
-                                  <Trash2 className="h-4 w-4" />
+                                  <Trash2 className="h-4 w-4 text-red-600" />
                                 </Button>
                               </div>
                             </TableCell>
@@ -1610,6 +1945,7 @@ const Saidas = () => {
               variant="destructive"
               onClick={confirmDelete}
               disabled={isDeleting}
+              className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 bg-red-600 hover:bg-red-700 text-white h-10 px-4 py-2"
             >
               {isDeleting ? (
                 <>
@@ -1626,6 +1962,9 @@ const Saidas = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+
+      
 
       {/* Modal de Edição de Saída */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
