@@ -36,8 +36,8 @@ const defaultActions = [
   },
   {
     id: "entradas",
-    title: "Entradas",
-    description: "Controle de entradas",
+    title: "Compras",
+    description: "Controle de compras",
     icon: "TrendingUp",
     color: "from-emerald-500 to-emerald-600",
     hoverColor: "from-emerald-600 to-emerald-700",
@@ -46,8 +46,8 @@ const defaultActions = [
   },
   {
     id: "saidas",
-    title: "Saídas",
-    description: "Controle de saídas",
+    title: "Vendas",
+    description: "Controle de vendas",
     icon: "TrendingDown",
     color: "from-red-500 to-red-600",
     hoverColor: "from-red-600 to-red-700",
@@ -85,15 +85,15 @@ const availablePages = [
     icon: "Package"
   },
   { 
-    name: "Entradas", 
+    name: "Compras", 
     path: "/entradas", 
-    description: "Controle de entradas",
+    description: "Controle de compras",
     icon: "TrendingUp"
   },
   { 
-    name: "Saídas", 
+    name: "Vendas", 
     path: "/saidas", 
-    description: "Controle de saídas",
+    description: "Controle de vendas",
     icon: "TrendingDown"
   },
   { 
@@ -152,20 +152,29 @@ export const QuickActions = () => {
   useEffect(() => {
     const savedActions = localStorage.getItem('flexi-gestor-quick-actions');
     const actionsVersion = localStorage.getItem('flexi-gestor-actions-version');
-    const currentVersion = '2.0'; // Versão atual dos atalhos
+    const currentVersion = '2.1'; // bump para remover atalhos antigos de PDV
+
+    const removeOldPDVRefs = (list: QuickAction[]) =>
+      (list || []).filter(a => a.path !== '/pdv' && a.title.toLowerCase() !== 'pdv' && !/ponto de venda/i.test(a.description || ''));
     
     // Se não tem versão ou a versão é diferente, resetar para os padrões
     if (!actionsVersion || actionsVersion !== currentVersion) {
-      console.log('🔄 Atualizando atalhos do Dashboard para versão', currentVersion);
-      setActions(defaultActions);
-      localStorage.setItem('flexi-gestor-quick-actions', JSON.stringify(defaultActions));
+      const cleanedDefaults = removeOldPDVRefs(defaultActions);
+      setActions(cleanedDefaults);
+      localStorage.setItem('flexi-gestor-quick-actions', JSON.stringify(cleanedDefaults));
       localStorage.setItem('flexi-gestor-actions-version', currentVersion);
     } else if (savedActions) {
-      setActions(JSON.parse(savedActions));
+      const parsed: QuickAction[] = JSON.parse(savedActions);
+      const cleaned = removeOldPDVRefs(parsed);
+      setActions(cleaned);
+      if (cleaned.length !== parsed.length) {
+        localStorage.setItem('flexi-gestor-quick-actions', JSON.stringify(cleaned));
+      }
     } else {
       // Usar ações padrão na primeira vez
-      setActions(defaultActions);
-      localStorage.setItem('flexi-gestor-quick-actions', JSON.stringify(defaultActions));
+      const cleanedDefaults = removeOldPDVRefs(defaultActions);
+      setActions(cleanedDefaults);
+      localStorage.setItem('flexi-gestor-quick-actions', JSON.stringify(cleanedDefaults));
       localStorage.setItem('flexi-gestor-actions-version', currentVersion);
     }
   }, []);
