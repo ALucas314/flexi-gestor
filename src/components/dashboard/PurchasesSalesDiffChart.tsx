@@ -130,7 +130,7 @@ export function PurchasesSalesDiffChart({ movements }: PurchasesSalesDiffChartPr
   };
 
   const chartContent = chartData.length > 0 ? (
-    <ResponsiveContainer width="100%" height={isMobile ? 500 : 350}>
+    <ResponsiveContainer width="100%" height={isMobile ? 500 : 280}>
       <ComposedChart 
         data={chartData} 
         margin={isMobile 

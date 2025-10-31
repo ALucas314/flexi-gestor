@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Plus, TrendingUp, Package, Search, Edit, Trash2, Calendar, DollarSign, Filter, Download, Eye, X } from "lucide-react";
 import { BatchManager } from "@/components/BatchManager";
 
@@ -17,6 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useData } from "@/contexts/DataContext";
 import { getBatchesByProduct, createBatch, updateBatchQuantity, checkBatchNumberExists, generateNextAvailableBatchNumber } from "@/lib/batches";
 import { useAuth } from "@/contexts/AuthContext";
+import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { supabase } from "@/lib/supabase";
 import { Label } from "@/components/ui/label";
 import { generateReceiptNumber } from "@/lib/utils";
@@ -55,6 +56,7 @@ interface StockEntry {
   notes: string;
   status: "pendente" | "aprovado" | "cancelado";
   receiptNumber?: string; // Número único da nota fiscal
+  markup?: number; // Percentual de markup para calcular preço de venda
 }
 
 type StockEntryFormData = Omit<StockEntry, 'id' | 'productName' | 'productSku' | 'totalCost' | 'receiptNumber'>;
@@ -76,7 +78,7 @@ const Entradas = () => {
   const [productSearchOpen, setProductSearchOpen] = useState(false);
   const [productSearchTerm, setProductSearchTerm] = useState("");
   const [supplierSearchTerm, setSupplierSearchTerm] = useState("");
-  const [supplierResults, setSupplierResults] = useState<Array<{ id?: string; nome: string; codigo: number }>>([]);
+  const [supplierResults, setSupplierResults] = useState<Array<{ id?: string; nome: string; codigo: string }>>([]);
   // Estado para armazenar valores parciais de datas enquanto digita
   const [dateTextValues, setDateTextValues] = useState<{[key: string]: string}>({});
   const [isBatchDialogOpen, setIsBatchDialogOpen] = useState(false);
@@ -84,11 +86,17 @@ const Entradas = () => {
   const [quantityErrors, setQuantityErrors] = useState<{[key: number]: string}>({});
   const [selectedProductForBatch, setSelectedProductForBatch] = useState<{id: string, name: string, sku: string, stock: number} | null>(null);
   const [supplierSuggestion, setSupplierSuggestion] = useState<{ id: string; code?: string; name: string } | null>(null);
+  // Estado para armazenar todos os fornecedores cadastrados
+  const [allSuppliers, setAllSuppliers] = useState<Array<{ id: string; codigo: string; nome: string }>>([]);
+  const [isLoadingSuppliers, setIsLoadingSuppliers] = useState(false);
+  const [showSupplierDropdown, setShowSupplierDropdown] = useState(false);
+  const supplierInputRef = useRef<HTMLDivElement>(null);
 
   // Hooks
   const { toast } = useToast();
-  const { products, movements, addMovement, deleteMovement, addNotification } = useData();
+  const { products, movements, addMovement, deleteMovement, addNotification, updateProduct } = useData();
   const { user } = useAuth();
+  const { workspaceAtivo } = useWorkspace();
 
   // Filtrar apenas as compras (type 'entrada') dos movements
   const entries: StockEntry[] = movements
@@ -155,6 +163,7 @@ const Entradas = () => {
       entryDate: new Date(),
       notes: "",
       status: "pendente",
+      markup: 0, // Markup padrão em percentual
     },
   });
 
@@ -185,37 +194,79 @@ const Entradas = () => {
     }
   };
 
-  // Buscar fornecedores por nome (ilike) ou código (igual) conforme usuário digita
-  useEffect(() => {
-    let isCancelled = false;
-    const term = supplierSearchTerm.trim();
-    if (term === "") {
-      setSupplierResults([]);
+  // Carregar todos os fornecedores do workspace
+  const loadAllSuppliers = async () => {
+    if (!workspaceAtivo?.id) {
+      setAllSuppliers([]);
       return;
     }
-    const fetchSuppliers = async () => {
-      try {
-        const numeric = /^\d+$/.test(term) ? Number(term) : null;
-        const or = numeric !== null
-          ? `nome.ilike.%${term}%,codigo.eq.${numeric}`
-          : `nome.ilike.%${term}%`;
-        const { data, error } = await supabase
-          .from("fornecedores")
-          .select("codigo,nome")
-          .or(or)
-          .order("nome", { ascending: true })
-          .limit(5);
-        if (error) throw error;
-        if (!isCancelled) {
-          setSupplierResults((data || []).map(r => ({ nome: r.nome as string, codigo: r.codigo as number })));
-        }
-      } catch {
-        if (!isCancelled) setSupplierResults([]);
+
+    try {
+      setIsLoadingSuppliers(true);
+      const { data, error } = await supabase
+        .from('fornecedores')
+        .select('id, codigo, nome')
+        .eq('usuario_id', workspaceAtivo.id)
+        .order('nome', { ascending: true });
+
+      if (error) {
+        console.error('Erro ao carregar fornecedores:', error);
+        setAllSuppliers([]);
+        return;
+      }
+
+      const mapped = (data || []).map((s: any) => ({
+        id: s.id,
+        codigo: String(s.codigo || ''),
+        nome: s.nome || s.name || ''
+      }));
+
+      setAllSuppliers(mapped);
+    } catch (error: any) {
+      console.error('Erro ao carregar fornecedores:', error);
+      setAllSuppliers([]);
+    } finally {
+      setIsLoadingSuppliers(false);
+    }
+  };
+
+  // Carregar fornecedores quando o workspace mudar
+  useEffect(() => {
+    loadAllSuppliers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceAtivo?.id]);
+
+  // Fechar dropdown quando clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (supplierInputRef.current && !supplierInputRef.current.contains(event.target as Node)) {
+        setShowSupplierDropdown(false);
       }
     };
-    fetchSuppliers();
-    return () => { isCancelled = true; };
-  }, [supplierSearchTerm]);
+
+    if (showSupplierDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showSupplierDropdown]);
+
+  // Filtrar fornecedores localmente baseado no termo de busca
+  const filteredSuppliers = useMemo(() => {
+    const search = (supplierSearchTerm || '').trim().toLowerCase();
+    // Não retornar resultados se não houver texto digitado
+    if (!search) {
+      return [];
+    }
+
+    return allSuppliers.filter((supplier) => {
+      const codigo = String(supplier.codigo || '').toLowerCase();
+      const nome = String(supplier.nome || '').toLowerCase();
+      return codigo.includes(search) || nome.includes(search);
+    }).slice(0, 10); // Limitar a 10 resultados
+  }, [allSuppliers, supplierSearchTerm]);
 
   // Adicionar novo lote à compra
   const addBatchToEntry = async () => {
@@ -606,7 +657,9 @@ const Entradas = () => {
           .map(d => d as Date)
           .sort((a, b) => a.getTime() - b.getTime())[0];
 
-        addMovement({
+        const markup = (data as any).markup || 0;
+        
+        await addMovement({
           type: 'entrada',
           productId: data.productId,
           productName: product.name,
@@ -617,6 +670,12 @@ const Entradas = () => {
             + (minExpiry ? ` | EXP:${minExpiry.toISOString().split('T')[0]}` : ''),
           date: data.entryDate,
         });
+
+        // Calcular e atualizar preço de venda do produto se markup foi informado
+        if (markup > 0 && averageCost > 0) {
+          const salePrice = averageCost * (1 + markup / 100);
+          await updateProduct(data.productId, { price: salePrice });
+        }
 
         setIsAddDialogOpen(false);
         setSelectedBatches([]);
@@ -659,7 +718,9 @@ const Entradas = () => {
       // Adicionar movimentação no contexto global - salva no Supabase
       const manu = (data as any).manufactureDate as Date | undefined;
       const exp = (data as any).expiryDate as Date | undefined;
-      addMovement({
+      const markup = (data as any).markup || 0;
+      
+      await addMovement({
         type: 'entrada',
         productId: data.productId,
         productName: product.name,
@@ -668,6 +729,12 @@ const Entradas = () => {
         description: `Entrada de ${data.quantity} unidades - ${data.supplier}` + (manu ? ` | FAB:${manu.toISOString().split('T')[0]}` : '') + (exp ? ` | EXP:${exp.toISOString().split('T')[0]}` : ''),
         date: data.entryDate,
       });
+
+      // Calcular e atualizar preço de venda do produto se markup foi informado
+      if (markup > 0 && data.unitCost > 0) {
+        const salePrice = data.unitCost * (1 + markup / 100);
+        await updateProduct(data.productId, { price: salePrice });
+      }
 
       setIsAddDialogOpen(false);
       form.reset();
@@ -960,6 +1027,9 @@ const Entradas = () => {
           {/* Botão de Nova Entrada com Design Sofisticado */}
           <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
             setIsAddDialogOpen(open);
+            if (open) {
+              setShowSupplierDropdown(false);
+            }
             if (!open) {
               // Limpar estados ao fechar
               setSelectedProductId("");
@@ -1109,103 +1179,67 @@ const Entradas = () => {
                             🏢 Fornecedor
                           </FormLabel>
                           <FormControl>
-                            <div className="relative">
+                            <div className="relative" ref={supplierInputRef}>
                               <Input 
                                 placeholder="Código ou nome do fornecedor" 
                                 value={field.value}
-                                onChange={async (e) => {
-                                  const value = e.target.value;
-                                  field.onChange(value);
-                                  setSupplierSuggestion(null);
-                                  const trimmed = value.trim();
-                                  if (trimmed.length < 1) return; // permite 1+ para código
-                                  try {
-                                    const term = trimmed.replace(/[%_]/g, '');
-                                    const isNumeric = /^\d+$/.test(term);
-
-                                    if (isNumeric) {
-                                      // Prioridade para CÓDIGO quando só dígitos
-                                      let byCode = await supabase
-                                        .from('fornecedores')
-                                        .select('id, codigo, nome')
-                                        .eq('codigo', term)
-                                        .limit(1);
-                                      if (!byCode.error && byCode.data && byCode.data.length === 1) {
-                                        setSupplierSuggestion({ id: byCode.data[0].id, code: String(byCode.data[0].codigo ?? ''), name: byCode.data[0].nome });
-                                        return;
-                                      }
-                                      let codeStarts = await supabase
-                                        .from('fornecedores')
-                                        .select('id, codigo, nome')
-                                        .ilike('codigo', `${term}%`)
-                                        .limit(1);
-                                      if (!codeStarts.error && codeStarts.data && codeStarts.data.length === 1) {
-                                        setSupplierSuggestion({ id: codeStarts.data[0].id, code: String(codeStarts.data[0].codigo ?? ''), name: codeStarts.data[0].nome });
-                                        return;
-                                      }
-                                    } else {
-                                      // Prioridade para NOME quando tem letras
-                                      let nameStarts = await supabase
-                                        .from('fornecedores')
-                                        .select('id, codigo, nome')
-                                        .ilike('nome', `${term}%`)
-                                        .limit(1);
-                                      if (!nameStarts.error && nameStarts.data && nameStarts.data.length === 1) {
-                                        setSupplierSuggestion({ id: nameStarts.data[0].id, code: String(nameStarts.data[0].codigo ?? ''), name: nameStarts.data[0].nome });
-                                        return;
-                                      }
-                                      let nameContains = await supabase
-                                        .from('fornecedores')
-                                        .select('id, codigo, nome')
-                                        .ilike('nome', `%${term}%`)
-                                        .limit(1);
-                                      if (!nameContains.error && nameContains.data && nameContains.data.length === 1) {
-                                        setSupplierSuggestion({ id: nameContains.data[0].id, code: String(nameContains.data[0].codigo ?? ''), name: nameContains.data[0].nome });
-                                        return;
-                                      }
-                                    }
-
-                                    // Alternativas de colunas (code/name)
-                                    let startsAlt = await supabase
-                                      .from('fornecedores')
-                                      .select('id, code, name')
-                                      .ilike(isNumeric ? 'code' : 'name', `${term}%`)
-                                      .limit(1);
-                                    if (!startsAlt.error && startsAlt.data && startsAlt.data.length === 1) {
-                                      setSupplierSuggestion({ id: startsAlt.data[0].id, code: String(startsAlt.data[0].code ?? ''), name: startsAlt.data[0].name });
-                                      return;
-                                    }
-                                    let containsAlt = await supabase
-                                      .from('fornecedores')
-                                      .select('id, code, name')
-                                      .ilike(isNumeric ? 'code' : 'name', `%${term}%`)
-                                      .limit(1);
-                                    if (!containsAlt.error && containsAlt.data && containsAlt.data.length === 1) {
-                                      setSupplierSuggestion({ id: containsAlt.data[0].id, code: String(containsAlt.data[0].code ?? ''), name: containsAlt.data[0].name });
-                                      return;
-                                    }
-
-                                    setSupplierSuggestion(null);
-                                  } catch (_) {
-                                    setSupplierSuggestion(null);
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              field.onChange(value);
+                              setSupplierSearchTerm(value);
+                              // Só mostrar dropdown se houver texto digitado
+                              if (value.trim().length > 0) {
+                                setShowSupplierDropdown(true);
+                              } else {
+                                setShowSupplierDropdown(false);
+                              }
+                              setSupplierSuggestion(null);
+                            }}
+                                onFocus={() => {
+                                  // Só mostrar dropdown se houver texto digitado
+                                  if (field.value && field.value.trim().length > 0) {
+                                    setShowSupplierDropdown(true);
+                                    setSupplierSearchTerm(field.value);
                                   }
                                 }}
                                 className="h-11 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-base sm:text-sm"
                               />
-                              {supplierSuggestion && (
-                                <div className="absolute z-10 mt-1 w-full bg-white border border-neutral-200 rounded-lg shadow-lg overflow-hidden">
-                                  <button
-                                    type="button"
-                                    className="w-full px-4 py-3 text-left hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus:outline-none border-b last:border-b-0 transition-colors"
-                                    onClick={() => {
-                                      field.onChange(supplierSuggestion.name);
-                                      setSupplierSuggestion(null);
-                                    }}
-                                  >
-                                    <div className="font-medium">{supplierSuggestion.name}</div>
-                                    <div className="text-xs text-muted-foreground">{supplierSuggestion.code ? `Código: ${supplierSuggestion.code}` : 'Código: —'}</div>
-                                  </button>
-                                </div>
+                              {showSupplierDropdown && !isLoadingSuppliers && (
+                                <>
+                                  {filteredSuppliers.length > 0 ? (
+                                    <div className="absolute z-50 mt-1 w-full bg-white border border-neutral-200 rounded-lg shadow-lg overflow-hidden max-h-60 overflow-y-auto">
+                                      {filteredSuppliers.map((supplier) => (
+                                        <button
+                                          key={supplier.id}
+                                          type="button"
+                                          className="w-full px-4 py-3 text-left hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus:outline-none border-b last:border-b-0 transition-colors"
+                                          onClick={() => {
+                                            field.onChange(supplier.nome);
+                                            setSupplierSearchTerm('');
+                                            setShowSupplierDropdown(false);
+                                            setSupplierSuggestion(null);
+                                          }}
+                                        >
+                                          <div className="font-medium">{supplier.nome}</div>
+                                          <div className="text-xs text-muted-foreground">
+                                            Código: {supplier.codigo || '—'}
+                                          </div>
+                                        </button>
+                                      ))}
+                                      {filteredSuppliers.length === 10 && allSuppliers.length > 10 && (
+                                        <div className="px-4 py-2 text-xs text-neutral-500 bg-neutral-50 text-center">
+                                          Mostrando 10 de {allSuppliers.length} fornecedores
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <div className="absolute z-50 mt-1 w-full bg-white border border-neutral-200 rounded-lg shadow-lg p-3">
+                                      <div className="text-sm text-neutral-500 text-center">
+                                        {allSuppliers.length === 0 ? 'Nenhum fornecedor cadastrado' : 'Nenhum fornecedor encontrado'}
+                                      </div>
+                                    </div>
+                                  )}
+                                </>
                               )}
                             </div>
                           </FormControl>
@@ -1299,6 +1333,45 @@ const Entradas = () => {
                                   </FormItem>
                                 )}
                               />
+                              <FormField
+                                control={form.control}
+                                name="markup"
+                                render={({ field }) => (
+                                  <FormItem className="space-y-2">
+                                    <FormLabel className="text-sm font-semibold text-neutral-700">
+                                      📈 Markup (%) - Para calcular preço de venda
+                                    </FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        type="number"
+                                        step="0.1"
+                                        min="0"
+                                        placeholder="0.00"
+                                        {...field}
+                                        onChange={(e) => {
+                                          const value = e.target.value;
+                                          if (value === '' || value === null) {
+                                            field.onChange(0);
+                                            return;
+                                          }
+                                          const numValue = parseFloat(value);
+                                          if (!isNaN(numValue) && numValue >= 0) {
+                                            field.onChange(numValue);
+                                          }
+                                        }}
+                                        value={field.value === undefined || field.value === null || field.value === 0 ? '' : field.value}
+                                        className="h-11 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-base sm:text-sm"
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                    {form.watch('unitCost') > 0 && form.watch('markup') > 0 && (
+                                      <p className="text-xs text-emerald-600 font-medium">
+                                        💰 Preço de Venda: R$ {(form.watch('unitCost') * (1 + (form.watch('markup') || 0) / 100)).toFixed(2)}
+                                      </p>
+                                    )}
+                                  </FormItem>
+                                )}
+                              />
                             </div>
 
                             {/* Datas e Vencimento (para produtos sem lote) */}
@@ -1377,13 +1450,21 @@ const Entradas = () => {
                               </div>
                             </div>
                             {form.watch('quantity') > 0 && form.watch('unitCost') > 0 && (
-                              <div className="pt-3 border-t border-indigo-200">
+                              <div className="pt-3 border-t border-indigo-200 space-y-2">
                                 <div className="flex items-center justify-between">
                                   <span className="text-sm font-medium text-gray-900">💰 Valor Total:</span>
                                   <span className="text-lg font-bold text-emerald-600">
                                     R$ {(form.watch('quantity') * form.watch('unitCost')).toFixed(2)}
                                   </span>
                                 </div>
+                                {form.watch('markup') > 0 && (
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-sm font-medium text-gray-900">💰 Preço de Venda Unitário:</span>
+                                    <span className="text-base font-bold text-indigo-600">
+                                      R$ {(form.watch('unitCost') * (1 + form.watch('markup') / 100)).toFixed(2)}
+                                    </span>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </CardContent>
@@ -2208,7 +2289,12 @@ const Entradas = () => {
       </Dialog>
 
       {/* Modal de Edição com Design Sofisticado */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+      <Dialog open={isEditDialogOpen} onOpenChange={(open) => {
+        setIsEditDialogOpen(open);
+        if (open) {
+          setShowSupplierDropdown(false);
+        }
+      }}>
         <DialogContent className="max-w-2xl sm:max-w-3xl bg-white rounded-xl shadow-lg border border-gray-200">
           <DialogHeader className="space-y-2 pb-4 sm:pb-6">
             <DialogTitle className="text-base sm:text-2xl font-bold text-neutral-900">
@@ -2259,43 +2345,67 @@ const Entradas = () => {
                         🏢 Fornecedor
                       </FormLabel>
                       <FormControl>
-                              <div className="relative">
-                                <Input 
-                                  placeholder="Nome ou código do fornecedor" 
-                                  {...field} 
-                                  value={field.value}
-                                  onChange={(e) => {
-                                    field.onChange(e.target.value);
-                                    setSupplierSearchTerm(e.target.value);
-                                  }}
-                                  onFocus={() => {
-                                    setSupplierSearchTerm(field.value || "");
-                                  }}
-                                  className="h-12 border-neutral-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                />
-                                {supplierSearchTerm.trim() !== '' && (
-                                  <div className="absolute z-50 w-full mt-1 bg-white border-2 border-neutral-200 rounded-xl shadow-lg max-h-[260px] overflow-y-auto">
-                                    {supplierResults.length === 0 ? (
-                                      <div className="p-3 text-sm text-neutral-500">Fornecedor não cadastrado</div>
-                                    ) : (
-                                      supplierResults.map((s) => (
-                                        <button
-                                          key={`edit-${s.codigo}-${s.nome}`}
-                                          type="button"
-                                          className="w-full px-4 py-2.5 text-left hover:bg-indigo-50 focus:bg-indigo-50 focus:outline-none border-b last:border-b-0"
-                                          onClick={() => {
-                                            field.onChange(s.nome);
-                                            setSupplierSearchTerm("");
-                                          }}
-                                        >
-                                          <div className="font-medium text-neutral-800">{s.nome}</div>
-                                          <div className="text-xs text-neutral-500">Código: {s.codigo}</div>
-                                        </button>
-                                      ))
-                                    )}
+                        <div className="relative" ref={supplierInputRef}>
+                          <Input 
+                            placeholder="Código ou nome do fornecedor" 
+                            value={field.value}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              field.onChange(value);
+                              setSupplierSearchTerm(value);
+                              // Só mostrar dropdown se houver texto digitado
+                              if (value.trim().length > 0) {
+                                setShowSupplierDropdown(true);
+                              } else {
+                                setShowSupplierDropdown(false);
+                              }
+                            }}
+                            onFocus={() => {
+                              // Só mostrar dropdown se houver texto digitado
+                              if (field.value && field.value.trim().length > 0) {
+                                setShowSupplierDropdown(true);
+                                setSupplierSearchTerm(field.value || "");
+                              }
+                            }}
+                            className="h-12 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-base sm:text-sm"
+                          />
+                          {showSupplierDropdown && !isLoadingSuppliers && (
+                            <>
+                              {filteredSuppliers.length > 0 ? (
+                                <div className="absolute z-50 mt-1 w-full bg-white border border-neutral-200 rounded-lg shadow-lg overflow-hidden max-h-60 overflow-y-auto">
+                                  {filteredSuppliers.map((supplier) => (
+                                    <button
+                                      key={`edit-${supplier.id}`}
+                                      type="button"
+                                      className="w-full px-4 py-3 text-left hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus:outline-none border-b last:border-b-0 transition-colors"
+                                      onClick={() => {
+                                        field.onChange(supplier.nome);
+                                        setSupplierSearchTerm('');
+                                        setShowSupplierDropdown(false);
+                                      }}
+                                    >
+                                      <div className="font-medium">{supplier.nome}</div>
+                                      <div className="text-xs text-muted-foreground">
+                                        Código: {supplier.codigo || '—'}
+                                      </div>
+                                    </button>
+                                  ))}
+                                  {filteredSuppliers.length === 10 && allSuppliers.length > 10 && (
+                                    <div className="px-4 py-2 text-xs text-neutral-500 bg-neutral-50 text-center">
+                                      Mostrando 10 de {allSuppliers.length} fornecedores
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="absolute z-50 mt-1 w-full bg-white border border-neutral-200 rounded-lg shadow-lg p-3">
+                                  <div className="text-sm text-neutral-500 text-center">
+                                    {allSuppliers.length === 0 ? 'Nenhum fornecedor cadastrado' : 'Nenhum fornecedor encontrado'}
                                   </div>
-                                )}
-                              </div>
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
                       </FormControl>
                       <FormMessage />
                     </FormItem>

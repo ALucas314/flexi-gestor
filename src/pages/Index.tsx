@@ -137,7 +137,7 @@ const Index = () => {
                       <span className="text-slate-400">•</span>
                       <div className="flex items-center gap-1">
                         <TrendingDown className={`${isMobile ? 'w-3 h-3' : 'w-4 h-4'} text-red-600`} />
-                        <span className="font-medium text-red-700">{movements.filter(m => m.type === 'saida').length} {traduzir('saídas')}</span>
+                        <span className="font-medium text-red-700">{movements.filter(m => m.type === 'saida').length} {traduzir('vendas')}</span>
                       </div>
                     </div>
                   </div>
@@ -430,12 +430,12 @@ const Index = () => {
       {hasProducts ? (
         <>
           {/* Gráficos de Distribuição de Produtos e Quantidade de Vendas Mensais - Layout Responsivo baseado na Sidebar */}
-          {/* Desktop com sidebar não fixada: gráficos lado a lado (grid 12 colunas) */}
-          {/* Desktop com sidebar fixada: gráficos um abaixo do outro (grid 6 colunas) */}
+          {/* Desktop com sidebar não fixada: gráficos lado a lado (grid 2 colunas) */}
+          {/* Desktop com sidebar fixada: gráficos um abaixo do outro (grid 1 coluna) */}
           {/* Mobile/Tablet: gráficos um abaixo do outro (grid 1 coluna) */}
-          <div className={`grid ${isMobile || isTablet ? 'grid-cols-1' : isPinned ? 'grid-cols-1 lg:grid-cols-6' : 'grid-cols-1 lg:grid-cols-12'} ${isMobile ? 'gap-4' : 'gap-6'}`}>
+          <div className={`grid ${isMobile || isTablet ? 'grid-cols-1' : isPinned ? 'grid-cols-1 lg:grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'} ${isMobile ? 'gap-4' : 'gap-6'}`}>
             {/* Distribuição de Produtos */}
-            <div className={isMobile || isTablet ? 'col-span-1' : isPinned ? 'col-span-1 lg:col-span-6' : 'col-span-1 lg:col-span-7'}>
+            <div className="col-span-1">
               <ProductsChart 
                 products={products.map(p => ({
                   id: p.id,
@@ -454,7 +454,7 @@ const Index = () => {
               />
             </div>
             {/* Quantidade de Vendas Mensais */}
-            <div className={isMobile || isTablet ? 'col-span-1' : isPinned ? 'col-span-1 lg:col-span-6' : 'col-span-1 lg:col-span-5'}>
+            <div className="col-span-1">
               <SalesChart movements={movements.map(m => ({
                 id: m.id,
                 type: m.type,
@@ -468,12 +468,12 @@ const Index = () => {
           </div>
 
           {/* Gráficos de Compras vs Vendas e Ranking de Itens - Layout Responsivo baseado na Sidebar */}
-          {/* Desktop com sidebar não fixada: gráficos lado a lado (grid 12 colunas) */}
-          {/* Desktop com sidebar fixada: gráficos um abaixo do outro (grid 6 colunas) */}
+          {/* Desktop com sidebar não fixada: gráficos lado a lado (grid 2 colunas) */}
+          {/* Desktop com sidebar fixada: gráficos um abaixo do outro (grid 1 coluna) */}
           {/* Mobile/Tablet: gráficos um abaixo do outro (grid 1 coluna) */}
-          <div className={`grid ${isMobile || isTablet ? 'grid-cols-1' : isPinned ? 'grid-cols-1 lg:grid-cols-6' : 'grid-cols-1 lg:grid-cols-12'} ${isMobile ? 'gap-4' : 'gap-6'}`}>
+          <div className={`grid ${isMobile || isTablet ? 'grid-cols-1' : isPinned ? 'grid-cols-1 lg:grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'} ${isMobile ? 'gap-4' : 'gap-6'}`}>
             {/* Compras vs Vendas por Mês (Diferença) */}
-            <div className={isMobile || isTablet ? 'col-span-1' : isPinned ? 'col-span-1 lg:col-span-6' : 'col-span-1 lg:col-span-6'}>
+            <div className="col-span-1">
               <PurchasesSalesDiffChart movements={movements.map(m => ({
                 id: m.id,
                 type: m.type,
@@ -484,7 +484,7 @@ const Index = () => {
               }))} />
             </div>
             {/* Ranking de Itens - Maior Valor */}
-            <div className={isMobile || isTablet ? 'col-span-1' : isPinned ? 'col-span-1 lg:col-span-6' : 'col-span-1 lg:col-span-6'}>
+            <div className="col-span-1">
               <ItemsRankingChart 
                 movements={movements.map(m => ({
                   id: m.id,

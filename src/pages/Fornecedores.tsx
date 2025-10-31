@@ -8,10 +8,12 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Plus, Trash2, Edit, Phone, User2, Hash, Truck, Search } from 'lucide-react';
+import { Plus, Trash2, Edit, Phone, User2, Truck, Search } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabase';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { useAuth } from '@/contexts/AuthContext';
 
 // Helpers de formatação
 function formatCPF(value: string): string {
@@ -24,6 +26,21 @@ function formatCPF(value: string): string {
   if (part2) out += `.${part2}`;
   if (part3) out += `.${part3}`;
   if (part4) out += `-${part4}`;
+  return out;
+}
+
+function formatCNPJ(value: string): string {
+  const digits = (value || '').replace(/\D/g, '').slice(0, 14);
+  const part1 = digits.slice(0, 2);
+  const part2 = digits.slice(2, 5);
+  const part3 = digits.slice(5, 8);
+  const part4 = digits.slice(8, 12);
+  const part5 = digits.slice(12, 14);
+  let out = part1;
+  if (part2) out += `.${part2}`;
+  if (part3) out += `.${part3}`;
+  if (part4) out += `/${part4}`;
+  if (part5) out += `-${part5}`;
   return out;
 }
 
@@ -46,8 +63,8 @@ function formatPhoneBR(value: string): string {
 
 // Schema de validação do fornecedor
 const supplierSchema = z.object({
-  code: z.string().min(1, 'Código é obrigatório'),
   name: z.string().min(1, 'Nome é obrigatório').max(200),
+  documentType: z.enum(['cpf', 'cnpj']).optional(),
   cpf: z.string().optional(),
   phone: z.string().optional(),
 });
@@ -56,25 +73,17 @@ type SupplierFormData = z.infer<typeof supplierSchema>;
 
 interface Supplier {
   id: string;
-  code: string;
+  codigo?: string;
   name: string;
   cpf?: string | null;
   phone?: string | null;
   created_at?: string;
 }
 
-// Gera próximo código numérico simples: 1, 2, 3, ...
-function generateNextSupplierCode(existing: Supplier[]): string {
-  const numbers = existing
-    .map(s => parseInt(String(s.code || '').replace(/\D/g, ''), 10))
-    .filter(n => !isNaN(n));
-  const next = (numbers.length > 0 ? Math.max(...numbers) + 1 : 1);
-  return String(next);
-}
-
 const Fornecedores = () => {
   const { toast } = useToast();
   const { workspaceAtivo } = useWorkspace();
+  const { user } = useAuth();
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -84,14 +93,14 @@ const Fornecedores = () => {
   const [supplierToDelete, setSupplierToDelete] = useState<Supplier | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
+  const [documentType, setDocumentType] = useState<'cpf' | 'cnpj' | undefined>('cpf');
+
   const form = useForm<SupplierFormData>({
     resolver: zodResolver(supplierSchema),
-    defaultValues: { code: '', name: '', cpf: '', phone: '' }
+    defaultValues: { name: '', documentType: 'cpf', cpf: '', phone: '' }
   });
 
-  const nextCode = useMemo(() => generateNextSupplierCode(suppliers), [suppliers]);
-
-  // Filtrar fornecedores baseado no termo de busca (código e nome)
+  // Filtrar fornecedores baseado no termo de busca (nome e código)
   const filteredSuppliers = useMemo(() => {
     // Se não há termo de busca, retorna todos os fornecedores
     const search = searchTerm?.trim() || '';
@@ -105,20 +114,15 @@ const Fornecedores = () => {
       return [];
     }
     
-    return suppliers.filter((s) => {
+    return suppliers.filter((s, index) => {
       if (!s) return false;
       
-      // Busca por código
-      const code = s.code;
-      if (code !== null && code !== undefined && code !== '') {
-        const codeStr = String(code).trim().toLowerCase();
-        // Compara diretamente ou se começa com o termo
-        if (codeStr === term || codeStr.startsWith(term)) {
-          return true;
-        }
+      // Busca por código (do banco de dados) - case-insensitive para consistência
+      if (s.codigo && String(s.codigo).toLowerCase().includes(term)) {
+        return true;
       }
       
-      // Busca por nome - busca parcial
+      // Busca por nome - busca parcial case-insensitive
       if (s.name) {
         const name = String(s.name).toLowerCase().trim();
         if (name.includes(term)) {
@@ -143,7 +147,7 @@ const Fornecedores = () => {
         .from('fornecedores')
         .select('*')
         .eq('usuario_id', workspaceAtivo.id)
-        .order('id', { ascending: false });
+        .order('codigo', { ascending: true });
       
       if (error) {
         // Tratar erros específicos
@@ -166,7 +170,7 @@ const Fornecedores = () => {
       
       const mapped: Supplier[] = (data || []).map((s: any) => ({
         id: s.id,
-        code: String(s.codigo ?? s.code ?? ''),
+        codigo: s.codigo,
         name: s.nome ?? s.name,
         cpf: s.cpf,
         phone: s.telefone ?? s.phone,
@@ -186,13 +190,32 @@ const Fornecedores = () => {
     }
   };
 
+  // Recarregar quando usuário ou workspace mudar (incluindo reconexão de token)
   useEffect(() => {
-    loadSuppliers();
+    if (user?.id && workspaceAtivo?.id) {
+      loadSuppliers();
+    }
+  }, [user?.id, workspaceAtivo?.id]);
+
+  // Escutar mudanças de autenticação para recarregar após reconexão
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        if (workspaceAtivo?.id) {
+          loadSuppliers();
+        }
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, [workspaceAtivo?.id]);
 
   const onOpenAdd = () => {
     setEditing(null);
-    form.reset({ code: nextCode, name: '', cpf: '', phone: '' });
+    setDocumentType('cpf');
+    form.reset({ name: '', documentType: 'cpf', cpf: '', phone: '' });
     setIsAddOpen(true);
   };
 
@@ -208,31 +231,16 @@ const Fornecedores = () => {
     
     try {
       if (!editing) {
-        // Verificar se já existe um fornecedor com o mesmo código para este usuário
-        const { data: existing, error: checkError } = await supabase
-          .from('fornecedores')
-          .select('id')
-          .eq('codigo', data.code)
-          .eq('usuario_id', workspaceAtivo.id)
-          .maybeSingle();
-        
-        if (checkError && checkError.code !== 'PGRST116') { // PGRST116 = não encontrado (ok)
-          throw checkError;
-        }
-        
-        if (existing) {
-          toast({ 
-            title: 'Código já existe', 
-            description: `Já existe um fornecedor com o código "${data.code}". Use um código diferente.`,
-            variant: 'destructive' 
-          });
-          return;
-        }
+        // Gerar próximo código disponível
+        const maxCodigo = suppliers.length > 0 
+          ? Math.max(...suppliers.map(s => parseInt(s.codigo || '0')))
+          : 0;
+        const nextCodigo = String(maxCodigo + 1);
         
         const { error } = await supabase
           .from('fornecedores')
           .insert({
-            codigo: data.code,
+            codigo: nextCodigo,
             nome: data.name,
             cpf: data.cpf || null,
             telefone: data.phone || null,
@@ -241,14 +249,6 @@ const Fornecedores = () => {
         
         if (error) {
           // Tratar erros específicos
-          if (error.code === '23505') { // Violação de constraint única
-            toast({ 
-              title: 'Código já existe', 
-              description: `Já existe um fornecedor com o código "${data.code}". Use um código diferente.`,
-              variant: 'destructive' 
-            });
-            return;
-          }
           if (error.code === '42501') { // Erro de permissão RLS
             toast({ 
               title: 'Erro de permissão', 
@@ -261,32 +261,9 @@ const Fornecedores = () => {
         }
         toast({ title: '✅ Fornecedor cadastrado' });
       } else {
-        // Verificar se outro fornecedor já usa este código (exceto o que estamos editando)
-        const { data: existing, error: checkError } = await supabase
-          .from('fornecedores')
-          .select('id')
-          .eq('codigo', data.code)
-          .eq('usuario_id', workspaceAtivo.id)
-          .neq('id', editing.id)
-          .maybeSingle();
-        
-        if (checkError && checkError.code !== 'PGRST116') {
-          throw checkError;
-        }
-        
-        if (existing) {
-          toast({ 
-            title: 'Código já existe', 
-            description: `Já existe outro fornecedor com o código "${data.code}". Use um código diferente.`,
-            variant: 'destructive' 
-          });
-          return;
-        }
-        
         const { error } = await supabase
           .from('fornecedores')
           .update({
-            codigo: data.code,
             nome: data.name,
             cpf: data.cpf || null,
             telefone: data.phone || null,
@@ -295,14 +272,6 @@ const Fornecedores = () => {
           .eq('usuario_id', workspaceAtivo.id); // Garantir que só atualiza do próprio usuário
         
         if (error) {
-          if (error.code === '23505') {
-            toast({ 
-              title: 'Código já existe', 
-              description: `Já existe um fornecedor com o código "${data.code}". Use um código diferente.`,
-              variant: 'destructive' 
-            });
-            return;
-          }
           if (error.code === '42501') {
             toast({ 
               title: 'Erro de permissão', 
@@ -321,7 +290,7 @@ const Fornecedores = () => {
       console.error('Erro ao salvar fornecedor:', error);
       toast({ 
         title: 'Erro ao salvar', 
-        description: error.message || `Erro ${error.code || 'desconhecido'}: Não foi possível salvar o fornecedor. Verifique se o código é único e você tem permissões adequadas.`, 
+        description: error.message || `Erro ${error.code || 'desconhecido'}: Não foi possível salvar o fornecedor. Verifique se você tem permissões adequadas.`, 
         variant: 'destructive' 
       });
     }
@@ -329,7 +298,16 @@ const Fornecedores = () => {
 
   const handleEdit = (s: Supplier) => {
     setEditing(s);
-    form.reset({ code: s.code, name: s.name, cpf: s.cpf || '', phone: s.phone || '' });
+    // Detectar tipo de documento baseado no tamanho (CPF tem 14 chars com formatação, CNPJ tem 18)
+    const docValue = s.cpf || '';
+    const detectedType = docValue.replace(/\D/g, '').length <= 11 ? 'cpf' : 'cnpj';
+    setDocumentType(detectedType);
+    form.reset({ 
+      name: s.name, 
+      documentType: detectedType,
+      cpf: s.cpf || '', 
+      phone: s.phone || '' 
+    });
     setIsAddOpen(true);
   };
 
@@ -401,7 +379,7 @@ const Fornecedores = () => {
                 <TableRow className="border-neutral-200">
                   <TableHead className="px-4 py-3">Código</TableHead>
                   <TableHead className="px-4 py-3">Nome</TableHead>
-                  <TableHead className="px-4 py-3">CPF</TableHead>
+                  <TableHead className="px-4 py-3">CPF/CNPJ</TableHead>
                   <TableHead className="px-4 py-3">Telefone</TableHead>
                   <TableHead className="px-4 py-3 text-right">Ações</TableHead>
                 </TableRow>
@@ -414,9 +392,9 @@ const Fornecedores = () => {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredSuppliers.map((s) => (
+                  filteredSuppliers.map((s, index) => (
                     <TableRow key={s.id} className="border-neutral-100 hover:bg-neutral-50 transition-colors duration-150">
-                      <TableCell className="px-4 py-3 font-mono text-sm">{s.code}</TableCell>
+                      <TableCell className="px-4 py-3 font-medium">{s.codigo || index + 1}</TableCell>
                       <TableCell className="px-4 py-3">{s.name}</TableCell>
                       <TableCell className="px-4 py-3">{s.cpf || '—'}</TableCell>
                       <TableCell className="px-4 py-3">{s.phone || '—'}</TableCell>
@@ -460,22 +438,6 @@ const Fornecedores = () => {
             <form onSubmit={form.handleSubmit(handleSave)} className="space-y-4">
               <FormField
                 control={form.control}
-                name="code"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Código</FormLabel>
-                    <FormControl>
-                      <div className="relative">
-                        <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400" />
-                        <Input {...field} value={field.value || nextCode} onChange={(e) => field.onChange(e.target.value)} className="pl-9" />
-                      </div>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
                 name="name"
                 render={({ field }) => (
                   <FormItem>
@@ -492,15 +454,48 @@ const Fornecedores = () => {
               />
               <FormField
                 control={form.control}
+                name="documentType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tipo de Documento</FormLabel>
+                    <Select 
+                      onValueChange={(value) => {
+                        field.onChange(value);
+                        setDocumentType(value as 'cpf' | 'cnpj');
+                        form.setValue('cpf', ''); // Limpar campo ao trocar tipo
+                      }} 
+                      value={field.value || 'cpf'}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione o tipo" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="cpf">CPF</SelectItem>
+                        <SelectItem value="cnpj">CNPJ</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
                 name="cpf"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>CPF</FormLabel>
+                    <FormLabel>{documentType === 'cnpj' ? 'CNPJ' : 'CPF'}</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="000.000.000-00"
+                        placeholder={documentType === 'cnpj' ? '00.000.000/0000-00' : '000.000.000-00'}
                         value={field.value || ''}
-                        onChange={(e) => field.onChange(formatCPF(e.target.value))}
+                        onChange={(e) => {
+                          const formatted = documentType === 'cnpj' 
+                            ? formatCNPJ(e.target.value) 
+                            : formatCPF(e.target.value);
+                          field.onChange(formatted);
+                        }}
                       />
                     </FormControl>
                     <FormMessage />

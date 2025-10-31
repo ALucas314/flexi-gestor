@@ -73,6 +73,7 @@ const Saidas = () => {
 
   // Carrinho de vendas
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [discount, setDiscount] = useState<number>(0); // Desconto em R$
 
   // Hooks
   const { toast } = useToast();
@@ -335,6 +336,7 @@ const Saidas = () => {
   const clearCartNow = () => {
     try {
       setCartItems([]);
+      setDiscount(0);
       localStorage.removeItem('fg_cart_items');
       setIsCartPanelOpen(false);
       toast({ title: 'Carrinho esvaziado' });
@@ -343,7 +345,50 @@ const Saidas = () => {
 
   // Carrinho renderizado dentro do Dialog (evita conflitos de overlay/fora)
 
-  const getCartTotal = () => cartItems.reduce((sum, i) => sum + (i.quantity * i.unitPrice), 0);
+  // Calcular total do carrinho sem desconto
+  const getCartSubtotal = () => cartItems.reduce((sum, i) => sum + (i.quantity * i.unitPrice), 0);
+  
+  // Calcular total com desconto
+  const getCartTotal = () => {
+    const subtotal = getCartSubtotal();
+    return Math.max(0, subtotal - discount);
+  };
+  
+  // Calcular custo total dos produtos (baseado nas entradas)
+  const getCartCostTotal = () => {
+    return cartItems.reduce((sum, item) => {
+      // Buscar custo da última entrada do produto
+      const productEntries = movements.filter(m => {
+        const typeStr = String(m.type || '').toLowerCase().trim();
+        return typeStr === 'entrada' && m.productId === item.productId;
+      }).sort((a, b) => {
+        const dateA = a.date instanceof Date ? a.date : new Date(a.date);
+        const dateB = b.date instanceof Date ? b.date : new Date(b.date);
+        return dateB.getTime() - dateA.getTime();
+      });
+      
+      const unitCost = productEntries.length > 0 && productEntries[0].unitPrice > 0 
+        ? productEntries[0].unitPrice 
+        : 0;
+      
+      return sum + (item.quantity * unitCost);
+    }, 0);
+  };
+  
+  // Calcular margem de lucro
+  const getProfitMargin = () => {
+    const total = getCartTotal();
+    const costTotal = getCartCostTotal();
+    return total - costTotal;
+  };
+  
+  // Calcular percentual de margem de lucro
+  const getProfitMarginPercent = () => {
+    const costTotal = getCartCostTotal();
+    if (costTotal === 0) return 0;
+    const profit = getProfitMargin();
+    return (profit / costTotal) * 100;
+  };
 
   // Processar todos itens do carrinho como uma única saída
   const processCartSale = async () => {
@@ -364,8 +409,11 @@ const Saidas = () => {
       // Gerar um único número de recibo para toda a venda
       const receiptNumber = generateReceiptNumber();
       
-      // Calcular total geral e salvar informações antes de limpar
+      // Calcular totais e salvar informações antes de limpar
+      const subtotal = getCartSubtotal();
       const totalGeral = getCartTotal();
+      const costTotal = getCartCostTotal();
+      const profitMargin = getProfitMargin();
       const totalQuantity = cartItems.reduce((sum, item) => sum + item.quantity, 0);
       const totalProducts = cartItems.length;
       
@@ -411,13 +459,21 @@ const Saidas = () => {
         }
 
         // Registrar movimentação com o mesmo número de recibo
+        // Aplicar desconto proporcional ao item (se houver desconto)
+        const itemSubtotal = item.quantity * item.unitPrice;
+        const subtotal = getCartSubtotal();
+        const discountRatio = subtotal > 0 ? discount / subtotal : 0;
+        const itemDiscount = itemSubtotal * discountRatio;
+        const itemFinalPrice = itemSubtotal - itemDiscount;
+        const itemUnitPrice = item.quantity > 0 ? itemFinalPrice / item.quantity : item.unitPrice;
+        
         await addMovement({
           type: 'saida',
           productId: item.productId,
           productName: item.productName,
           quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          description: `Venda múltiplos itens - ${item.productName} | ${paymentInfo}${notes ? ' | Obs: ' + notes : ''}`,
+          unitPrice: itemUnitPrice, // Preço unitário já com desconto proporcional aplicado
+          description: `Venda múltiplos itens - ${item.productName} | ${paymentInfo}${discount > 0 ? ` | Desconto: R$ ${itemDiscount.toFixed(2)}` : ''}${notes ? ' | Obs: ' + notes : ''}`,
           date: exitDate,
           status: 'confirmado',
           paymentMethod: paymentMethod === "parcelado" ? `parcelado-${installments}x` : paymentMethod,
@@ -427,6 +483,7 @@ const Saidas = () => {
 
       // Limpar carrinho e fechar modal
       setCartItems([]);
+      setDiscount(0);
       setIsCartPanelOpen(false);
       setIsAddDialogOpen(false);
       
@@ -465,9 +522,18 @@ const Saidas = () => {
     <StockExitCart
       items={cartItems}
       total={getCartTotal()}
+      subtotal={getCartSubtotal()}
+      discount={discount}
+      costTotal={getCartCostTotal()}
+      profitMargin={getProfitMargin()}
+      profitMarginPercent={getProfitMarginPercent()}
       onRemove={removeCartItem}
       onQuantityChange={updateCartItemQuantity}
-      onClear={clearCartNow}
+      onDiscountChange={setDiscount}
+      onClear={() => {
+        clearCartNow();
+        setDiscount(0);
+      }}
       onFinalize={processCartSale}
       compact={compact}
     />

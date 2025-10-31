@@ -1,6 +1,8 @@
 import React, { useRef, useLayoutEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Trash2, ShoppingCart, Plus, Minus } from "lucide-react";
 
@@ -10,14 +12,34 @@ interface CartItem { productId: string; productName: string; productSku: string;
 interface StockExitCartProps {
   items: CartItem[];
   total: number;
+  subtotal?: number;
+  discount?: number;
+  costTotal?: number;
+  profitMargin?: number;
+  profitMarginPercent?: number;
   onRemove: (index: number) => void;
   onQuantityChange: (index: number, newQuantity: number) => void;
+  onDiscountChange?: (discount: number) => void;
   onClear: () => void;
   onFinalize: () => void;
   compact?: boolean;
 }
 
-export function StockExitCart({ items, total, onRemove, onQuantityChange, onClear, onFinalize, compact = false }: StockExitCartProps) {
+export function StockExitCart({ 
+  items, 
+  total, 
+  subtotal,
+  discount = 0,
+  costTotal = 0,
+  profitMargin = 0,
+  profitMarginPercent = 0,
+  onRemove, 
+  onQuantityChange, 
+  onDiscountChange,
+  onClear, 
+  onFinalize, 
+  compact = false 
+}: StockExitCartProps) {
   // Refs para preservar a posição do scroll
   const mobileScrollRef = useRef<HTMLDivElement>(null);
   const desktopScrollRef = useRef<HTMLDivElement>(null);
@@ -206,10 +228,77 @@ export function StockExitCart({ items, total, onRemove, onQuantityChange, onClea
         {/* Footer compactável: ocultar dentro do modal para não cobrir botões principais */}
         {!compact && (
           <div className="sticky bottom-0 bg-white border-t p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-neutral-700">Total</span>
-              <span className="text-xl font-extrabold text-green-700">R$ {total.toFixed(2).replace(".", ",")}</span>
+            {/* Campo de Desconto */}
+            {onDiscountChange && (
+              <div className="space-y-2 pb-3 border-b">
+                <Label htmlFor="discount" className="text-sm font-medium text-neutral-700">
+                  💰 Desconto (R$)
+                </Label>
+                <Input
+                  id="discount"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0.00"
+                  value={discount === 0 ? '' : discount}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === '' || value === null) {
+                      onDiscountChange(0);
+                      return;
+                    }
+                    const numValue = parseFloat(value);
+                    if (!isNaN(numValue) && numValue >= 0) {
+                      onDiscountChange(numValue);
+                    }
+                  }}
+                  className="h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                />
+              </div>
+            )}
+            
+            {/* Resumo Financeiro */}
+            <div className="space-y-2 pb-3 border-b">
+              {subtotal !== undefined && subtotal !== total && (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-neutral-600">Subtotal:</span>
+                  <span className="text-neutral-700">R$ {subtotal.toFixed(2).replace(".", ",")}</span>
+                </div>
+              )}
+              {discount > 0 && (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-red-600">Desconto:</span>
+                  <span className="text-red-700 font-medium">- R$ {discount.toFixed(2).replace(".", ",")}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-neutral-700">Total:</span>
+                <span className="text-xl font-extrabold text-green-700">R$ {total.toFixed(2).replace(".", ",")}</span>
+              </div>
+              {costTotal > 0 && (
+                <>
+                  <div className="flex items-center justify-between text-xs pt-2 border-t">
+                    <span className="text-neutral-500">Custo Total:</span>
+                    <span className="text-neutral-600">R$ {costTotal.toFixed(2).replace(".", ",")}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-emerald-600 font-medium">💰 Margem de Lucro:</span>
+                    <span className={`font-bold ${profitMargin >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                      R$ {profitMargin.toFixed(2).replace(".", ",")}
+                    </span>
+                  </div>
+                  {profitMarginPercent !== 0 && (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-neutral-500">Percentual:</span>
+                      <span className={`font-medium ${profitMarginPercent >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                        {profitMarginPercent >= 0 ? '+' : ''}{profitMarginPercent.toFixed(2).replace(".", ",")}%
+                      </span>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
+            
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <Button
                 type="button"

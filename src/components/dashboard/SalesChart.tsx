@@ -2,6 +2,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { TrendingUp } from 'lucide-react';
 import { FullscreenChart } from '../ui/fullscreen-chart';
+import { useResponsive } from '@/hooks/use-responsive';
 
 interface SalesChartProps {
   movements: Array<{
@@ -16,6 +17,8 @@ interface SalesChartProps {
 }
 
 export function SalesChart({ movements }: SalesChartProps) {
+  const { isMobile } = useResponsive();
+  
   // Agrupar vendas por mês de forma correta
   const monthlySales = movements
     .filter(m => m.type === 'saida')
@@ -52,7 +55,7 @@ export function SalesChart({ movements }: SalesChartProps) {
     }));
 
   const chartContent = chartData.length > 0 ? (
-    <ResponsiveContainer width="100%" height={300}>
+    <ResponsiveContainer width="100%" height={isMobile ? 300 : 280}>
       <BarChart data={chartData} barCategoryGap="20%">
         <CartesianGrid strokeDasharray="3 3" />
         <XAxis dataKey="month" />
@@ -69,7 +72,7 @@ export function SalesChart({ movements }: SalesChartProps) {
           fill="#10b981" 
           radius={[4, 4, 0, 0]}
           name="Quantidade Vendida"
-          barSize={180}
+          barSize={isMobile ? 180 : 120}
         >
           <LabelList 
             dataKey="vendas" 
@@ -85,7 +88,7 @@ export function SalesChart({ movements }: SalesChartProps) {
       </BarChart>
     </ResponsiveContainer>
   ) : (
-    <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+    <div className={`flex items-center justify-center ${isMobile ? 'h-[300px]' : 'h-[280px]'} text-muted-foreground`}>
       Nenhuma venda registrada ainda
     </div>
   );

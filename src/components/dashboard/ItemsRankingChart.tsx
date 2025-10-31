@@ -86,7 +86,7 @@ export function ItemsRankingChart({ movements, products }: ItemsRankingChartProp
     }));
 
   const valueChartContent = valueChartData.length > 0 ? (
-    <ResponsiveContainer width="100%" height={isMobile ? 500 : 350}>
+    <ResponsiveContainer width="100%" height={isMobile ? 500 : 280}>
       <BarChart 
         data={valueChartData} 
         margin={isMobile 

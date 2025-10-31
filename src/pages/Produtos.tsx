@@ -22,10 +22,7 @@ import { useResponsive } from "@/hooks/use-responsive";
 
 // Schema de validação - Campos essenciais apenas
 const productSchema = z.object({
-  sku: z.string()
-    .min(1, "❌ Código do produto é obrigatório")
-    .max(50, "❌ Código deve ter no máximo 50 caracteres")
-    .regex(/^[a-zA-Z0-9_-]+$/, "❌ Código deve conter apenas letras, números, traços e underscores"),
+  sku: z.string().optional(), // SKU será gerado automaticamente
   name: z.string()
     .min(1, "❌ Descrição/Nome do produto é obrigatório")
     .min(3, "❌ Descrição deve ter pelo menos 3 caracteres")
@@ -35,6 +32,7 @@ const productSchema = z.object({
     .max(20, "❌ Unidade de medida deve ter no máximo 20 caracteres"),
   category: z.string().optional().default("Geral"),
   managedByBatch: z.boolean().optional().default(false), // Campo opcional para gerenciamento por lote
+  minStock: z.number().optional(), // Estoque mínimo
 });
 
 // Interface do produto - Simplificada
@@ -360,6 +358,14 @@ const Produtos = () => {
   // @ts-ignore - Conflito de tipos entre Product local e do DataContext
   const columns: TableColumn<Product>[] = [
     {
+      key: 'sku',
+      label: 'Código do Produto',
+      priority: 'high',
+      render: (product) => (
+        <span className="text-sm sm:text-base text-muted-foreground">{product.sku}</span>
+      )
+    },
+    {
       key: 'name',
       label: 'Descrição',
       priority: 'high',
@@ -367,14 +373,6 @@ const Produtos = () => {
         <div>
           <div className="font-medium text-sm sm:text-base">{product.name || product.description || 'Sem nome'}</div>
         </div>
-      )
-    },
-    {
-      key: 'sku',
-      label: 'Código do Produto',
-      priority: 'high',
-      render: (product) => (
-        <span className="text-sm sm:text-base text-muted-foreground">{product.sku}</span>
       )
     },
     {
@@ -554,7 +552,7 @@ const Produtos = () => {
       category: data.category || "Geral", // Usar categoria do formulário ou padrão
       price: 0, // Preço inicial zerado
       stock: 0, // Estoque inicial zerado
-      minStock: 0, // Estoque mínimo zerado
+      minStock: data.minStock || 0, // Estoque mínimo do formulário
       status: "ativo" as const,
       // Campos adicionais para compatibilidade futura
       unitOfMeasure: data.unitOfMeasure,
@@ -723,6 +721,7 @@ const Produtos = () => {
               unitOfMeasure: "",
               category: "Geral",
               managedByBatch: false,
+              minStock: undefined,
             });
             setSkuDuplicateError(""); // Limpar erro de SKU
             setIsAddingCustomUnit(false); // Limpar estado de adicionar unidade
@@ -743,8 +742,8 @@ const Produtos = () => {
               Novo Produto
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-md sm:max-w-lg">
-            <DialogHeader className="space-y-2 pb-4 sm:pb-3">
+          <DialogContent className="max-w-md sm:max-w-lg flex flex-col max-h-[90vh] overflow-hidden">
+            <DialogHeader className="space-y-2 pb-4 sm:pb-3 flex-shrink-0">
               <DialogTitle className="text-base sm:text-xl font-bold text-neutral-900">
                 📦 Adicionar Novo Produto
               </DialogTitle>
@@ -753,32 +752,8 @@ const Produtos = () => {
               </DialogDescription>
             </DialogHeader>
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(handleAddProduct)} className="space-y-4 sm:space-y-3">
-                <FormField
-                  control={form.control}
-                  name="sku"
-                  render={({ field }) => (
-                    <FormItem className="space-y-3">
-                      <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700 flex items-center justify-between">
-                        <span>🏷️ Código do Produto</span>
-                        <span className="text-xs text-gray-500 font-normal">Gerado: {generateNextSKU()}</span>
-                      </FormLabel>
-                      <FormControl>
-                        <Input 
-                          placeholder="Código do produto" 
-                          {...field} 
-                          className={`h-12 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-base sm:text-sm ${skuDuplicateError ? 'border-red-500' : ''}`}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                      {skuDuplicateError && (
-                        <p className="text-sm text-red-600 bg-red-50 p-2 rounded-md border border-red-200">
-                          {skuDuplicateError}
-                        </p>
-                      )}
-                    </FormItem>
-                  )}
-                />
+              <form onSubmit={form.handleSubmit(handleAddProduct)} className="flex flex-col flex-1 min-h-0">
+                <div className="flex-1 overflow-y-auto space-y-4 sm:space-y-3 pr-1 -mr-1">
 
                 <FormField
                   control={form.control}
@@ -1028,7 +1003,42 @@ const Produtos = () => {
                   )}
                 />
 
-                <DialogFooter className="flex flex-col sm:flex-row gap-2 pt-2 sm:pt-3">
+                <FormField
+                  control={form.control}
+                  name="minStock"
+                  render={({ field }) => (
+                    <FormItem className="space-y-3">
+                      <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
+                        ⚠️ Estoque Mínimo
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min="0"
+                          placeholder=""
+                          {...field}
+                          value={field.value === undefined || field.value === null || field.value === 0 ? '' : field.value}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            if (value === '' || value === null) {
+                              field.onChange(undefined);
+                              return;
+                            }
+                            const intValue = parseInt(value, 10);
+                            if (!isNaN(intValue) && intValue >= 0) {
+                              field.onChange(intValue);
+                            }
+                          }}
+                          className="h-12 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-base sm:text-sm"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                  </div>
+                <DialogFooter className="flex flex-col sm:flex-row gap-2 pt-4 mt-4 flex-shrink-0 border-t border-neutral-200">
                   <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)} className="w-full sm:w-auto h-11 sm:h-10 text-sm">
                     ❌ Cancelar
                   </Button>
@@ -1199,8 +1209,8 @@ const Produtos = () => {
                 setNewCategoryName(""); // Limpar input de categoria
               }
             }}>
-              <DialogContent className="max-w-md sm:max-w-lg">
-                <DialogHeader className="space-y-2 pb-4 sm:pb-3">
+              <DialogContent className="max-w-md sm:max-w-lg flex flex-col max-h-[90vh] overflow-hidden">
+                <DialogHeader className="space-y-2 pb-4 sm:pb-3 flex-shrink-0">
                   <DialogTitle className="text-base sm:text-xl font-bold text-neutral-900">
                     ✏️ Editar Produto
                   </DialogTitle>
@@ -1209,7 +1219,8 @@ const Produtos = () => {
                   </DialogDescription>
                 </DialogHeader>
                 <Form {...form}>
-                  <form onSubmit={form.handleSubmit(handleEditProduct)} className="space-y-4 sm:space-y-3">
+                  <form onSubmit={form.handleSubmit(handleEditProduct)} className="flex flex-col flex-1 min-h-0">
+                    <div className="flex-1 overflow-y-auto space-y-4 sm:space-y-3 pr-1 -mr-1">
                     <FormField
                       control={form.control}
                       name="sku"
@@ -1222,7 +1233,8 @@ const Produtos = () => {
                             <Input 
                               placeholder="Código do produto" 
                               {...field} 
-                              className={`h-12 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-base sm:text-sm ${skuDuplicateError ? 'border-red-500' : ''}`}
+                              readOnly
+                              className="h-12 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-base sm:text-sm bg-gray-50 cursor-not-allowed"
                             />
                           </FormControl>
                           <FormMessage />
@@ -1484,7 +1496,8 @@ const Produtos = () => {
                       )}
                     />
 
-                    <DialogFooter className="flex flex-col sm:flex-row gap-2 pt-2 sm:pt-3">
+                      </div>
+                    <DialogFooter className="flex flex-col sm:flex-row gap-2 pt-4 mt-4 flex-shrink-0 border-t border-neutral-200">
                       <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)} className="w-full sm:w-auto h-11 sm:h-10 text-sm">
                         ❌ Cancelar
                       </Button>

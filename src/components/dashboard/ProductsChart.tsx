@@ -2,6 +2,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recha
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Package } from 'lucide-react';
 import { FullscreenChart } from '../ui/fullscreen-chart';
+import { useResponsive } from '@/hooks/use-responsive';
 
 interface ProductsChartProps {
   products: Array<{
@@ -21,6 +22,8 @@ interface ProductsChartProps {
 }
 
 export function ProductsChart({ products, movements = [] }: ProductsChartProps) {
+  const { isMobile } = useResponsive();
+  
   // Se há poucos produtos (até 10), mostrar cada produto individualmente
   // Se há muitos, agrupar por categoria
   const shouldShowIndividual = products.length <= 10;
@@ -111,7 +114,7 @@ export function ProductsChart({ products, movements = [] }: ProductsChartProps) 
 
   const chartContent = chartData.length > 0 ? (
     <div className="w-full flex justify-center">
-      <ResponsiveContainer width="100%" height={300}>
+      <ResponsiveContainer width="100%" height={isMobile ? 300 : 280}>
         <PieChart>
           <Pie
             data={chartData}
@@ -119,7 +122,7 @@ export function ProductsChart({ products, movements = [] }: ProductsChartProps) 
             cy="50%"
             labelLine={false}
             label={({ name, quantidade }) => `${name}\n${quantidade} produtos`}
-            outerRadius={80}
+            outerRadius={isMobile ? 80 : 70}
             fill="#8884d8"
             dataKey="quantidade"
           >
@@ -152,7 +155,7 @@ export function ProductsChart({ products, movements = [] }: ProductsChartProps) 
       </ResponsiveContainer>
     </div>
   ) : (
-    <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+    <div className={`flex items-center justify-center ${isMobile ? 'h-[300px]' : 'h-[280px]'} text-muted-foreground`}>
       Nenhum produto cadastrado
     </div>
   );

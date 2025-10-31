@@ -8,7 +8,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Plus, Trash2, Edit, Phone, User2, Hash, UserCircle, Search } from 'lucide-react';
+import { Plus, Trash2, Edit, Phone, User2, UserCircle, Search } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabase';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
@@ -25,6 +26,21 @@ function formatCPF(value: string): string {
   if (part2) out += `.${part2}`;
   if (part3) out += `.${part3}`;
   if (part4) out += `-${part4}`;
+  return out;
+}
+
+function formatCNPJ(value: string): string {
+  const digits = (value || '').replace(/\D/g, '').slice(0, 14);
+  const part1 = digits.slice(0, 2);
+  const part2 = digits.slice(2, 5);
+  const part3 = digits.slice(5, 8);
+  const part4 = digits.slice(8, 12);
+  const part5 = digits.slice(12, 14);
+  let out = part1;
+  if (part2) out += `.${part2}`;
+  if (part3) out += `.${part3}`;
+  if (part4) out += `/${part4}`;
+  if (part5) out += `-${part5}`;
   return out;
 }
 
@@ -47,8 +63,8 @@ function formatPhoneBR(value: string): string {
 
 // Schema de validação do cliente
 const clientSchema = z.object({
-  code: z.string().min(1, 'Código é obrigatório'),
   name: z.string().min(1, 'Nome é obrigatório').max(200),
+  documentType: z.enum(['cpf', 'cnpj']).optional(),
   cpf: z.string().optional(),
   phone: z.string().optional(),
 });
@@ -57,20 +73,11 @@ type ClientFormData = z.infer<typeof clientSchema>;
 
 interface Client {
   id: string;
-  code: string;
+  codigo?: string;
   name: string;
   cpf?: string | null;
   phone?: string | null;
   created_at?: string;
-}
-
-// Gera próximo código numérico simples: 1, 2, 3, ...
-function generateNextClientCode(existing: Client[]): string {
-  const numbers = existing
-    .map(c => parseInt(String(c.code || '').replace(/\D/g, ''), 10))
-    .filter(n => !isNaN(n));
-  const next = (numbers.length > 0 ? Math.max(...numbers) + 1 : 1);
-  return String(next);
 }
 
 const Clientes = () => {
@@ -86,14 +93,14 @@ const Clientes = () => {
   const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
+  const [documentType, setDocumentType] = useState<'cpf' | 'cnpj' | undefined>('cpf');
+
   const form = useForm<ClientFormData>({
     resolver: zodResolver(clientSchema),
-    defaultValues: { code: '', name: '', cpf: '', phone: '' }
+    defaultValues: { name: '', documentType: 'cpf', cpf: '', phone: '' }
   });
 
-  const nextCode = useMemo(() => generateNextClientCode(clients), [clients]);
-
-  // Filtrar clientes baseado no termo de busca (código e nome)
+  // Filtrar clientes baseado no termo de busca (nome e código)
   const filteredClients = useMemo(() => {
     // Se não há termo de busca, retorna todos os clientes
     const search = searchTerm?.trim() || '';
@@ -110,14 +117,9 @@ const Clientes = () => {
     return clients.filter((c) => {
       if (!c) return false;
       
-      // Busca por código
-      const code = c.code;
-      if (code !== null && code !== undefined && code !== '') {
-        const codeStr = String(code).trim().toLowerCase();
-        // Compara diretamente ou se começa com o termo
-        if (codeStr === term || codeStr.startsWith(term)) {
-          return true;
-        }
+      // Busca por código (do banco de dados)
+      if (c.codigo && String(c.codigo).includes(search)) {
+        return true;
       }
       
       // Busca por nome - busca parcial
@@ -134,16 +136,40 @@ const Clientes = () => {
 
   // Carrega clientes do Supabase
   const loadClients = async () => {
+    if (!workspaceAtivo?.id) {
+      setClients([]);
+      return;
+    }
+    
     try {
       setIsLoading(true);
       const { data, error } = await supabase
         .from('clientes')
         .select('*')
-        .order('id', { ascending: false });
-      if (error) throw error;
+        .eq('usuario_id', workspaceAtivo.id)
+        .order('codigo', { ascending: true });
+      
+      if (error) {
+        // Tratar erros específicos
+        if (error.code === '42501') {
+          console.warn('Erro de permissão RLS ao carregar clientes. Verifique as políticas.');
+          setClients([]);
+          return;
+        }
+        if (error.code === '42P01') {
+          toast({
+            title: 'Tabela não encontrada',
+            description: 'A tabela de clientes não existe. Execute o script SQL de criação.',
+            variant: 'destructive'
+          });
+          return;
+        }
+        throw error;
+      }
+      
       const mapped: Client[] = (data || []).map((c: any) => ({
         id: c.id,
-        code: String(c.codigo ?? c.code ?? ''),
+        codigo: c.codigo,
         name: c.nome ?? c.name,
         cpf: c.cpf,
         phone: c.telefone ?? c.phone,
@@ -153,7 +179,7 @@ const Clientes = () => {
     } catch (error: any) {
       toast({
         title: 'Erro ao carregar clientes',
-        description: error.message || 'Verifique nomes de colunas: id, codigo (ou code), nome (ou name), cpf, telefone (ou phone).',
+        description: error.message || 'Verifique nomes de colunas: id, nome (ou name), cpf, telefone (ou phone).',
         variant: 'destructive'
       });
     } finally {
@@ -161,13 +187,32 @@ const Clientes = () => {
     }
   };
 
+  // Recarregar quando usuário ou workspace mudar (incluindo reconexão de token)
   useEffect(() => {
-    loadClients();
+    if (user?.id && workspaceAtivo?.id) {
+      loadClients();
+    }
+  }, [user?.id, workspaceAtivo?.id]);
+
+  // Escutar mudanças de autenticação para recarregar após reconexão
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        if (workspaceAtivo?.id) {
+          loadClients();
+        }
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, [workspaceAtivo?.id]);
 
   const onOpenAdd = () => {
     setEditing(null);
-    form.reset({ code: nextCode, name: '', cpf: '', phone: '' });
+    setDocumentType('cpf');
+    form.reset({ name: '', documentType: 'cpf', cpf: '', phone: '' });
     setIsAddOpen(true);
   };
 
@@ -175,10 +220,16 @@ const Clientes = () => {
     if (!user?.id) return;
     try {
       if (!editing) {
+        // Gerar próximo código disponível
+        const maxCodigo = clients.length > 0 
+          ? Math.max(...clients.map(c => parseInt(c.codigo || '0')))
+          : 0;
+        const nextCodigo = String(maxCodigo + 1);
+        
         const { error } = await supabase
           .from('clientes')
           .insert({
-            codigo: data.code,
+            codigo: nextCodigo,
             nome: data.name,
             cpf: data.cpf || null,
             telefone: data.phone || null,
@@ -190,7 +241,6 @@ const Clientes = () => {
         const { error } = await supabase
           .from('clientes')
           .update({
-            codigo: data.code,
             nome: data.name,
             cpf: data.cpf || null,
             telefone: data.phone || null,
@@ -208,7 +258,16 @@ const Clientes = () => {
 
   const handleEdit = (c: Client) => {
     setEditing(c);
-    form.reset({ code: c.code, name: c.name, cpf: c.cpf || '', phone: c.phone || '' });
+    // Detectar tipo de documento baseado no tamanho (CPF tem 14 chars com formatação, CNPJ tem 18)
+    const docValue = c.cpf || '';
+    const detectedType = docValue.replace(/\D/g, '').length <= 11 ? 'cpf' : 'cnpj';
+    setDocumentType(detectedType);
+    form.reset({ 
+      name: c.name, 
+      documentType: detectedType,
+      cpf: c.cpf || '', 
+      phone: c.phone || '' 
+    });
     setIsAddOpen(true);
   };
 
@@ -280,7 +339,7 @@ const Clientes = () => {
                 <TableRow className="border-neutral-200">
                   <TableHead className="px-4 py-3">Código</TableHead>
                   <TableHead className="px-4 py-3">Nome</TableHead>
-                  <TableHead className="px-4 py-3">CPF</TableHead>
+                  <TableHead className="px-4 py-3">CPF/CNPJ</TableHead>
                   <TableHead className="px-4 py-3">Telefone</TableHead>
                   <TableHead className="px-4 py-3 text-right">Ações</TableHead>
                 </TableRow>
@@ -295,7 +354,7 @@ const Clientes = () => {
                 ) : (
                   filteredClients.map((c) => (
                     <TableRow key={c.id} className="border-neutral-100 hover:bg-neutral-50 transition-colors duration-150">
-                      <TableCell className="px-4 py-3 font-mono text-sm">{c.code}</TableCell>
+                      <TableCell className="px-4 py-3 font-medium">{c.codigo || '—'}</TableCell>
                       <TableCell className="px-4 py-3">{c.name}</TableCell>
                       <TableCell className="px-4 py-3">{c.cpf || '—'}</TableCell>
                       <TableCell className="px-4 py-3">{c.phone || '—'}</TableCell>
@@ -339,22 +398,6 @@ const Clientes = () => {
             <form onSubmit={form.handleSubmit(handleSave)} className="space-y-4">
               <FormField
                 control={form.control}
-                name="code"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Código</FormLabel>
-                    <FormControl>
-                      <div className="relative">
-                        <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400" />
-                        <Input {...field} value={field.value || nextCode} onChange={(e) => field.onChange(e.target.value)} className="pl-9" />
-                      </div>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
                 name="name"
                 render={({ field }) => (
                   <FormItem>
@@ -371,15 +414,48 @@ const Clientes = () => {
               />
               <FormField
                 control={form.control}
+                name="documentType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tipo de Documento</FormLabel>
+                    <Select 
+                      onValueChange={(value) => {
+                        field.onChange(value);
+                        setDocumentType(value as 'cpf' | 'cnpj');
+                        form.setValue('cpf', ''); // Limpar campo ao trocar tipo
+                      }} 
+                      value={field.value || 'cpf'}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione o tipo" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="cpf">CPF</SelectItem>
+                        <SelectItem value="cnpj">CNPJ</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
                 name="cpf"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>CPF</FormLabel>
+                    <FormLabel>{documentType === 'cnpj' ? 'CNPJ' : 'CPF'}</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="000.000.000-00"
+                        placeholder={documentType === 'cnpj' ? '00.000.000/0000-00' : '000.000.000-00'}
                         value={field.value || ''}
-                        onChange={(e) => field.onChange(formatCPF(e.target.value))}
+                        onChange={(e) => {
+                          const formatted = documentType === 'cnpj' 
+                            ? formatCNPJ(e.target.value) 
+                            : formatCPF(e.target.value);
+                          field.onChange(formatted);
+                        }}
                       />
                     </FormControl>
                     <FormMessage />
