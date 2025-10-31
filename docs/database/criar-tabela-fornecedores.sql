@@ -19,7 +19,9 @@ CREATE TABLE IF NOT EXISTS public.fornecedores (
   telefone TEXT,
   usuario_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
   criado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  -- Constraint única composta: cada usuário pode ter seus próprios códigos
+  CONSTRAINT codigo_unico_por_usuario UNIQUE (codigo, usuario_id)
 );
 
 -- Adicionar coluna usuario_id se a tabela já existir mas não tiver essa coluna
@@ -42,10 +44,12 @@ END $$;
 
 -- Comentários
 COMMENT ON TABLE public.fornecedores IS 'Cadastro de fornecedores';
-COMMENT ON COLUMN public.fornecedores.codigo IS 'Código único do fornecedor';
+COMMENT ON COLUMN public.fornecedores.codigo IS 'Código do fornecedor (único por usuário)';
 COMMENT ON COLUMN public.fornecedores.nome IS 'Nome completo do fornecedor';
 COMMENT ON COLUMN public.fornecedores.cpf IS 'CPF do fornecedor';
 COMMENT ON COLUMN public.fornecedores.telefone IS 'Telefone do fornecedor';
+COMMENT ON CONSTRAINT codigo_unico_por_usuario ON public.fornecedores 
+IS 'Código único por usuário - cada usuário pode ter seus próprios códigos de fornecedores';
 
 -- RLS (Row Level Security)
 ALTER TABLE public.fornecedores ENABLE ROW LEVEL SECURITY;

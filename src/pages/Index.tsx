@@ -5,6 +5,8 @@ import { RecentMovements } from "@/components/dashboard/RecentMovements";
 import { QuickActions } from "@/components/dashboard/QuickActions";
 import { SalesChart } from "@/components/dashboard/SalesChart";
 import { ProductsChart } from "@/components/dashboard/ProductsChart";
+import { PurchasesSalesDiffChart } from "@/components/dashboard/PurchasesSalesDiffChart";
+import { ItemsRankingChart } from "@/components/dashboard/ItemsRankingChart";
 import { useData } from "@/contexts/DataContext";
 import { useResponsive } from "@/hooks/use-responsive";
 import { useNavigate } from "react-router-dom";
@@ -128,7 +130,7 @@ const Index = () => {
                     <div className={`${isMobile ? 'mt-2' : 'mt-3'} flex items-center gap-2 ${isMobile ? 'text-xs' : 'text-sm'} text-slate-600`}>
                       <div className="flex items-center gap-1">
                         <TrendingUp className={`${isMobile ? 'w-3 h-3' : 'w-4 h-4'} text-emerald-600`} />
-                        <span className="font-medium text-emerald-700">{movements.filter(m => m.type === 'entrada').length} {traduzir('entradas')}</span>
+                        <span className="font-medium text-emerald-700">{movements.filter(m => m.type === 'entrada').length} {traduzir('compras')}</span>
                       </div>
                       <span className="text-slate-400">•</span>
                       <div className="flex items-center gap-1">
@@ -159,7 +161,7 @@ const Index = () => {
                         </div>
                         <div className={`flex items-center gap-2 ${isMobile ? 'text-xs' : 'text-sm'} text-slate-600`}>
                           <span className={`px-2 py-0.5 ${recentMovements[0].type === 'entrada' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'} ${isMobile ? 'rounded' : 'rounded-md'} font-medium`}>
-                            {recentMovements[0].type === 'entrada' ? '📥 Entrada' : '📤 Saída'}
+                            {recentMovements[0].type === 'entrada' ? '📥 Compra' : '📤 Venda'}
                           </span>
                           <span className="text-slate-600">
                             {new Date(recentMovements[0].date).toLocaleString('pt-BR', { 
@@ -425,6 +427,7 @@ const Index = () => {
       {/* Gráficos - Só aparecem quando há produtos - Responsivo */}
       {hasProducts ? (
         <>
+          {/* Gráficos Originais */}
           <div className={`grid ${isMobile ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-6'} ${isMobile ? 'gap-4' : 'gap-6'}`}>
             <SalesChart movements={movements.map(m => ({
               id: m.id,
@@ -451,6 +454,27 @@ const Index = () => {
                 date: m.date
               }))}
             />
+          </div>
+
+          {/* Gráficos de Compras vs Vendas e Ranking de Itens */}
+          <div className={`grid ${isMobile ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-6'} ${isMobile ? 'gap-4' : 'gap-6'}`}>
+            <PurchasesSalesDiffChart movements={movements.map(m => ({
+              id: m.id,
+              type: m.type,
+              quantity: m.quantity,
+              unitPrice: m.unitPrice,
+              date: m.date,
+              total: m.total
+            }))} />
+            <ItemsRankingChart movements={movements.map(m => ({
+              id: m.id,
+              type: m.type,
+              quantity: m.quantity,
+              unitPrice: m.unitPrice,
+              date: m.date,
+              productName: m.productName,
+              total: m.total
+            }))} />
           </div>
         </>
       ) : (

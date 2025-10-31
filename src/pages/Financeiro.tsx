@@ -632,16 +632,17 @@ Compra registrada com sucesso!
 
       {/* Modal de Receita (Saída) */}
       <Dialog open={showReceipt} onOpenChange={setShowReceipt}>
-        <DialogContent className="max-w-md sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-green-600">
-              <CheckCircle className="h-6 w-6" />
-              Detalhes da Receita
-            </DialogTitle>
-          </DialogHeader>
-          
-          {selectedMovement && (
-            <div className="space-y-4">
+        <DialogContent className="max-w-md sm:max-w-lg max-h-[90vh] flex flex-col p-0 overflow-hidden !md:overflow-hidden">
+          <div className="overflow-y-auto flex-1 px-6 pt-6 pb-6 min-h-0">
+            <DialogHeader className="pb-4 border-b">
+              <DialogTitle className="flex items-center gap-2 text-green-600">
+                <CheckCircle className="h-6 w-6" />
+                Detalhes da Receita
+              </DialogTitle>
+            </DialogHeader>
+            
+            {selectedMovement && (
+              <div className="space-y-4 pt-4">
               {/* Cabeçalho da Receita */}
               <div className="border-b pb-4">
                 <div className="text-center mb-3">
@@ -718,7 +719,7 @@ Compra registrada com sucesso!
               {/* Botões de Ação */}
               <div className="space-y-2 pt-2">
                 <Button 
-                  className="w-full bg-green-600 hover:bg-green-700"
+                  className="w-full bg-green-600 hover:bg-green-700 text-white"
                   onClick={() => downloadReceipt(selectedMovement)}
                 >
                   <Share2 className="mr-2 h-4 w-4" />
@@ -750,22 +751,24 @@ Compra registrada com sucesso!
                 <p className="mt-1">💚 Flexi Gestor - Gestão Inteligente</p>
               </div>
             </div>
-          )}
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 
       {/* Modal de Compra (Entrada) */}
       <Dialog open={showPurchase} onOpenChange={setShowPurchase}>
-        <DialogContent className="max-w-md sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-blue-600">
-              <CheckCircle className="h-6 w-6" />
-              Comprovante de Compra
-            </DialogTitle>
-          </DialogHeader>
-          
-          {selectedMovement && (
-            <div className="space-y-4">
+        <DialogContent className="max-w-md sm:max-w-lg max-h-[90vh] flex flex-col p-0 overflow-hidden !md:overflow-hidden">
+          <div className="overflow-y-auto flex-1 px-6 pt-6 pb-6 min-h-0">
+            <DialogHeader className="pb-4 border-b">
+              <DialogTitle className="flex items-center gap-2 text-blue-600">
+                <CheckCircle className="h-6 w-6" />
+                Comprovante de Compra
+              </DialogTitle>
+            </DialogHeader>
+            
+            {selectedMovement && (
+              <div className="space-y-4 pt-4">
               {/* Cabeçalho do Comprovante */}
               <div className="border-b pb-4">
                 <div className="text-center mb-3">
@@ -866,7 +869,8 @@ Compra registrada com sucesso!
                 <p className="mt-1">📦 Flexi Gestor - Controle de Estoque</p>
               </div>
             </div>
-          )}
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </main>

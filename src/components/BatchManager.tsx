@@ -272,8 +272,7 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
   };
 
   return (
-    <>
-    <div className="space-y-3 pt-4">
+    <div className="space-y-3 w-full max-w-full overflow-hidden">
       {/* Header com título e botão */}
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0 flex-1">
@@ -586,7 +585,7 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
       </div>
 
       {/* Resumo de Distribuição */}
-      <Card className="bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-200 shadow-md">
+      <Card className="bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-200 shadow-md w-full">
         <CardContent className="p-3">
           <div className="space-y-2">
             {/* Cabeçalho do Resumo */}
@@ -685,20 +684,19 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
           </div>
         </CardContent>
       </Card>
+      
+      {/* Diálogo de Confirmação */}
+      <ConfirmDialog
+        isOpen={dialogState.isOpen}
+        onClose={closeDialog}
+        onConfirm={handleConfirm}
+        title={dialogState.title}
+        description={dialogState.description}
+        confirmText={dialogState.confirmText}
+        cancelText={dialogState.cancelText}
+        variant={dialogState.variant}
+      />
     </div>
-
-    {/* Diálogo de Confirmação */}
-    <ConfirmDialog
-      isOpen={dialogState.isOpen}
-      onClose={closeDialog}
-      onConfirm={handleConfirm}
-      title={dialogState.title}
-      description={dialogState.description}
-      confirmText={dialogState.confirmText}
-      cancelText={dialogState.cancelText}
-      variant={dialogState.variant}
-    />
-  </>
   );
 };
 

@@ -16,6 +16,47 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Credenciais do Supabase não encontradas nas variáveis de ambiente')
 }
 
+// Listener global para tratar erros de autenticação do Supabase
+// Configurar interceptadores ANTES de criar o cliente Supabase
+if (typeof window !== 'undefined') {
+  // Função auxiliar para limpar tokens inválidos
+  const clearInvalidTokens = () => {
+    try {
+      const keys = Object.keys(localStorage);
+      keys.forEach(key => {
+        if (key.includes('supabase.auth.token') || 
+            (key.includes('sb-') && key.includes('-auth-token'))) {
+          localStorage.removeItem(key);
+        }
+      });
+    } catch {
+      // Ignorar erros ao limpar
+    }
+  };
+
+  // Interceptar console.error ANTES de qualquer coisa para suprimir erros de refresh token
+  const originalConsoleError = console.error;
+  console.error = (...args: any[]) => {
+    const errorMessage = args.join(' ');
+    // Suprimir erros específicos de refresh token inválido
+    const isRefreshTokenError = 
+      errorMessage.includes('Invalid Refresh Token') ||
+      errorMessage.includes('Refresh Token Not Found') ||
+      errorMessage.includes('refresh_token') ||
+      (errorMessage.includes('auth/v1/token') && errorMessage.includes('400')) ||
+      (errorMessage.includes('400 (Bad Request)') && errorMessage.includes('token')) ||
+      (errorMessage.includes('POST') && errorMessage.includes('auth/v1/token') && errorMessage.includes('400')) ||
+      (errorMessage.includes('grant_type=refresh_token') && errorMessage.includes('400'));
+    
+    if (isRefreshTokenError) {
+      // Não logar esses erros, apenas ignorar silenciosamente
+      return;
+    }
+    // Para todos os outros erros, logar normalmente
+    originalConsoleError.apply(console, args);
+  };
+}
+
 // Criar e exportar o cliente Supabase com configurações de persistência
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
@@ -47,37 +88,119 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 
 // Listener global para tratar erros de autenticação do Supabase
 if (typeof window !== 'undefined') {
+  // Função auxiliar para limpar tokens inválidos (já definida acima, mas mantida aqui para compatibilidade)
+  const clearInvalidTokens = () => {
+    try {
+      const keys = Object.keys(localStorage);
+      keys.forEach(key => {
+        if (key.includes('supabase.auth.token') || 
+            (key.includes('sb-') && key.includes('-auth-token'))) {
+          localStorage.removeItem(key);
+        }
+      });
+    } catch {
+      // Ignorar erros ao limpar
+    }
+  };
+
   // Escutar mudanças de autenticação para tratar erros de refresh token
-  supabase.auth.onAuthStateChange((event, session) => {
+  supabase.auth.onAuthStateChange(async (event, session) => {
     // Se o token foi revogado ou expirado, limpar localmente
     if (event === 'TOKEN_REFRESHED' && !session) {
+      clearInvalidTokens();
+    }
+    
+    // Se houver erro de sessão, limpar tokens inválidos
+    if (event === 'SIGNED_OUT' || event === 'USER_UPDATED') {
+      // Verificar se a sessão foi perdida devido a token inválido
       try {
-        const keys = Object.keys(localStorage);
-        keys.forEach(key => {
-          if (key.includes('supabase.auth.token')) {
-            localStorage.removeItem(key);
-          }
-        });
+        const { error } = await supabase.auth.getSession();
+        if (error && (error.message.includes('refresh_token') || 
+                     error.message.includes('Invalid') ||
+                     error.message.includes('JWT'))) {
+          clearInvalidTokens();
+        }
       } catch {
         // Ignorar erros
       }
     }
   });
 
-  // Interceptar console.error para suprimir erros de refresh token
-  const originalConsoleError = console.error;
-  console.error = (...args: any[]) => {
-    const errorMessage = args.join(' ');
-    // Suprimir erros específicos de refresh token inválido
-    if (errorMessage.includes('Invalid Refresh Token') ||
-        errorMessage.includes('Refresh Token Not Found') ||
-        errorMessage.includes('refresh_token')) {
-      // Não logar esses erros, apenas ignorar
-      return;
+  // Limpar tokens inválidos na inicialização se houver erro de refresh
+  // Isso evita que o erro 400 apareça no console
+  const initializeAuthCleanup = async () => {
+    try {
+      // Aguardar um pouco para o Supabase tentar inicializar
+      setTimeout(async () => {
+        try {
+          const { error } = await supabase.auth.getSession();
+          if (error && (error.message.includes('refresh_token') || 
+                       error.message.includes('Invalid') ||
+                       error.message.includes('JWT') ||
+                       error.message.includes('400'))) {
+            // Limpar tokens inválidos silenciosamente
+            clearInvalidTokens();
+            // Fazer signOut local para limpar estado
+            await supabase.auth.signOut({ scope: 'local' });
+          }
+        } catch {
+          // Ignorar erros durante limpeza inicial
+        }
+      }, 1000);
+    } catch {
+      // Ignorar erros
     }
-    // Para todos os outros erros, logar normalmente
-    originalConsoleError.apply(console, args);
   };
+  
+  initializeAuthCleanup();
+
+  // Interceptar erros de rede do fetch para suprimir erros 400 de refresh token
+  // Apenas para requisições específicas do Supabase Auth
+  const originalFetch = window.fetch;
+  window.fetch = async (...args) => {
+    const [url, options] = args;
+    const urlString = typeof url === 'string' ? url : url.toString();
+    
+    // Verificar se é uma requisição de refresh token do Supabase
+    const isRefreshTokenRequest = urlString.includes('auth/v1/token') && 
+                                  (urlString.includes('grant_type=refresh_token') || 
+                                   (options && typeof options === 'object' && 'body' in options && 
+                                    typeof options.body === 'string' && 
+                                    options.body.includes('refresh_token')));
+    
+    try {
+      const response = await originalFetch(...args);
+      
+      // Se for uma requisição de refresh token que retornou 400, limpar tokens silenciosamente
+      if (isRefreshTokenRequest && response.status === 400) {
+        clearInvalidTokens();
+        // Clonar a resposta para poder lê-la sem afetar o Supabase
+        const clonedResponse = response.clone();
+        try {
+          const errorData = await clonedResponse.json();
+          // Se o erro indica token inválido, limpar tokens e suprimir o erro
+          if (errorData.error === 'invalid_grant' || 
+              errorData.error_description?.includes('refresh') ||
+              errorData.message?.includes('refresh')) {
+            // Não propagar o erro visível, apenas limpar tokens
+            return response;
+          }
+        } catch {
+          // Se não conseguir ler o JSON, ainda assim limpar tokens
+          clearInvalidTokens();
+        }
+      }
+      
+      return response;
+    } catch (error: any) {
+      // Se for erro de rede relacionado a refresh token, limpar tokens
+      if (isRefreshTokenRequest) {
+        clearInvalidTokens();
+      }
+      throw error;
+    }
+  };
+
 }
 
 // Tipos do banco de dados

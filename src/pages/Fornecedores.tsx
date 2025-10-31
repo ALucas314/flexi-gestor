@@ -132,7 +132,11 @@ const Fornecedores = () => {
 
   // Carrega fornecedores do Supabase
   const loadSuppliers = async () => {
-    if (!workspaceAtivo?.id) return;
+    if (!workspaceAtivo?.id) {
+      setSuppliers([]);
+      return;
+    }
+    
     try {
       setIsLoading(true);
       const { data, error } = await supabase
@@ -140,7 +144,26 @@ const Fornecedores = () => {
         .select('*')
         .eq('usuario_id', workspaceAtivo.id)
         .order('id', { ascending: false });
-      if (error) throw error;
+      
+      if (error) {
+        // Tratar erros específicos
+        if (error.code === '42501') {
+          console.warn('Erro de permissão RLS ao carregar fornecedores. Verifique as políticas.');
+          // Não mostrar erro ao usuário se for problema de RLS durante carregamento
+          setSuppliers([]);
+          return;
+        }
+        if (error.code === '42P01') {
+          toast({
+            title: 'Tabela não encontrada',
+            description: 'A tabela de fornecedores não existe. Execute o script SQL de criação.',
+            variant: 'destructive'
+          });
+          return;
+        }
+        throw error;
+      }
+      
       const mapped: Supplier[] = (data || []).map((s: any) => ({
         id: s.id,
         code: String(s.codigo ?? s.code ?? ''),
@@ -151,11 +174,13 @@ const Fornecedores = () => {
       }));
       setSuppliers(mapped);
     } catch (error: any) {
+      console.error('Erro ao carregar fornecedores:', error);
       toast({
         title: 'Erro ao carregar fornecedores',
-        description: error.message || 'Verifique nomes de colunas: id, codigo (ou code), nome (ou name), cpf, telefone (ou phone).',
+        description: error.message || `Erro ${error.code || 'desconhecido'}: Verifique se a tabela existe e as políticas RLS estão configuradas corretamente.`,
         variant: 'destructive'
       });
+      setSuppliers([]);
     } finally {
       setIsLoading(false);
     }
@@ -172,9 +197,38 @@ const Fornecedores = () => {
   };
 
   const handleSave = async (data: SupplierFormData) => {
-    if (!workspaceAtivo?.id) return;
+    if (!workspaceAtivo?.id) {
+      toast({ 
+        title: 'Erro', 
+        description: 'Workspace não selecionado. Selecione um workspace antes de continuar.',
+        variant: 'destructive' 
+      });
+      return;
+    }
+    
     try {
       if (!editing) {
+        // Verificar se já existe um fornecedor com o mesmo código para este usuário
+        const { data: existing, error: checkError } = await supabase
+          .from('fornecedores')
+          .select('id')
+          .eq('codigo', data.code)
+          .eq('usuario_id', workspaceAtivo.id)
+          .maybeSingle();
+        
+        if (checkError && checkError.code !== 'PGRST116') { // PGRST116 = não encontrado (ok)
+          throw checkError;
+        }
+        
+        if (existing) {
+          toast({ 
+            title: 'Código já existe', 
+            description: `Já existe um fornecedor com o código "${data.code}". Use um código diferente.`,
+            variant: 'destructive' 
+          });
+          return;
+        }
+        
         const { error } = await supabase
           .from('fornecedores')
           .insert({
@@ -184,9 +238,51 @@ const Fornecedores = () => {
             telefone: data.phone || null,
             usuario_id: workspaceAtivo.id,
           } as any);
-        if (error) throw error;
+        
+        if (error) {
+          // Tratar erros específicos
+          if (error.code === '23505') { // Violação de constraint única
+            toast({ 
+              title: 'Código já existe', 
+              description: `Já existe um fornecedor com o código "${data.code}". Use um código diferente.`,
+              variant: 'destructive' 
+            });
+            return;
+          }
+          if (error.code === '42501') { // Erro de permissão RLS
+            toast({ 
+              title: 'Erro de permissão', 
+              description: 'Você não tem permissão para realizar esta operação. Verifique as políticas RLS.',
+              variant: 'destructive' 
+            });
+            return;
+          }
+          throw error;
+        }
         toast({ title: '✅ Fornecedor cadastrado' });
       } else {
+        // Verificar se outro fornecedor já usa este código (exceto o que estamos editando)
+        const { data: existing, error: checkError } = await supabase
+          .from('fornecedores')
+          .select('id')
+          .eq('codigo', data.code)
+          .eq('usuario_id', workspaceAtivo.id)
+          .neq('id', editing.id)
+          .maybeSingle();
+        
+        if (checkError && checkError.code !== 'PGRST116') {
+          throw checkError;
+        }
+        
+        if (existing) {
+          toast({ 
+            title: 'Código já existe', 
+            description: `Já existe outro fornecedor com o código "${data.code}". Use um código diferente.`,
+            variant: 'destructive' 
+          });
+          return;
+        }
+        
         const { error } = await supabase
           .from('fornecedores')
           .update({
@@ -195,14 +291,39 @@ const Fornecedores = () => {
             cpf: data.cpf || null,
             telefone: data.phone || null,
           })
-          .eq('id', editing.id);
-        if (error) throw error;
+          .eq('id', editing.id)
+          .eq('usuario_id', workspaceAtivo.id); // Garantir que só atualiza do próprio usuário
+        
+        if (error) {
+          if (error.code === '23505') {
+            toast({ 
+              title: 'Código já existe', 
+              description: `Já existe um fornecedor com o código "${data.code}". Use um código diferente.`,
+              variant: 'destructive' 
+            });
+            return;
+          }
+          if (error.code === '42501') {
+            toast({ 
+              title: 'Erro de permissão', 
+              description: 'Você não tem permissão para atualizar este fornecedor.',
+              variant: 'destructive' 
+            });
+            return;
+          }
+          throw error;
+        }
         toast({ title: '🔄 Fornecedor atualizado' });
       }
       setIsAddOpen(false);
       await loadSuppliers();
     } catch (error: any) {
-      toast({ title: 'Erro ao salvar', description: error.message, variant: 'destructive' });
+      console.error('Erro ao salvar fornecedor:', error);
+      toast({ 
+        title: 'Erro ao salvar', 
+        description: error.message || `Erro ${error.code || 'desconhecido'}: Não foi possível salvar o fornecedor. Verifique se o código é único e você tem permissões adequadas.`, 
+        variant: 'destructive' 
+      });
     }
   };
 

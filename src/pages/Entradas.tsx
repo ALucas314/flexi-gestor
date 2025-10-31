@@ -75,6 +75,8 @@ const Entradas = () => {
   const [nextBatchNumberSuggestion, setNextBatchNumberSuggestion] = useState<string>("1");
   const [productSearchOpen, setProductSearchOpen] = useState(false);
   const [productSearchTerm, setProductSearchTerm] = useState("");
+  const [supplierSearchTerm, setSupplierSearchTerm] = useState("");
+  const [supplierResults, setSupplierResults] = useState<Array<{ id?: string; nome: string; codigo: number }>>([]);
   // Estado para armazenar valores parciais de datas enquanto digita
   const [dateTextValues, setDateTextValues] = useState<{[key: string]: string}>({});
   const [isBatchDialogOpen, setIsBatchDialogOpen] = useState(false);
@@ -88,7 +90,7 @@ const Entradas = () => {
   const { products, movements, addMovement, deleteMovement, addNotification } = useData();
   const { user } = useAuth();
 
-  // Filtrar apenas as entradas dos movements
+  // Filtrar apenas as compras (type 'entrada') dos movements
   const entries: StockEntry[] = movements
     .filter(m => m.type === 'entrada')
     .map(m => {
@@ -183,7 +185,39 @@ const Entradas = () => {
     }
   };
 
-  // Adicionar novo lote à entrada
+  // Buscar fornecedores por nome (ilike) ou código (igual) conforme usuário digita
+  useEffect(() => {
+    let isCancelled = false;
+    const term = supplierSearchTerm.trim();
+    if (term === "") {
+      setSupplierResults([]);
+      return;
+    }
+    const fetchSuppliers = async () => {
+      try {
+        const numeric = /^\d+$/.test(term) ? Number(term) : null;
+        const or = numeric !== null
+          ? `nome.ilike.%${term}%,codigo.eq.${numeric}`
+          : `nome.ilike.%${term}%`;
+        const { data, error } = await supabase
+          .from("fornecedores")
+          .select("codigo,nome")
+          .or(or)
+          .order("nome", { ascending: true })
+          .limit(5);
+        if (error) throw error;
+        if (!isCancelled) {
+          setSupplierResults((data || []).map(r => ({ nome: r.nome as string, codigo: r.codigo as number })));
+        }
+      } catch {
+        if (!isCancelled) setSupplierResults([]);
+      }
+    };
+    fetchSuppliers();
+    return () => { isCancelled = true; };
+  }, [supplierSearchTerm]);
+
+  // Adicionar novo lote à compra
   const addBatchToEntry = async () => {
     try {
       // Se não há produto selecionado, mostrar aviso
@@ -235,7 +269,7 @@ const Entradas = () => {
     }
   };
 
-  // Remover lote da entrada
+  // Remover lote da compra
   const removeBatchFromEntry = (index: number) => {
     setSelectedBatches(prev => prev.filter((_, i) => i !== index));
     // Limpar erro do lote removido
@@ -916,10 +950,10 @@ const Entradas = () => {
           <div className="space-y-2 text-center sm:text-left">
             <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent flex items-center gap-2 justify-center sm:justify-start">
               <TrendingUp className="w-8 h-8 text-blue-600" />
-              Entradas de Estoque
+              Compras de Estoque
             </h1>
             <p className="text-base sm:text-lg md:text-xl text-neutral-600 max-w-2xl mx-auto sm:mx-0">
-              Gerencie todas as entradas de produtos, registre compras e mantenha o controle completo do seu inventário
+              Gerencie todas as compras de produtos e mantenha o controle completo do seu inventário
             </p>
           </div>
           
@@ -938,7 +972,7 @@ const Entradas = () => {
             <DialogTrigger asChild>
               <Button className="w-full sm:w-auto bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-xl sm:rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-200 transform hover:scale-105">
                 <Plus className="w-5 h-5 sm:w-6 sm:h-6 mr-2 sm:mr-3" />
-                Nova Entrada
+                Nova Compra
               </Button>
             </DialogTrigger>
             
@@ -946,10 +980,10 @@ const Entradas = () => {
             <DialogContent className="max-w-md sm:max-w-lg md:max-w-2xl max-h-[90vh] flex flex-col p-0">
               <DialogHeader className="space-y-2 pb-4 px-6 pt-6 border-b">
                 <DialogTitle className="text-base sm:text-xl font-bold text-neutral-900">
-                  ✨ Registrar Nova Entrada
+                  ✨ Registrar Nova Compra
                 </DialogTitle>
                 <DialogDescription className="text-sm text-neutral-600">
-                  Preencha as informações detalhadas da entrada de estoque para manter o controle preciso
+                  Preencha as informações detalhadas da compra de estoque para manter o controle preciso
                 </DialogDescription>
               </DialogHeader>
               
@@ -1192,7 +1226,7 @@ const Entradas = () => {
                         <Card className="border-2 border-indigo-200">
                           <CardHeader className="pb-3">
                             <CardTitle className="text-lg font-semibold text-gray-900">
-                              📦 Informações da Entrada
+                              📦 Informações da Compra
                             </CardTitle>
                             <p className="text-sm text-gray-600">{selectedProduct?.name || 'Produto selecionado'}</p>
                           </CardHeader>
@@ -1798,7 +1832,7 @@ const Entradas = () => {
                     render={({ field }) => (
                       <FormItem className="space-y-3">
                         <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
-                          📅 Data de Entrada
+                          📅 Data da Compra
                         </FormLabel>
                         <FormControl>
                           <Input 
@@ -1825,7 +1859,7 @@ const Entradas = () => {
                         </FormLabel>
                         <FormControl>
                           <Textarea 
-                            placeholder="Observações adicionais sobre a entrada..." 
+                            placeholder="Observações adicionais sobre a compra..." 
                             {...field}
                             rows={3}
                             className="min-h-[80px] border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-base sm:text-sm resize-none"
@@ -1854,7 +1888,7 @@ const Entradas = () => {
                       type="submit"
                       className="w-full sm:w-auto bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white shadow-lg hover:shadow-xl transition-all duration-200 h-9 text-sm"
                     >
-                      ✨ Registrar Entrada
+                      ✨ Registrar Compra
                     </Button>
                   </DialogFooter>
                 </form>
@@ -1876,7 +1910,7 @@ const Entradas = () => {
               <div className="text-xs sm:text-sm opacity-90">Total</div>
             </div>
           </div>
-          <h3 className="text-base sm:text-lg font-semibold mb-2">📈 Total de Entradas</h3>
+          <h3 className="text-base sm:text-lg font-semibold mb-2">📈 Total de Compras</h3>
           <p className="text-xs sm:text-sm opacity-80">Registros no sistema</p>
         </div>
         
@@ -1905,7 +1939,7 @@ const Entradas = () => {
             </div>
           </div>
           <h3 className="text-base sm:text-lg font-semibold mb-2">📅 Este Mês</h3>
-          <p className="text-xs sm:text-sm opacity-80">Entradas do período</p>
+          <p className="text-xs sm:text-sm opacity-80">Compras do período</p>
         </div>
       </div>
 
@@ -1949,7 +1983,7 @@ const Entradas = () => {
       <Card className="bg-white border-0 shadow-xl rounded-3xl overflow-hidden">
         <CardHeader className="bg-gradient-to-r from-neutral-50 to-neutral-100 border-b border-neutral-200">
           <CardTitle className="text-2xl font-bold text-neutral-900">
-            📋 Lista de Entradas
+            📋 Lista de Compras
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -1976,10 +2010,10 @@ const Entradas = () => {
                         <Package className="w-12 h-12 sm:w-16 sm:h-16 lg:w-20 lg:h-20 mx-auto text-neutral-300" />
                         <div className="space-y-2">
                           <p className="text-lg sm:text-xl lg:text-2xl font-medium text-neutral-600">
-                            Nenhuma entrada encontrada
+                            Nenhuma compra encontrada
                           </p>
                           <p className="text-sm sm:text-base text-neutral-500 max-w-md mx-auto">
-                            Comece registrando sua primeira entrada de estoque para manter o controle do seu inventário
+                            Comece registrando sua primeira compra de estoque para manter o controle do seu inventário
                           </p>
                         </div>
                         <div className="pt-2 sm:pt-4">
@@ -1988,7 +2022,7 @@ const Entradas = () => {
                             className="bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-xl sm:rounded-2xl shadow-lg hover:shadow-xl transition-all duration-200"
                           >
                             <Plus className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
-                            Registrar Primeira Entrada
+                            Registrar Primeira Compra
                           </Button>
                         </div>
                       </div>
@@ -2116,17 +2150,17 @@ const Entradas = () => {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg">
               <Trash2 className="h-5 w-5 text-red-600" />
-              Confirmar Exclusão de Entrada
+              Confirmar Exclusão de Compra
             </DialogTitle>
             <DialogDescription>
-              Esta ação não pode ser desfeita. A entrada será removida e o estoque será ajustado.
+              Esta ação não pode ser desfeita. A compra será removida e o estoque será ajustado.
             </DialogDescription>
           </DialogHeader>
 
           {entryToDelete && (
             <div className="py-4">
               <div className="bg-red-50 rounded-lg p-4 border border-red-200">
-                <h4 className="font-semibold text-sm mb-2 text-red-900">Entrada a ser excluída:</h4>
+                <h4 className="font-semibold text-sm mb-2 text-red-900">Compra a ser excluída:</h4>
                 <div className="space-y-1 text-sm">
                   <p><strong>Produto:</strong> {entryToDelete.productName}</p>
                   <p><strong>Quantidade:</strong> {entryToDelete.quantity} unidades</p>
@@ -2165,7 +2199,7 @@ const Entradas = () => {
               ) : (
                 <>
                   <Trash2 className="h-4 w-4 mr-2" />
-                    Excluir Entrada
+                  Excluir Entrada
                 </>
               )}
             </Button>
@@ -2178,10 +2212,10 @@ const Entradas = () => {
         <DialogContent className="max-w-2xl sm:max-w-3xl bg-white rounded-xl shadow-lg border border-gray-200">
           <DialogHeader className="space-y-2 pb-4 sm:pb-6">
             <DialogTitle className="text-base sm:text-2xl font-bold text-neutral-900">
-              ✏️ Editar Entrada
+              ✏️ Editar Compra
             </DialogTitle>
             <DialogDescription className="text-sm sm:text-base text-neutral-600">
-              Atualize as informações da entrada de estoque selecionada
+              Atualize as informações da compra de estoque selecionada
             </DialogDescription>
           </DialogHeader>
           
@@ -2225,11 +2259,43 @@ const Entradas = () => {
                         🏢 Fornecedor
                       </FormLabel>
                       <FormControl>
-                        <Input 
-                          placeholder="Nome do fornecedor" 
-                          {...field} 
-                          className="h-12 border-neutral-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        />
+                              <div className="relative">
+                                <Input 
+                                  placeholder="Nome ou código do fornecedor" 
+                                  {...field} 
+                                  value={field.value}
+                                  onChange={(e) => {
+                                    field.onChange(e.target.value);
+                                    setSupplierSearchTerm(e.target.value);
+                                  }}
+                                  onFocus={() => {
+                                    setSupplierSearchTerm(field.value || "");
+                                  }}
+                                  className="h-12 border-neutral-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                />
+                                {supplierSearchTerm.trim() !== '' && (
+                                  <div className="absolute z-50 w-full mt-1 bg-white border-2 border-neutral-200 rounded-xl shadow-lg max-h-[260px] overflow-y-auto">
+                                    {supplierResults.length === 0 ? (
+                                      <div className="p-3 text-sm text-neutral-500">Fornecedor não cadastrado</div>
+                                    ) : (
+                                      supplierResults.map((s) => (
+                                        <button
+                                          key={`edit-${s.codigo}-${s.nome}`}
+                                          type="button"
+                                          className="w-full px-4 py-2.5 text-left hover:bg-indigo-50 focus:bg-indigo-50 focus:outline-none border-b last:border-b-0"
+                                          onClick={() => {
+                                            field.onChange(s.nome);
+                                            setSupplierSearchTerm("");
+                                          }}
+                                        >
+                                          <div className="font-medium text-neutral-800">{s.nome}</div>
+                                          <div className="text-xs text-neutral-500">Código: {s.codigo}</div>
+                                        </button>
+                                      ))
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -2372,7 +2438,7 @@ const Entradas = () => {
                   render={({ field }) => (
                     <FormItem className="space-y-3">
                       <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
-                        📅 Data de Entrada
+                        📅 Data da Compra
                       </FormLabel>
                       <FormControl>
                         <Input 
@@ -2449,7 +2515,7 @@ const Entradas = () => {
                   type="submit"
                   className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-2 rounded-lg shadow-md hover:shadow-lg transition-all duration-200"
                 >
-                  ✏️ Atualizar Entrada
+                  ✏️ Atualizar Compra
                 </Button>
               </DialogFooter>
             </form>
@@ -2459,19 +2525,21 @@ const Entradas = () => {
 
       {/* Modal de Gerenciamento de Lotes */}
       <Dialog open={isBatchDialogOpen} onOpenChange={setIsBatchDialogOpen}>
-        <DialogContent className="max-w-md sm:max-w-lg md:max-w-xl max-h-[90vh] overflow-y-auto pt-8">
-          {selectedProductForBatch && (
-            <BatchManager
-              productId={selectedProductForBatch.id}
-              productName={selectedProductForBatch.name}
-              productSku={selectedProductForBatch.sku}
-              productStock={selectedProductForBatch.stock}
-              onBatchesChange={async () => {
-                // Atualizar estoque silenciosamente quando lotes mudarem
-                // Aqui você pode adicionar lógica de atualização se necessário
-              }}
-            />
-          )}
+        <DialogContent className="max-w-md sm:max-w-lg md:max-w-xl max-h-[90vh] flex flex-col p-0 overflow-hidden !md:overflow-hidden">
+          <div className="overflow-y-auto flex-1 px-6 pt-6 pb-6 min-h-0">
+            {selectedProductForBatch && (
+              <BatchManager
+                productId={selectedProductForBatch.id}
+                productName={selectedProductForBatch.name}
+                productSku={selectedProductForBatch.sku}
+                productStock={selectedProductForBatch.stock}
+                onBatchesChange={async () => {
+                  // Atualizar estoque silenciosamente quando lotes mudarem
+                  // Aqui você pode adicionar lógica de atualização se necessário
+                }}
+              />
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </main>

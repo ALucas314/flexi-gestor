@@ -53,15 +53,15 @@ const navigationItems = [
   },
   { 
     icon: TrendingUp, 
-    label: "Entradas", 
+    label: "Compras", 
     path: "/entradas",
-    description: "Controle de entradas"
+    description: "Controle de compras"
   },
   { 
     icon: TrendingDown, 
-    label: "Saídas", 
+    label: "Vendas", 
     path: "/saidas",
-    description: "Controle de saídas"
+    description: "Controle de vendas"
   },
   { 
     icon: FileText, 
@@ -163,8 +163,9 @@ export const Sidebar = ({ className, variant = 'overlay', onNavigate }: SidebarP
       {/* Header do Sidebar - Responsivo */}
       <div className="p-3 sm:p-4 md:p-6 border-b border-neutral-200 bg-gradient-to-br from-indigo-50 to-indigo-100">
         <div className="flex items-center space-x-2 sm:space-x-3">
-          <div className="w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 bg-gradient-to-br from-indigo-600 to-indigo-700 rounded-lg sm:rounded-xl flex items-center justify-center shadow-lg">
-            <span className="text-sm sm:text-base md:text-lg text-white font-bold">FG</span>
+          {/* Marca/Logo: aumentada e levemente deslocada para cima */}
+          <div className="-mt-2 sm:-mt-3 md:-mt-4 w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 bg-gradient-to-br from-indigo-600 to-indigo-700 rounded-lg sm:rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/30">
+            <span className="text-base sm:text-lg md:text-xl text-white font-bold">FG</span>
           </div>
           <div>
             <h1 className="text-sm sm:text-base md:text-lg font-bold text-indigo-900">Flexi Gestor</h1>
@@ -217,7 +218,7 @@ export const Sidebar = ({ className, variant = 'overlay', onNavigate }: SidebarP
                   ? "bg-white/20 text-white"
                   : "bg-indigo-100 text-indigo-700 group-hover:bg-indigo-200 group-hover:text-indigo-800"
               )}>
-                <item.icon className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'} stroke-[2.5]`} />
+                <item.icon className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'} stroke-[2.5] relative -top-0.5`} />
               </div>
               
               <div className="flex-1 min-w-0">

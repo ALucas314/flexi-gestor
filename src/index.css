@@ -150,8 +150,9 @@ All colors MUST be HSL.
     --warning: 45 90% 75%;
     --warning-foreground: 220 15% 25%;
 
-    --destructive: 0 70% 75%;
-    --destructive-foreground: 220 15% 25%;
+    /* Vermelho forte (equivalente ao Tailwind red-600) */
+    --destructive: 0 72% 45%;
+    --destructive-foreground: 0 0% 98%;
 
     /* Cores de Informação - Azul suave */
     --info: 210 100% 80%;

@@ -22,7 +22,7 @@ import { printReceipt, downloadReceipt } from "@/lib/receiptPDF";
 import { StockExitCart } from "@/components/saidas/StockExitCart";
 import { supabase } from "@/lib/supabase";
 
-// Interface da saída de estoque
+// Interface da venda de estoque
 interface StockExit {
   id: string;
   productId: string;
@@ -79,7 +79,7 @@ const Saidas = () => {
   const { products, movements, addMovement, deleteMovement, addNotification, refreshMovements } = useData();
   const { user } = useAuth();
 
-  // Filtrar apenas as saídas dos movements
+  // Filtrar apenas as vendas (type 'saida') dos movements
   const exits = movements
     .filter(m => m.type === 'saida')
     .map(m => ({
@@ -533,6 +533,59 @@ const Saidas = () => {
 
   // Funções
   const handleAddExit = async (data: StockExitFormData) => {
+    // Se houver itens no carrinho, processa todos; caso contrário, segue o fluxo atual de único item
+    if (cartItems.length > 0) {
+      for (const item of cartItems) {
+        const product = products.find(p => p.id === item.productId);
+        if (!product) continue;
+        const quantity = item.quantity;
+        if (quantity <= 0 || (product.stock || 0) < quantity) {
+          toast({ title: "⚠️ Verifique o carrinho", description: `${product?.name || 'Produto'} com quantidade inválida ou estoque insuficiente.`, variant: "destructive" });
+          return;
+        }
+        const unitPrice = getProductPrice(item.productId);
+        const receiptNumber = generateReceiptNumber();
+
+        // Atualizar lotes se gerenciado por lote
+        if (item.managedByBatch && item.batches.length > 0 && user?.id) {
+          try {
+            const batches = await getBatchesByProduct(item.productId, user.id);
+            await Promise.all(item.batches.map(async sel => {
+              const batch = batches.find(b => b.id === sel.batchId);
+              if (batch) {
+                const newQuantity = Math.max(0, (batch.quantity || 0) - sel.quantity);
+                await updateBatchQuantity(batch.id, newQuantity, user.id);
+              }
+            }));
+          } catch (error) {
+            console.error('Erro ao atualizar lotes:', error);
+          }
+        }
+
+        addMovement({
+          type: 'saida',
+          productId: item.productId,
+          productName: product.name,
+          quantity,
+          unitPrice,
+          description: `Saída de ${quantity} unidades - ${data.customer || 'Cliente'}`,
+          date: data.exitDate,
+          paymentMethod: data.paymentMethod === "parcelado" ? `parcelado-${data.installments || 1}x` : (data.paymentMethod || 'avista'),
+          status: "confirmado",
+          receiptNumber,
+        });
+      }
+
+      setIsAddDialogOpen(false);
+      setSelectedBatches([]);
+      setSelectedProductId("");
+      setCartItems([]);
+      form.reset();
+      toast({ title: "✅ Venda Registrada!", description: `${cartItems.length} item(ns) processado(s).`, variant: "default" });
+      addNotification('🛒 Nova Venda', `${cartItems.length} item(ns) registrado(s) no pedido.`, 'success');
+      return;
+    }
+
     const product = products.find(p => p.id === data.productId);
     if (!product) {
       toast({
@@ -911,7 +964,7 @@ const Saidas = () => {
             <div className="w-16 h-16 bg-gradient-to-br from-red-500 to-red-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
               <TrendingDown className="w-8 h-8 text-white" />
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">📤 Carregando Saídas...</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">🛒 Carregando Vendas...</h3>
             <p className="text-gray-600">Preparando dados de vendas</p>
           </div>
         </div>
@@ -926,9 +979,9 @@ const Saidas = () => {
         <div className="text-center sm:text-left">
           <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent flex items-center gap-2 justify-center sm:justify-start">
             <TrendingDown className="w-8 h-8 text-blue-600" />
-            Saídas de Estoque
+            Vendas de Estoque
           </h1>
-          <p className="text-muted-foreground">Registre vendas e saídas do sistema</p>
+          <p className="text-muted-foreground">Registre vendas do sistema</p>
         </div>
       <div className="relative flex items-center gap-4 flex-wrap">
         <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
@@ -976,10 +1029,10 @@ const Saidas = () => {
                 >
                   <DialogHeader className="space-y-2 pb-4 px-6 pt-6 border-b">
                     <DialogTitle className="text-base sm:text-xl font-bold text-neutral-900">
-                      📤 Registrar Nova Saída
+                      🛒 Registrar Nova Venda
                     </DialogTitle>
                     <DialogDescription className="text-sm text-neutral-600">
-                      Preencha as informações detalhadas da saída de estoque para manter o controle preciso
+                      Preencha as informações detalhadas da venda para manter o controle preciso
                     </DialogDescription>
                   </DialogHeader>
                   <Form {...form}>
@@ -1210,7 +1263,7 @@ const Saidas = () => {
                             <Card className="border-2 border-red-200">
                               <CardHeader className="pb-3">
                                 <CardTitle className="text-lg font-semibold text-gray-900">
-                                  📦 Informações da Saída
+                                  🧾 Informações da Venda
                                 </CardTitle>
                                 <p className="text-sm text-gray-600">{selectedProduct?.name || 'Produto selecionado'}</p>
                               </CardHeader>
@@ -1598,7 +1651,34 @@ const Saidas = () => {
                         );
                       })()}
                       
-                        {/* Segunda linha - Data de Saída e Forma de Pagamento */}
+                        {/* Carrinho (aparece quando há itens) */}
+                        {cartItems.length > 0 && (
+                          <Card className="border-2 border-amber-200">
+                            <CardHeader className="pb-3">
+                              <CardTitle className="text-lg font-semibold text-gray-900">🧺 Itens no Carrinho</CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                              {cartItems.map((ci, idx) => {
+                                const p = products.find(p => p.id === ci.productId);
+                                return (
+                                  <div key={idx} className="flex items-center justify-between rounded-lg border p-3">
+                                    <div className="text-sm">
+                                      <div className="font-medium">{p?.name || 'Produto'}</div>
+                                      <div className="text-xs text-muted-foreground">
+                                        {ci.managedByBatch ? `${ci.batches.reduce((s, b) => s + (b.quantity || 0), 0)} un em ${ci.batches.length} lote(s)` : `${ci.quantity} un`}
+                                      </div>
+                                    </div>
+                                    <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => removeCartItem(idx)}>
+                                      <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                  </div>
+                                );
+                              })}
+                            </CardContent>
+                          </Card>
+                        )}
+
+                        {/* Segunda linha - Data da Venda e Forma de Pagamento */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-3">
                           <FormField
                             control={form.control}
@@ -1606,7 +1686,7 @@ const Saidas = () => {
                             render={({ field }) => (
                               <FormItem className="space-y-3">
                                 <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
-                                  📅 Data de Saída
+                                  📅 Data da Venda
                                 </FormLabel>
                                 <FormControl>
                                   <Input 
@@ -1795,7 +1875,7 @@ const Saidas = () => {
             
             {/* Cards de Estatísticas */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
-              {/* Card Total de Saídas */}
+              {/* Card Total de Vendas */}
               <div className="group bg-gradient-to-br from-red-100 to-red-200 rounded-2xl sm:rounded-3xl p-4 sm:p-6 text-red-800 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 border border-red-200/50">
                 <div className="flex items-center justify-between mb-3 sm:mb-4">
                   <div className="w-10 h-10 sm:w-12 sm:h-12 bg-red-300/50 rounded-xl sm:rounded-2xl flex items-center justify-center backdrop-blur-sm">
@@ -1806,8 +1886,8 @@ const Saidas = () => {
                     <div className="text-xs sm:text-sm opacity-90">Total</div>
                   </div>
                 </div>
-                <h3 className="text-base sm:text-lg font-semibold mb-2">📤 Total de Saídas</h3>
-                <p className="text-xs sm:text-sm opacity-80">Saídas registradas</p>
+                <h3 className="text-base sm:text-lg font-semibold mb-2">🛒 Total de Vendas</h3>
+                <p className="text-xs sm:text-sm opacity-80">Vendas registradas</p>
               </div>
 
               {/* Card Valor Total */}
@@ -1822,7 +1902,7 @@ const Saidas = () => {
                   </div>
                 </div>
                 <h3 className="text-base sm:text-lg font-semibold mb-2">💰 Valor Total</h3>
-                <p className="text-xs sm:text-sm opacity-80">Valor total das saídas</p>
+                <p className="text-xs sm:text-sm opacity-80">Valor total das vendas</p>
               </div>
 
               {/* Card Saídas do Mês */}
@@ -1837,7 +1917,7 @@ const Saidas = () => {
                   </div>
                 </div>
                 <h3 className="text-base sm:text-lg font-semibold mb-2">📅 Este Mês</h3>
-                <p className="text-xs sm:text-sm opacity-80">Saídas do mês atual</p>
+                <p className="text-xs sm:text-sm opacity-80">Vendas do mês atual</p>
               </div>
 
               {/* Card Produtos Vendidos */}
@@ -1876,8 +1956,8 @@ const Saidas = () => {
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
                     <span className="text-sm font-medium text-blue-800">
-                      {filteredExits.length === 0 ? 'Nenhuma saída encontrada' : 
-                       `${filteredExits.length} saída${filteredExits.length !== 1 ? 's' : ''} encontrada${filteredExits.length !== 1 ? 's' : ''}`
+                      {filteredExits.length === 0 ? 'Nenhuma venda encontrada' : 
+                       `${filteredExits.length} venda${filteredExits.length !== 1 ? 's' : ''} encontrada${filteredExits.length !== 1 ? 's' : ''}`
                       }
                     </span>
                   </div>
@@ -1885,12 +1965,12 @@ const Saidas = () => {
               </CardContent>
             </Card>
 
-            {/* Tabela de Saídas */}
+            {/* Tabela de Vendas */}
             <Card className="bg-white border-slate-200 shadow-sm">
               <CardHeader className="pb-4">
                 <CardTitle className="flex items-center gap-2 text-slate-800">
                   <Package className="w-5 h-5 text-slate-600" />
-                  📋 Lista de Saídas
+                  📋 Lista de Vendas
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -1916,8 +1996,8 @@ const Saidas = () => {
                             <div className="flex flex-col items-center gap-3">
                               <Package className="w-12 h-12 text-slate-300" />
                               <div className="text-slate-500">
-                                <p className="font-medium">Nenhuma saída encontrada</p>
-                                <p className="text-sm">Comece registrando sua primeira saída de estoque</p>
+                                <p className="font-medium">Nenhuma venda encontrada</p>
+                                <p className="text-sm">Comece registrando sua primeira venda</p>
                               </div>
                             </div>
                           </TableCell>
@@ -2016,14 +2096,14 @@ const Saidas = () => {
               Confirmar Exclusão
             </DialogTitle>
             <DialogDescription>
-              Esta ação não pode ser desfeita. A saída será removida e o estoque será ajustado.
+              Esta ação não pode ser desfeita. A venda será removida e o estoque será ajustado.
             </DialogDescription>
           </DialogHeader>
 
           {exitToDelete && (
             <div className="py-4">
               <div className="bg-red-50 rounded-lg p-4 border border-red-200">
-                <h4 className="font-semibold text-sm mb-2 text-red-900">Saída a ser excluída:</h4>
+                <h4 className="font-semibold text-sm mb-2 text-red-900">Venda a ser excluída:</h4>
                 <div className="space-y-1 text-sm">
                   <p><strong>Produto:</strong> {exitToDelete.productName}</p>
                   <p><strong>Quantidade:</strong> {exitToDelete.quantity} unidades</p>
@@ -2063,16 +2143,13 @@ const Saidas = () => {
               ) : (
                 <>
                   <Trash2 className="h-4 w-4 mr-2" />
-                  Excluir Saída
+                  Excluir Venda
                 </>
               )}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-
-      
 
       {/* Modal de Edição de Saída */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
@@ -2172,16 +2249,17 @@ const Saidas = () => {
 
       {/* Modal de Receita */}
       <Dialog open={showReceipt} onOpenChange={setShowReceipt}>
-        <DialogContent className="max-w-md sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-green-600">
-              <CheckCircle className="h-6 w-6" />
-              Receita de Saída
-            </DialogTitle>
-          </DialogHeader>
-          
-          {selectedExit && (
-            <div className="space-y-4">
+        <DialogContent className="max-w-md sm:max-w-lg max-h-[90vh] flex flex-col p-0 overflow-hidden !md:overflow-hidden">
+          <div className="overflow-y-auto flex-1 px-6 pt-6 pb-6 min-h-0">
+            <DialogHeader className="pb-4 border-b">
+              <DialogTitle className="flex items-center gap-2 text-green-600">
+                <CheckCircle className="h-6 w-6" />
+                Receita de Venda
+              </DialogTitle>
+            </DialogHeader>
+            
+            {selectedExit && (
+              <div className="space-y-4 pt-4">
               {/* Cabeçalho da Receita */}
               <div className="border-b pb-4">
                 <div className="text-center mb-3">
@@ -2291,7 +2369,8 @@ const Saidas = () => {
                 <p className="mt-1">💚 Flexi Gestor - Gestão Inteligente</p>
               </div>
             </div>
-          )}
+            )}
+          </div>
         </DialogContent>
       </Dialog>
                     </main>
