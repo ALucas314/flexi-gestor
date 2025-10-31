@@ -1,7 +1,7 @@
 // 📧 Página de Recuperação de Senha com Supabase
 // Permite que o usuário solicite um link de reset por email
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Mail, Send, CheckCircle, AlertCircle, Package, Lock, Shield, Zap, Heart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,14 @@ const ForgotPassword = () => {
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+
+  // Desabilitar scroll do body
+  useEffect(() => {
+    document.body.classList.add('no-scroll');
+    return () => {
+      document.body.classList.remove('no-scroll');
+    };
+  }, []);
 
   // Validação de email
   const isValidEmail = (email: string) => {
@@ -84,9 +92,9 @@ const ForgotPassword = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row">
+    <div className="h-screen w-screen overflow-hidden flex flex-col lg:flex-row">
       {/* Imagem - 60% em lg, 70% em 3xl+, oculta em mobile */}
-      <div className="hidden lg:flex lg:w-[60%] 3xl:w-[70%] relative overflow-hidden">
+      <div className="hidden lg:flex lg:w-[60%] 3xl:w-[70%] relative overflow-hidden h-full">
         <img 
           src={img2} 
           alt="Flexi Gestor" 
@@ -116,7 +124,7 @@ const ForgotPassword = () => {
       </div>
 
       {/* Formulário - 40% em lg, 30% em 3xl+, 100% em mobile */}
-      <div className="flex-1 lg:w-[40%] 3xl:w-[30%] flex items-center justify-center p-4 md:p-6 lg:p-4 overflow-y-auto relative min-h-screen bg-gradient-to-br from-gray-50 via-purple-50/30 to-blue-50/30">
+      <div className="flex-1 lg:w-[40%] 3xl:w-[30%] flex items-center justify-center p-2 sm:p-3 md:p-4 overflow-hidden relative h-full bg-gradient-to-br from-gray-50 via-purple-50/30 to-blue-50/30">
         {/* Pattern decorativo sutil */}
         <div className="absolute inset-0 opacity-[0.03] pointer-events-none">
           <div className="absolute inset-0" style={{
@@ -125,21 +133,21 @@ const ForgotPassword = () => {
           }}></div>
         </div>
         
-        {/* Gradientes decorativos */}
-        <div className="absolute top-20 right-20 w-64 h-64 bg-purple-200/20 rounded-full blur-3xl hidden md:block"></div>
-        <div className="absolute bottom-20 left-20 w-64 h-64 bg-blue-200/20 rounded-full blur-3xl hidden md:block"></div>
+        {/* Gradientes decorativos - ocultos em telas menores */}
+        <div className="absolute top-20 right-20 w-64 h-64 bg-purple-200/20 rounded-full blur-3xl hidden xl:block"></div>
+        <div className="absolute bottom-20 left-20 w-64 h-64 bg-blue-200/20 rounded-full blur-3xl hidden xl:block"></div>
         
-        <div className="w-full max-w-md mx-auto relative z-10">
+        <div className="w-full max-w-md mx-auto relative z-10 h-full flex flex-col justify-center max-h-full overflow-y-auto">
           {/* Logo e Título */}
-          <div className="mb-8 text-center animate-fade-in">
-            <div className="flex items-center justify-center mb-6">
-              <div className="w-20 h-20 bg-gradient-to-br from-purple-600 to-blue-600 rounded-2xl flex items-center justify-center shadow-2xl hover:shadow-purple-500/50 transform hover:scale-105 transition-all duration-300 animate-fade-in">
-                <Package className="w-10 h-10 text-white" />
+          <div className="mb-2 sm:mb-3 md:mb-4 text-center animate-fade-in flex-shrink-0">
+            <div className="flex items-center justify-center mb-2 sm:mb-3">
+              <div className="w-12 h-12 sm:w-16 sm:h-16 md:w-20 md:h-20 bg-gradient-to-br from-purple-600 to-blue-600 rounded-2xl flex items-center justify-center shadow-2xl hover:shadow-purple-500/50 transform hover:scale-105 transition-all duration-300 animate-fade-in">
+                <Package className="w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10 text-white" />
               </div>
             </div>
             
             {/* Título em Mobile - só aparece quando a imagem está oculta */}
-            <div className="text-center mb-4 lg:hidden">
+            <div className="text-center mb-2 lg:hidden">
               <h1 className="text-3xl font-extrabold text-gray-900 mb-2 bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
                 Flexi Gestor
               </h1>
@@ -165,23 +173,23 @@ const ForgotPassword = () => {
             </div>
           </div>
 
-          <Card className="shadow-xl border border-gray-200/50 bg-white/95 backdrop-blur-sm hover:shadow-2xl hover:border-purple-200/50 transition-all duration-300 overflow-hidden relative">
+          <Card className="shadow-xl border border-gray-200/50 bg-white/95 backdrop-blur-sm hover:shadow-2xl hover:border-purple-200/50 transition-all duration-300 overflow-hidden relative flex-shrink-0 max-h-[calc(100vh-150px)] flex flex-col w-full">
             {/* Borda decorativa superior */}
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-600 via-blue-600 to-purple-600"></div>
             
-            <CardHeader className="text-center pb-4 sm:pb-6 px-4 sm:px-6 pt-8">
-              <CardTitle className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center justify-center gap-2">
-                <div className="w-10 h-10 bg-gradient-to-br from-purple-600 to-blue-600 rounded-lg flex items-center justify-center shadow-md">
-                  <Mail className="w-5 h-5 text-white" />
+            <CardHeader className="text-center pb-2 sm:pb-3 md:pb-4 px-3 sm:px-4 md:px-6 pt-3 sm:pt-4 md:pt-6 flex-shrink-0">
+              <CardTitle className="text-lg sm:text-xl md:text-2xl font-bold text-gray-900 flex items-center justify-center gap-2">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-purple-600 to-blue-600 rounded-lg flex items-center justify-center shadow-md">
+                  <Mail className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
                 </div>
                 Esqueceu sua Senha?
               </CardTitle>
-              <CardDescription className="text-sm text-gray-600 mt-2 font-medium">
+              <CardDescription className="text-xs sm:text-sm text-gray-600 mt-1 sm:mt-2 font-medium">
                 Digite seu email e enviaremos um link para redefinir sua senha
               </CardDescription>
             </CardHeader>
 
-            <CardContent className="px-4 sm:px-6 space-y-4">
+            <CardContent className="px-3 sm:px-4 md:px-6 pb-3 sm:pb-4 md:pb-6 space-y-2 sm:space-y-3 overflow-y-auto flex-1 min-h-0">
               {/* Mensagens */}
               {message && (
                 <Alert variant={message.type === 'error' ? 'destructive' : 'default'}

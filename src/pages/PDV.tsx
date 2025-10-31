@@ -3,35 +3,20 @@
 
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { 
-  ShoppingCart, 
-  Plus,
-  Minus,
-  Trash2,
-  CreditCard,
-  DollarSign,
-  Barcode,
-  Search,
-  Receipt,
-  Printer,
-  Download,
-  CheckCircle
-} from "lucide-react";
-import { useResponsive } from "@/hooks/use-responsive";
+import { ShoppingCart } from "lucide-react";
 import { useData } from "@/contexts/DataContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
 import { generateUniqueReceiptNumber } from "@/lib/utils";
-
-interface CartItem {
-  id: string;
-  name: string;
-  price: number;
-  quantity: number;
-  sku: string;
-}
+import { getBatchesByProduct, adjustBatchQuantity, Batch as BatchInfo } from "@/lib/batches";
+import { BatchSearch } from "@/components/pdv/BatchSearch";
+import { ProductSearch } from "@/components/pdv/ProductSearch";
+import { Cart } from "@/components/pdv/Cart";
+import { ReceiptModal } from "@/components/pdv/ReceiptModal";
+import { BatchSelectionDialog } from "@/components/pdv/BatchSelectionDialog";
+import { usePDVCart, CartItem } from "@/hooks/usePDVCart";
+import { useBatchSearch } from "@/hooks/useBatchSearch";
+import { useProductSearch } from "@/hooks/useProductSearch";
 
 interface ReceiptData {
   receiptNumber: string;
@@ -41,14 +26,48 @@ interface ReceiptData {
 }
 
 const PDV = () => {
-  const { isMobile } = useResponsive();
-  const { products, addMovement, refreshMovements, refreshProducts } = useData();
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [searchTerm, setSearchTerm] = useState("");
+  const { products, movements, addMovement, refreshMovements, refreshProducts } = useData();
+  const { user } = useAuth();
+  
+  // Função para obter o preço baseado na entrada (última entrada do produto)
+  const getPriceFromEntry = (productId: string): number => {
+    // Buscar a última entrada do produto
+    const productEntries = movements
+      .filter(m => m.type === 'entrada' && m.productId === productId)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    
+    if (productEntries.length > 0) {
+      // Retornar o preço unitário da última entrada
+      return productEntries[0].unitPrice;
+    }
+    
+    // Se não houver entrada, buscar do produto
+    const product = products.find(p => p.id === productId);
+    return product?.price || 0;
+  };
   const [isProcessingSale, setIsProcessingSale] = useState(false);
   const [showReceipt, setShowReceipt] = useState(false);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [paymentMethod, setPaymentMethod] = useState<string>("avista");
+  const [installments, setInstallments] = useState<number>(1);
+  const [productBatches, setProductBatches] = useState<Record<string, BatchInfo[]>>({});
+  const [showBatchDialog, setShowBatchDialog] = useState(false);
+  const [productPendingBatch, setProductPendingBatch] = useState<any>(null);
+  const [selectedBatchForDialog, setSelectedBatchForDialog] = useState<string>("");
+
+  // Hooks customizados
+  const { cart, addItem, removeItem, updateQuantity, updateBatch, clearCart, getTotal } = usePDVCart();
+  const { 
+    availableBatches, 
+    batchSearchTerm, 
+    setBatchSearchTerm, 
+    productSearchTerm, 
+    setProductSearchTerm, 
+    results: batchResults 
+  } = useBatchSearch(user?.id, products);
+  const { searchTerm: productSearch, setSearchTerm: setProductSearch, results: productResults } =
+    useProductSearch(products);
 
   // Controlar estado de carregamento
   useEffect(() => {
@@ -59,55 +78,180 @@ const PDV = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  // Calcular total do carrinho
-  const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  // Adicionar produto ao carrinho (para produtos não gerenciados por lote)
+  const addToCart = async (product: any) => {
+    if ((product as any).managedByBatch) {
+      // Se gerenciado por lote, abrir diálogo para selecionar lote
+      await loadBatchesForProduct(product.id);
+      setProductPendingBatch(product);
+      setShowBatchDialog(true);
+      return;
+    }
 
-  // Adicionar produto ao carrinho
-  const addToCart = (product: any) => {
-    const existingItem = cart.find(item => item.id === product.id);
-    
-    if (existingItem) {
-      setCart(cart.map(item => 
-        item.id === product.id 
-          ? { ...item, quantity: item.quantity + 1 }
-          : item
-      ));
-    } else {
-      setCart([...cart, {
+    // Buscar preço baseado na entrada (última movimentação de entrada)
+    const productPrice = getPriceFromEntry(product.id);
+
+    if (productPrice === 0) {
+      toast({
+        title: "⚠️ Aviso",
+        description: `O produto ${product.name} não possui preço de entrada cadastrado. Por favor, cadastre uma entrada no módulo de Entradas.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Produto não gerenciado por lote: adicionar direto ao carrinho
+    addItem({
         id: product.id,
         name: product.name,
-        price: product.price,
+      price: productPrice,
         quantity: 1,
-        sku: product.sku
-      }]);
+      sku: product.sku,
+    });
+  };
+
+  // Adicionar lote ao carrinho
+  const addBatchToCart = async (batchWithProduct: any) => {
+    try {
+    const { product, id: batchId, batchNumber } = batchWithProduct;
+      
+      if (!product || !batchId || !batchNumber) {
+        toast({
+          title: "❌ Erro",
+          description: "Dados do lote incompletos",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // Buscar preço baseado na entrada (última movimentação de entrada)
+      const productPrice = getPriceFromEntry(product.id);
+      
+      if (productPrice === 0) {
+        toast({
+          title: "⚠️ Aviso",
+          description: `O produto ${product.name} não possui preço de entrada cadastrado. Por favor, cadastre uma entrada no módulo de Entradas.`,
+          variant: "destructive",
+        });
+        return;
+      }
+    
+    // Garantir que os lotes do produto estejam carregados para validação
+    if (!productBatches[product.id]) {
+      await loadBatchesForProduct(product.id);
+    }
+    
+      addItem({
+        id: product.id,
+        name: product.name,
+        price: productPrice,
+        quantity: 1,
+        sku: product.sku,
+        selectedBatchId: batchId,
+        selectedBatchNumber: batchNumber,
+      });
+    
+    toast({
+      title: "✅ Adicionado ao carrinho",
+        description: `${product.name} - Lote ${batchNumber} - R$ ${productPrice.toFixed(2)}`,
+      });
+      
+      // Limpar busca após adicionar
+      setBatchSearchTerm("");
+      setProductSearchTerm("");
+    } catch (error: any) {
+      console.error("Erro ao adicionar lote ao carrinho:", error);
+      toast({
+        title: "❌ Erro ao adicionar ao carrinho",
+        description: error.message || "Ocorreu um erro ao adicionar o produto",
+        variant: "destructive",
+      });
     }
   };
 
-  // Remover item do carrinho
-  const removeFromCart = (id: string) => {
-    setCart(cart.filter(item => item.id !== id));
+  // Confirmar seleção de lote e adicionar ao carrinho
+  const confirmBatchSelection = () => {
+    if (!productPendingBatch || !selectedBatchForDialog) {
+      toast({
+        title: "❌ Selecione um Lote",
+        description: "Por favor, selecione um lote antes de continuar",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    const batches = productBatches[productPendingBatch.id] || [];
+    const selectedBatch = batches.find((b) => b.id === selectedBatchForDialog);
+    
+    if (!selectedBatch) {
+      toast({
+        title: "❌ Lote não encontrado",
+        description: "O lote selecionado não foi encontrado",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Buscar preço baseado na entrada (última movimentação de entrada)
+    const productPrice = getPriceFromEntry(productPendingBatch.id);
+    
+    if (productPrice === 0) {
+      toast({
+        title: "⚠️ Aviso",
+        description: `O produto ${productPendingBatch.name} não possui preço de entrada cadastrado. Por favor, cadastre uma entrada no módulo de Entradas.`,
+        variant: "destructive",
+      });
+      setShowBatchDialog(false);
+      setProductPendingBatch(null);
+      setSelectedBatchForDialog("");
+      return;
+    }
+
+    addItem({
+        id: productPendingBatch.id,
+        name: productPendingBatch.name,
+      price: productPrice,
+        quantity: 1,
+        sku: productPendingBatch.sku,
+        selectedBatchId: selectedBatch.id,
+      selectedBatchNumber: selectedBatch.batchNumber,
+    });
+    
+    // Fechar diálogo
+    setShowBatchDialog(false);
+    setProductPendingBatch(null);
+    setSelectedBatchForDialog("");
+  };
+
+  // Carregar lotes de um produto quando necessário
+  const loadBatchesForProduct = async (productId: string) => {
+    if (!user?.id) return [];
+    if (productBatches[productId]) return productBatches[productId]; // já carregado
+    const batches = await getBatchesByProduct(productId, user.id);
+    setProductBatches((prev) => ({ ...prev, [productId]: batches || [] }));
+    return batches || [];
   };
 
   // Alterar quantidade
-  const updateQuantity = (id: string, delta: number) => {
-    setCart(cart.map(item => {
-      if (item.id === id) {
-        const newQuantity = item.quantity + delta;
-        return newQuantity > 0 ? { ...item, quantity: newQuantity } : item;
-      }
-      return item;
-    }).filter(item => item.quantity > 0));
+  const handleUpdateQuantity = (id: string, delta: number) => {
+    updateQuantity(id, delta);
   };
 
+  // Alterar lote do item
+  const handleBatchChange = (itemId: string, currentBatchId: string | undefined, newBatchId: string, batchNumber: string) => {
+    updateBatch(itemId, currentBatchId, newBatchId, batchNumber);
+  };
 
   // Finalizar venda
   const finalizeSale = async () => {
     if (cart.length === 0) return;
     if (isProcessingSale) return;
+
+    const total = getTotal();
     
-    // Validar estoque antes de processar
+    // Validar estoque e lotes antes de processar
     for (const item of cart) {
-      const product = products.find(p => p.id === item.id);
+      const product = products.find((p) => p.id === item.id);
       if (!product) {
         toast({
           title: "❌ Produto não encontrado",
@@ -134,6 +278,36 @@ const PDV = () => {
         });
         return;
       }
+
+      // Se gerenciado por lote, exigir lote selecionado e validar quantidade do lote
+      if ((product as any).managedByBatch) {
+        if (!item.selectedBatchId) {
+          toast({
+            title: "❌ Selecione o lote",
+            description: `Escolha o lote para o produto ${item.name} antes de finalizar`,
+            variant: "destructive",
+          });
+          return;
+        }
+        const batches = productBatches[item.id] || [];
+        const batch = batches.find((b) => b.id === item.selectedBatchId);
+        if (!batch) {
+          toast({
+            title: "❌ Lote inválido",
+            description: `O lote selecionado para ${item.name} não foi encontrado`,
+            variant: "destructive",
+          });
+          return;
+        }
+        if (batch.quantity < item.quantity) {
+          toast({
+            title: "❌ Lote insuficiente",
+            description: `${item.name} - Lote ${batch.batchNumber}: apenas ${batch.quantity} disponíveis`,
+            variant: "destructive",
+          });
+          return;
+        }
+      }
     }
     
     setIsProcessingSale(true);
@@ -141,35 +315,76 @@ const PDV = () => {
     try {
       // Criar uma movimentação de saída para cada item do carrinho
       for (const item of cart) {
-        await addMovement({
-          type: 'saida',
+        const product = products.find((p) => p.id === item.id);
+        if (!product) {
+          toast({
+            title: "❌ Erro",
+            description: `Produto ${item.name} não encontrado`,
+            variant: "destructive",
+          });
+          continue;
+        }
+
+        // Garantir que o preço vem da entrada (não do carrinho que pode estar desatualizado)
+        const salePrice = getPriceFromEntry(item.id);
+        
+        console.log(`[PDV] Processando venda - Produto: ${item.name}, Preço: R$ ${salePrice}, Quantidade: ${item.quantity}`);
+        
+        if (salePrice === 0) {
+          toast({
+            title: "⚠️ Aviso",
+            description: `O produto ${item.name} não possui preço de entrada. A venda não será registrada. Por favor, cadastre uma entrada com preço no módulo de Entradas.`,
+            variant: "destructive",
+          });
+          continue;
+        }
+
+        const paymentInfo =
+          paymentMethod === "parcelado"
+            ? `Pagamento: parcelado em ${installments}x`
+            : `Pagamento: à vista (${paymentMethod})`;
+        const loteInfo =
+          (product as any)?.managedByBatch && item.selectedBatchNumber
+            ? ` | Lote: ${item.selectedBatchNumber}`
+            : "";
+        
+        const movementData = {
+          type: "saida" as const,
           productId: item.id,
           quantity: item.quantity,
-          unitPrice: item.price,
-          description: `Venda PDV - ${item.name} (${item.quantity} unidades)`,
-          date: new Date()
-        });
+          unitPrice: salePrice,
+          description: `Venda PDV - ${item.name} (${item.quantity} unidades)${loteInfo} | ${paymentInfo}`,
+          paymentMethod: paymentMethod === "parcelado" ? `parcelado-${installments}x` : paymentMethod,
+          date: new Date(),
+          status: "confirmado" as const,
+        };
+        
+        console.log(`[PDV] Criando movimentação:`, movementData);
+        await addMovement(movementData);
+        console.log(`[PDV] Movimentação criada com sucesso para ${item.name}`);
+
+        // Se houver lote selecionado, decrementar quantidade do lote
+        if ((product as any)?.managedByBatch && item.selectedBatchId && user?.id) {
+          await adjustBatchQuantity(item.selectedBatchId, -item.quantity, user.id);
+        }
       }
       
       // Dados já são recarregados automaticamente pelo addMovement
       // mas vamos garantir que está sincronizado
-      await Promise.all([
-        refreshMovements(),
-        refreshProducts()
-      ]);
+      await Promise.all([refreshMovements(), refreshProducts()]);
       
       // Gerar dados da receita
       const receipt: ReceiptData = {
         receiptNumber: generateUniqueReceiptNumber("REC"),
-        date: new Date().toLocaleString('pt-BR'),
+        date: new Date().toLocaleString("pt-BR"),
         items: [...cart],
-        total: total
+        total: total,
       };
       
       // Mostrar toast de sucesso
       toast({
         title: "✅ Venda Finalizada!",
-        description: `Total: R$ ${total.toFixed(2)} | ${cart.length} ${cart.length === 1 ? 'item' : 'itens'} vendido(s)`,
+        description: `Total: R$ ${total.toFixed(2)} | ${cart.length} ${cart.length === 1 ? "item" : "itens"} vendido(s)`,
         duration: 5000,
       });
       
@@ -178,10 +393,11 @@ const PDV = () => {
       setShowReceipt(true);
       
       // Limpar carrinho
-      setCart([]);
-      
+      clearCart();
+      setPaymentMethod("avista");
+      setInstallments(1);
     } catch (error: any) {
-      console.error('Erro ao finalizar venda:', error);
+      console.error("Erro ao finalizar venda:", error);
       toast({
         title: "❌ Erro ao finalizar venda",
         description: error.message || "Ocorreu um erro ao processar a venda",
@@ -192,12 +408,6 @@ const PDV = () => {
       setIsProcessingSale(false);
     }
   };
-
-  // Filtrar produtos
-  const filteredProducts = products.filter(p => 
-    p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.sku.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   // Tela de carregamento
   if (isLoading) {
@@ -224,273 +434,89 @@ const PDV = () => {
           <ShoppingCart className="w-8 h-8 text-blue-600" />
           Ponto de Venda (PDV)
         </h1>
-        <p className="text-gray-600 mt-1">
-          Sistema de vendas rápido e intuitivo
-        </p>
+        <p className="text-gray-600 mt-1">Sistema de vendas rápido e intuitivo</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Lista de Produtos */}
+        {/* Área de Busca e Resultados */}
         <div className="lg:col-span-2">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <span>📦 Produtos Disponíveis</span>
-              </CardTitle>
-              
-              {/* Busca de produtos */}
-              <div className="relative mt-4">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder="Buscar por nome ou SKU..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 h-11 text-base"
-                />
-              </div>
+              <CardTitle>🛒 Ponto de Venda</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[600px] overflow-y-auto">
-                {filteredProducts.length === 0 ? (
-                  <div className="col-span-2 text-center py-12">
-                    <Barcode className="h-16 w-16 mx-auto text-gray-300 mb-4" />
-                    <p className="text-gray-500">Nenhum produto encontrado</p>
-                  </div>
-                ) : (
-                  filteredProducts.map(product => (
-                    <Card 
-                      key={product.id}
-                      className="hover:shadow-lg transition-shadow cursor-pointer"
-                      onClick={() => addToCart(product)}
-                    >
-                      <CardContent className="p-4">
-                        <div className="flex justify-between items-start mb-2">
-                          <div className="flex-1">
-                            <h3 className="font-semibold text-gray-900">{product.name}</h3>
-                            <p className="text-xs text-gray-500">SKU: {product.sku}</p>
-                          </div>
-                          <Plus className="h-5 w-5 text-indigo-600 flex-shrink-0 ml-2" />
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-lg font-bold text-indigo-600">
-                            R$ {product.price.toFixed(2)}
-                          </span>
-                          <span className="text-xs text-gray-500">
-                            Estoque: {product.stock}
-                          </span>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))
-                )}
-              </div>
+            <CardContent className="space-y-6">
+              {/* Campo de Busca por Lote */}
+              <BatchSearch
+                batchSearchTerm={batchSearchTerm}
+                productSearchTerm={productSearchTerm}
+                results={batchResults}
+                movements={movements}
+                products={products}
+                onBatchSearchChange={setBatchSearchTerm}
+                onProductSearchChange={setProductSearchTerm}
+                onBatchSelect={addBatchToCart}
+              />
+
+              {/* Separador */}
+              <div className="border-t pt-6"></div>
+
+              {/* Campo de Busca por Produto */}
+              <ProductSearch
+                searchTerm={productSearch}
+                results={productResults}
+                movements={movements}
+                products={products}
+                onSearchChange={setProductSearch}
+                onProductSelect={addToCart}
+              />
+
+              {/* Mensagem inicial */}
+              {!batchSearchTerm && !productSearchTerm && !productSearch && (
+                <div className="text-center py-12">
+                  <ShoppingCart className="h-16 w-16 mx-auto text-gray-300 mb-4" />
+                  <p className="text-gray-500">Digite o lote ou código/nome do produto para buscar</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
 
         {/* Carrinho */}
         <div className="lg:col-span-1">
-          <Card className="sticky top-24">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <ShoppingCart className="h-5 w-5" />
-                Carrinho ({cart.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {cart.length === 0 ? (
-                <div className="text-center py-8">
-                  <ShoppingCart className="h-12 w-12 mx-auto text-gray-300 mb-3" />
-                  <p className="text-gray-500 text-sm">Carrinho vazio</p>
+          <Cart
+            cart={cart}
+            total={getTotal()}
+            products={products}
+            availableBatches={availableBatches}
+            paymentMethod={paymentMethod}
+            installments={installments}
+            isProcessingSale={isProcessingSale}
+            onUpdateQuantity={handleUpdateQuantity}
+            onRemove={removeItem}
+            onBatchChange={handleBatchChange}
+            onPaymentMethodChange={setPaymentMethod}
+            onInstallmentsChange={setInstallments}
+            onClearCart={clearCart}
+            onFinalizeSale={finalizeSale}
+          />
                 </div>
-              ) : (
-                <>
-                  <div className="space-y-3 max-h-[400px] overflow-y-auto mb-4">
-                    {cart.map(item => (
-                      <div key={item.id} className="border rounded-lg p-3">
-                        <div className="flex justify-between items-start mb-2">
-                          <div className="flex-1">
-                            <h4 className="font-medium text-sm">{item.name}</h4>
-                            <p className="text-xs text-gray-500">R$ {item.price.toFixed(2)}</p>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => removeFromCart(item.id)}
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50 h-10 w-10 p-0"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                        
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => updateQuantity(item.id, -1)}
-                              className="h-9 w-9 p-0"
-                            >
-                              <Minus className="h-3 w-3" />
-                            </Button>
-                            <span className="w-8 text-center font-semibold">{item.quantity}</span>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => updateQuantity(item.id, 1)}
-                              className="h-9 w-9 p-0"
-                            >
-                              <Plus className="h-3 w-3" />
-                            </Button>
-                          </div>
-                          <span className="font-bold text-indigo-600">
-                            R$ {(item.price * item.quantity).toFixed(2)}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Total */}
-                  <div className="border-t pt-4 mb-4">
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-gray-600">Subtotal:</span>
-                      <span className="font-semibold">R$ {total.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-lg font-bold">
-                      <span>Total:</span>
-                      <span className="text-indigo-600">R$ {total.toFixed(2)}</span>
-                    </div>
-                  </div>
-
-                  {/* Botões de Ação */}
-                  <div className="space-y-2">
-                    <Button 
-                      className="w-full bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white px-6 py-3 rounded-xl shadow-xl hover:shadow-2xl transition-all duration-200 transform hover:scale-105"
-                      onClick={finalizeSale}
-                      disabled={isProcessingSale}
-                    >
-                      {isProcessingSale ? (
-                        <>
-                          <Receipt className="w-5 h-5 mr-2 animate-pulse" />
-                          Processando...
-                        </>
-                      ) : (
-                        <>
-                          <CreditCard className="w-5 h-5 mr-2" />
-                          Finalizar Venda
-                        </>
-                      )}
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      className="w-full"
-                      onClick={() => setCart([])}
-                      disabled={isProcessingSale}
-                    >
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Limpar Carrinho
-                    </Button>
-                  </div>
-                </>
-              )}
-            </CardContent>
-          </Card>
         </div>
-      </div>
 
       {/* Modal de Receita */}
-      <Dialog open={showReceipt} onOpenChange={setShowReceipt}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-green-600">
-              <CheckCircle className="h-6 w-6" />
-              Venda Finalizada com Sucesso!
-            </DialogTitle>
-          </DialogHeader>
-          
-          {receiptData && (
-            <div className="space-y-4">
-              {/* Cabeçalho da Receita */}
-              <div className="border-b pb-4">
-                <div className="text-center mb-3">
-                  <h2 className="text-2xl font-bold text-gray-900">📄 RECEITA</h2>
-                  <p className="text-sm text-gray-600">Flexi Gestor - Sistema de Gestão</p>
-                </div>
-                
-                <div className="space-y-1 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Número:</span>
-                    <span className="font-semibold">{receiptData.receiptNumber}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Data/Hora:</span>
-                    <span className="font-semibold">{receiptData.date}</span>
-                  </div>
-                </div>
-              </div>
+      <ReceiptModal open={showReceipt} onOpenChange={setShowReceipt} receiptData={receiptData} />
 
-              {/* Itens da Venda */}
-              <div className="space-y-2">
-                <h3 className="font-semibold text-gray-900">Itens:</h3>
-                <div className="border rounded-lg p-3 space-y-2 max-h-64 overflow-y-auto">
-                  {receiptData.items.map((item, index) => (
-                    <div key={index} className="flex justify-between items-start pb-2 border-b last:border-0">
-                      <div className="flex-1">
-                        <p className="font-medium text-sm">{item.name}</p>
-                        <p className="text-xs text-gray-500">
-                          {item.quantity} x R$ {item.price.toFixed(2)}
-                        </p>
-                      </div>
-                      <p className="font-semibold text-sm">
-                        R$ {(item.quantity * item.price).toFixed(2)}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Total */}
-              <div className="border-t pt-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-lg font-bold text-gray-900">TOTAL:</span>
-                  <span className="text-2xl font-bold text-green-600">
-                    R$ {receiptData.total.toFixed(2)}
-                  </span>
-                </div>
-              </div>
-
-              {/* Botões de Ação */}
-              <div className="space-y-2 pt-2">
-                <Button 
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                  onClick={() => window.print()}
-                >
-                  <Printer className="mr-2 h-4 w-4" />
-                  Imprimir Receita
-                </Button>
-                
-                <Button 
-                  variant="outline" 
-                  className="w-full"
-                  onClick={() => setShowReceipt(false)}
-                >
-                  Fechar
-                </Button>
-              </div>
-
-              {/* Rodapé */}
-              <div className="text-center text-xs text-gray-500 pt-2 border-t">
-                <p>Obrigado pela preferência!</p>
-                <p className="mt-1">💚 Flexi Gestor - Gestão Inteligente</p>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Dialog de Seleção de Lote */}
+      <BatchSelectionDialog
+        open={showBatchDialog}
+        onOpenChange={setShowBatchDialog}
+        product={productPendingBatch}
+        batches={productPendingBatch ? productBatches[productPendingBatch.id] || [] : []}
+        selectedBatchId={selectedBatchForDialog}
+        onBatchSelect={setSelectedBatchForDialog}
+        onConfirm={confirmBatchSelection}
+      />
     </main>
   );
 };
 
 export default PDV;
-

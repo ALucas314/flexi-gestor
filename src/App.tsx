@@ -11,10 +11,12 @@ import Entradas from "./pages/Entradas";
 import Saidas from "./pages/Saidas";
 import Relatorios from "./pages/Relatorios";
 import Financeiro from "./pages/Financeiro";
-import PDV from "./pages/PDV";
+import Fornecedores from "./pages/Fornecedores";
+import Clientes from "./pages/Clientes";
 import Perfil from "./pages/Perfil";
 import AlterarSenha from "./pages/AlterarSenha";
 import Compartilhar from "./pages/Compartilhar";
+import Configuracoes from "./pages/Configuracoes";
 import Login from "./pages/Login";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
@@ -26,6 +28,7 @@ import { AuthProvider } from "./contexts/AuthContext";
 import { WorkspaceProvider } from "./contexts/WorkspaceContext";
 import { DataProvider } from "./contexts/DataContext";
 import { SidebarProvider } from "./contexts/SidebarContext";
+import { ConfigProvider } from "./contexts/ConfigContext";
 
 // 🔄 Auto-reload quando HMR falha
 import { HMRReloader } from "./components/HMRReloader";
@@ -41,8 +44,10 @@ const App = () => (
         <WorkspaceProvider>
           {/* 🗄️ Data Provider - Gerencia dados com Prisma API */}
           <DataProvider>
-            {/* 📌 Sidebar Provider - Gerencia estado da sidebar (pinada/overlay) */}
-            <SidebarProvider>
+            {/* ⚙️ Config Provider - Gerencia configurações de moeda e idioma */}
+            <ConfigProvider>
+              {/* 📌 Sidebar Provider - Gerencia estado da sidebar (pinada/overlay) */}
+              <SidebarProvider>
             {/* 🔄 Auto-reload quando HMR desconecta */}
             <HMRReloader />
             <Toaster />
@@ -67,28 +72,34 @@ const App = () => (
               <Route path="/reset-password" element={<ResetPassword />} />
               
               {/* 🛡️ Rotas Protegidas */}
-              <Route path="/*" element={
-                <AuthGuard>
-                  <LayoutWithSidebar>
-                        <Routes>
-                          <Route path="/" element={<Index />} />
-                          <Route path="/produtos" element={<Produtos />} />
-                          <Route path="/entradas" element={<Entradas />} />
-                          <Route path="/saidas" element={<Saidas />} />
-                          <Route path="/relatorios" element={<Relatorios />} />
-                          <Route path="/financeiro" element={<Financeiro />} />
-                          <Route path="/pdv" element={<PDV />} />
-                          <Route path="/perfil" element={<Perfil />} />
-                          <Route path="/alterar-senha" element={<AlterarSenha />} />
-                          <Route path="/compartilhar" element={<Compartilhar />} />
-                          <Route path="*" element={<NotFound />} />
-                        </Routes>
-                  </LayoutWithSidebar>
-                </AuthGuard>
-              } />
+              <Route
+                path="/*"
+                element={
+                  <AuthGuard>
+                    <LayoutWithSidebar>
+                      <Routes>
+                        <Route path="/" element={<Index />} />
+                        <Route path="/produtos" element={<Produtos />} />
+                        <Route path="/entradas" element={<Entradas />} />
+                        <Route path="/saidas" element={<Saidas />} />
+                        <Route path="/relatorios" element={<Relatorios />} />
+                        <Route path="/financeiro" element={<Financeiro />} />
+                        <Route path="/fornecedores" element={<Fornecedores />} />
+                        <Route path="/clientes" element={<Clientes />} />
+                        <Route path="/perfil" element={<Perfil />} />
+                        <Route path="/alterar-senha" element={<AlterarSenha />} />
+                        <Route path="/compartilhar" element={<Compartilhar />} />
+                        <Route path="/configuracoes" element={<Configuracoes />} />
+                        <Route path="*" element={<NotFound />} />
+                      </Routes>
+                    </LayoutWithSidebar>
+                  </AuthGuard>
+                }
+              />
             </Routes>
-          </BrowserRouter>
+            </BrowserRouter>
             </SidebarProvider>
+            </ConfigProvider>
           </DataProvider>
         </WorkspaceProvider>
       </AuthProvider>

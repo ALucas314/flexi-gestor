@@ -8,6 +8,9 @@
     <meta name="keywords" content="gestão empresarial, controle de estoque, sistema de vendas, ERP, gestão financeira, controle de lotes, validade de produtos" />
     <meta name="author" content="Flexi Gestor" />
     
+    <!-- Content Security Policy - Permitir Supabase (incluindo WebSocket) -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://ujohzrebqzeochsozmac.supabase.co https://*.supabase.co wss://ujohzrebqzeochsozmac.supabase.co wss://*.supabase.co ws://localhost:* ws://127.0.0.1:*; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:;">
+    
     <!-- Sem Google Fonts para evitar CSP - usando fontes do sistema -->
     
     <!-- Estilos CSS inline para garantir fontes do sistema e responsividade -->
@@ -32,6 +35,21 @@
         flex-direction: column !important;
       }
       
+      /* Garantir que todos os elementos respeitem o viewport */
+      * {
+        max-width: 100%;
+        box-sizing: border-box !important;
+      }
+      
+      /* Correções para telas menores que 1440px (incluindo 1366x768) */
+      @media (max-width: 1440px) {
+        /* Diálogos mais responsivos */
+        [role="dialog"] {
+          max-width: 95vw !important;
+          margin: 0.5rem !important;
+        }
+      }
+      
       /* Correções específicas para mobile */
       @media (max-width: 768px) {
         html {
@@ -43,15 +61,15 @@
           line-height: 1.5 !important;
         }
         
-        /* Garantir que elementos não saiam da tela */
-        * {
-          max-width: 100% !important;
-          box-sizing: border-box !important;
-        }
-        
         /* Corrigir problemas de overflow */
         .overflow-hidden {
           overflow: hidden !important;
+        }
+        
+        /* Diálogos quase fullscreen em mobile */
+        [role="dialog"] {
+          max-width: 98vw !important;
+          margin: 1rem !important;
         }
       }
       

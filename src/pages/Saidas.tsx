@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { Plus, TrendingDown, Package, Search, Trash2, Calendar, DollarSign, ShoppingCart, Receipt, CheckCircle, Printer, Share2, Edit } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Plus, TrendingDown, Package, Search, Trash2, Calendar, DollarSign, ShoppingCart, Receipt, CheckCircle, Printer, Share2, Edit, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,14 +11,18 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Textarea } from "@/components/ui/textarea";
 import { useForm } from "react-hook-form";
 import { useToast } from "@/hooks/use-toast";
 import { useData } from "@/contexts/DataContext";
 import { getBatchesByProduct, updateBatchQuantity } from "@/lib/batches";
 import { useAuth } from "@/contexts/AuthContext";
 import { printReceipt, downloadReceipt } from "@/lib/receiptPDF";
+import { StockExitCart } from "@/components/saidas/StockExitCart";
+import { supabase } from "@/lib/supabase";
 
-// Interface da saída de estoque
+// Interface da venda de estoque
 interface StockExit {
   id: string;
   productId: string;
@@ -33,7 +38,14 @@ interface StockExit {
   receiptNumber?: string; // Número único da receita
 }
 
-type StockExitFormData = Omit<StockExit, 'id' | 'productName' | 'productSku' | 'totalPrice' | 'receiptNumber'>;
+type StockExitFormData = Omit<StockExit, 'id' | 'productName' | 'productSku' | 'totalPrice' | 'receiptNumber'> & {
+  paymentMethod?: string;
+  installments?: number;
+};
+
+// Carrinho
+interface CartBatchItem { batchId?: string; batchNumber?: string; quantity: number }
+interface CartItem { productId: string; productName: string; productSku: string; managedByBatch: boolean; quantity: number; unitPrice: number; batches?: CartBatchItem[] }
 
 const Saidas = () => {
   // Estados
@@ -41,7 +53,7 @@ const Saidas = () => {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [availableBatches, setAvailableBatches] = useState<any[]>([]);
-  const [selectedBatches, setSelectedBatches] = useState<Array<{batchId: string, quantity: number}>>([]);
+  const [selectedBatches, setSelectedBatches] = useState<Array<{batchId: string, batchNumber?: string, quantity: number}>>([]);
   const [selectedProductId, setSelectedProductId] = useState<string>("");
   const [showReceipt, setShowReceipt] = useState(false);
   const [selectedExit, setSelectedExit] = useState<StockExit | null>(null);
@@ -51,13 +63,23 @@ const Saidas = () => {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [exitToEdit, setExitToEdit] = useState<StockExit | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [productSearchTerm, setProductSearchTerm] = useState("");
+  const [productSearchOpen, setProductSearchOpen] = useState(false);
+  const [isCartPanelOpen, setIsCartPanelOpen] = useState(false);
+  const cartToggleRef = React.useRef<HTMLButtonElement | null>(null);
+  const [customerSearchTerm, setCustomerSearchTerm] = useState("");
+  const [customers, setCustomers] = useState<Array<{id: string, code: string, name: string}>>([]);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
+
+  // Carrinho de vendas
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
 
   // Hooks
   const { toast } = useToast();
   const { products, movements, addMovement, deleteMovement, addNotification, refreshMovements } = useData();
   const { user } = useAuth();
 
-  // Filtrar apenas as saídas dos movements
+  // Filtrar apenas as vendas (type 'saida') dos movements
   const exits = movements
     .filter(m => m.type === 'saida')
     .map(m => ({
@@ -85,6 +107,8 @@ const Saidas = () => {
       exitDate: new Date(),
       notes: "",
       status: "pendente",
+      paymentMethod: "avista",
+      installments: 1,
     },
   });
 
@@ -92,12 +116,13 @@ const Saidas = () => {
   const loadBatchesForProduct = async (productId: string) => {
     try {
       if (!user?.id) return;
-      
       setSelectedProductId(productId);
       setSelectedBatches([]);
       
       const batches = await getBatchesByProduct(productId, user.id);
-      setAvailableBatches(batches || []);
+      // Filtrar apenas lotes com estoque > 0 para saídas
+      const batchesWithStock = (batches || []).filter(b => b.quantity > 0);
+      setAvailableBatches(batchesWithStock);
     } catch (error) {
       setAvailableBatches([]);
     }
@@ -105,7 +130,7 @@ const Saidas = () => {
 
   // Adicionar lote à seleção
   const addBatchToSelection = () => {
-    setSelectedBatches(prev => [...prev, { batchId: '', quantity: 0 }]);
+    setSelectedBatches(prev => [...prev, { batchId: '', batchNumber: '', quantity: 0 }]);
   };
 
   // Remover lote da seleção
@@ -114,10 +139,34 @@ const Saidas = () => {
   };
 
   // Atualizar lote selecionado
-  const updateSelectedBatch = (index: number, batchId: string, quantity: number) => {
+  const updateSelectedBatch = (index: number, batchId: string, quantity: number, batchNumber?: string) => {
     setSelectedBatches(prev => {
       const updated = [...prev];
-      updated[index] = { batchId, quantity };
+      updated[index] = { batchId, batchNumber, quantity };
+      return updated;
+    });
+  };
+
+  // Atualizar número do lote (digitável)
+  const updateBatchNumber = (index: number, batchNumber: string) => {
+    setSelectedBatches(prev => {
+      const updated = [...prev];
+      // Buscar lote pelo número digitado
+      const foundBatch = availableBatches.find(b => {
+        const bNumber = b.batchNumber?.toString() || '';
+        const inputNumber = batchNumber.trim();
+        // Comparar números extraídos
+        const bMatch = bNumber.match(/\d+/);
+        const inputMatch = inputNumber.match(/\d+/);
+        return bMatch && inputMatch && bMatch[0] === inputMatch[0];
+      });
+      
+      if (foundBatch) {
+        updated[index] = { ...updated[index], batchId: foundBatch.id, batchNumber: foundBatch.batchNumber };
+      } else {
+        // Se não encontrou, permite digitar mas limpa o batchId
+        updated[index] = { ...updated[index], batchNumber, batchId: '' };
+      }
       return updated;
     });
   };
@@ -126,6 +175,303 @@ const Saidas = () => {
   const getTotalSelectedQuantity = () => {
     return selectedBatches.reduce((sum, batch) => sum + (batch.quantity || 0), 0);
   };
+
+  // Obter preço de venda do produto ou preço da última entrada como fallback (igual ao PDV)
+  const getProductPrice = (productId: string): number => {
+    if (!productId || !movements || movements.length === 0) {
+      const product = products.find(p => p.id === productId);
+      return product?.price || 0;
+    }
+    
+    // Buscar preço baseado na entrada (última movimentação de entrada)
+    // Filtro mais robusto: verificar tipo e productId (pode ser string ou pode ter case diferente)
+    const productEntries = movements.filter(m => {
+      const typeStr = String(m.type || '').toLowerCase().trim();
+      const isEntry = typeStr === 'entrada';
+      const matchesProduct = String(m.productId || '') === String(productId || '');
+      return isEntry && matchesProduct;
+    }).sort((a, b) => {
+      const dateA = a.date instanceof Date ? a.date : new Date(a.date);
+      const dateB = b.date instanceof Date ? b.date : new Date(b.date);
+      return dateB.getTime() - dateA.getTime();
+    });
+
+    if (productEntries.length > 0 && productEntries[0].unitPrice > 0) {
+      // Retornar o preço unitário da última entrada
+      return productEntries[0].unitPrice;
+    }
+    
+    // Se não houver entrada, buscar do produto
+    const product = products.find(p => p.id === productId);
+    return product?.price || 0;
+  };
+
+  // Adicionar item ao carrinho (suporta com/sem lote)
+  const addCurrentSelectionToCart = () => {
+    const selectedProduct = products.find(p => p.id === selectedProductId);
+    if (!selectedProduct) {
+      toast({ title: 'Selecione um produto', variant: 'destructive' });
+      return;
+    }
+    const managedByBatch = (selectedProduct as any)?.managedByBatch === true;
+    const unitPrice = getProductPrice(selectedProduct.id);
+
+    if (managedByBatch) {
+      const totalQty = getTotalSelectedQuantity();
+      if (totalQty <= 0) {
+        toast({ title: 'Selecione lotes com quantidade', variant: 'destructive' });
+        return;
+      }
+      const batches: CartBatchItem[] = selectedBatches
+        .filter(b => (b.quantity || 0) > 0 && b.batchId)
+        .map(b => ({ batchId: b.batchId, batchNumber: b.batchNumber, quantity: b.quantity }));
+      if (batches.length === 0) {
+        toast({ title: 'Selecione lotes válidos', variant: 'destructive' });
+        return;
+      }
+      setCartItems(prev => [...prev, {
+        productId: selectedProduct.id,
+        productName: selectedProduct.name,
+        productSku: selectedProduct.sku,
+        managedByBatch: true,
+        quantity: totalQty,
+        unitPrice,
+        batches
+      }]);
+      setIsCartPanelOpen(true);
+      setTimeout(() => {
+        try { cartToggleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' }); } catch {}
+      }, 0);
+    } else {
+      const qty = form.getValues('quantity') || 0;
+      if (qty <= 0) {
+        toast({ title: 'Informe a quantidade', variant: 'destructive' });
+        return;
+      }
+      setCartItems(prev => [...prev, {
+        productId: selectedProduct.id,
+        productName: selectedProduct.name,
+        productSku: selectedProduct.sku,
+        managedByBatch: false,
+        quantity: qty,
+        unitPrice
+      }]);
+      setIsCartPanelOpen(true);
+      setTimeout(() => {
+        try { cartToggleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' }); } catch {}
+      }, 0);
+    }
+
+    // Limpar seleção atual para permitir selecionar outro produto
+    setSelectedProductId('');
+    setSelectedBatches([]);
+    form.setValue('productId', '');
+    form.setValue('quantity', 0);
+    setProductSearchTerm('');
+    setProductSearchOpen(false);
+    toast({ title: 'Adicionado ao carrinho', description: selectedProduct.name });
+  };
+
+  const removeCartItem = (index: number) => {
+    setCartItems(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const updateCartItemQuantity = (index: number, newQuantity: number) => {
+    setCartItems(prev => prev.map((item, i) => {
+      if (i !== index) return item;
+      const targetQty = Math.max(1, newQuantity);
+
+      // Sem gerenciamento por lote: apenas ajusta a quantidade
+      if (!item.managedByBatch || !item.batches || item.batches.length === 0) {
+        return { ...item, quantity: targetQty };
+      }
+
+      // Com gerenciamento por lote: ajustar quantidades dentro dos lotes
+      const delta = targetQty - (item.quantity || 0);
+      let batches = [...(item.batches || [])];
+
+      if (delta > 0) {
+        // Aumentar: distribuir +1 por unidade começando do primeiro lote que tiver disponibilidade
+        let unitsToAdd = delta;
+        while (unitsToAdd > 0 && batches.length > 0) {
+          let adjusted = false;
+          for (let b = 0; b < batches.length && unitsToAdd > 0; b++) {
+            const batchEntry = batches[b];
+            const available = availableBatches.find(x => x.id === batchEntry.batchId)?.quantity ?? 0;
+            const currentUsed = batchEntry.quantity || 0;
+            if (currentUsed < available) {
+              batches[b] = { ...batchEntry, quantity: currentUsed + 1 };
+              unitsToAdd -= 1;
+              adjusted = true;
+            }
+          }
+          if (!adjusted) {
+            // Sem disponibilidade adicional em nenhum lote
+            break;
+          }
+        }
+      } else if (delta < 0) {
+        // Diminuir: remover unidades dos lotes do último para o primeiro
+        let unitsToRemove = -delta;
+        for (let b = batches.length - 1; b >= 0 && unitsToRemove > 0; b--) {
+          const current = batches[b].quantity || 0;
+          if (current > 0) {
+            const remove = Math.min(current, unitsToRemove);
+            batches[b] = { ...batches[b], quantity: current - remove };
+            unitsToRemove -= remove;
+          }
+        }
+        // Remover lotes zerados
+        batches = batches.filter(b => (b.quantity || 0) > 0);
+      }
+
+      const recomputedQty = batches.reduce((sum, b) => sum + (b.quantity || 0), 0);
+      // Garante pelo menos 1
+      const finalQty = Math.max(1, recomputedQty);
+      return { ...item, quantity: finalQty, batches };
+    }));
+  };
+
+  const clearCartNow = () => {
+    try {
+      setCartItems([]);
+      localStorage.removeItem('fg_cart_items');
+      setIsCartPanelOpen(false);
+      toast({ title: 'Carrinho esvaziado' });
+    } catch {}
+  };
+
+  // Carrinho renderizado dentro do Dialog (evita conflitos de overlay/fora)
+
+  const getCartTotal = () => cartItems.reduce((sum, i) => sum + (i.quantity * i.unitPrice), 0);
+
+  // Processar todos itens do carrinho como uma única saída
+  const processCartSale = async () => {
+    if (cartItems.length === 0) {
+      toast({ title: 'Carrinho vazio', variant: 'destructive' });
+      return;
+    }
+    
+    try {
+      // Obter dados do formulário (cliente, data, método de pagamento, observações)
+      const formData = form.getValues();
+      const customer = formData.customer || 'Cliente Genérico';
+      const exitDate = formData.exitDate || new Date();
+      const paymentMethod = formData.paymentMethod || 'avista';
+      const installments = formData.installments || 1;
+      const notes = formData.notes || '';
+      
+      // Gerar um único número de recibo para toda a venda
+      const receiptNumber = generateReceiptNumber();
+      
+      // Calcular total geral e salvar informações antes de limpar
+      const totalGeral = getCartTotal();
+      const totalQuantity = cartItems.reduce((sum, item) => sum + item.quantity, 0);
+      const totalProducts = cartItems.length;
+      
+      // Preparar informações de pagamento
+      const paymentInfo = paymentMethod === "parcelado" 
+        ? `Pagamento: parcelado em ${installments}x`
+        : `Pagamento: à vista (${paymentMethod})`;
+      
+      // Lista de produtos para descrição
+      const productsList = cartItems.map(item => 
+        `${item.quantity}x ${item.productName}`
+      ).join(', ');
+      
+      // Validar estoque de todos os itens antes de processar
+      for (const item of cartItems) {
+        const product = products.find(p => p.id === item.productId);
+        if (!product) {
+          toast({ title: `Produto não encontrado: ${item.productName}`, variant: 'destructive' });
+          return;
+        }
+
+        // Verificar estoque
+        if ((product.stock || 0) < item.quantity) {
+          toast({ title: `Estoque insuficiente: ${product.name}`, variant: 'destructive' });
+          return;
+        }
+      }
+
+      // Processar todos os itens com o mesmo número de recibo
+      for (const item of cartItems) {
+        const product = products.find(p => p.id === item.productId);
+        if (!product) continue;
+
+        // Atualizar lotes quando houver
+        if (item.managedByBatch && user?.id && item.batches && item.batches.length > 0) {
+          for (const b of item.batches) {
+            const batch = availableBatches.find(x => x.id === b.batchId);
+            if (batch) {
+              const newQty = Math.max(0, (batch.quantity || 0) - b.quantity);
+              await updateBatchQuantity(batch.id, newQty, user.id);
+            }
+          }
+        }
+
+        // Registrar movimentação com o mesmo número de recibo
+        await addMovement({
+          type: 'saida',
+          productId: item.productId,
+          productName: item.productName,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          description: `Venda múltiplos itens - ${item.productName} | ${paymentInfo}${notes ? ' | Obs: ' + notes : ''}`,
+          date: exitDate,
+          status: 'confirmado',
+          paymentMethod: paymentMethod === "parcelado" ? `parcelado-${installments}x` : paymentMethod,
+          receiptNumber: receiptNumber // Mesmo número de recibo para todos os itens
+        });
+      }
+
+      // Limpar carrinho e fechar modal
+      setCartItems([]);
+      setIsCartPanelOpen(false);
+      setIsAddDialogOpen(false);
+      
+      // Limpar formulário
+      form.reset({
+        productId: "",
+        quantity: 0,
+        unitPrice: 0,
+        customer: customer, // Manter o cliente para próxima venda
+        exitDate: new Date(),
+        notes: "",
+        paymentMethod: "avista",
+        installments: 1,
+      });
+      
+      // Toast com informações agregadas
+      toast({ 
+        title: '✅ Venda Registrada!', 
+        description: `${totalProducts} produto(s) totalizando ${totalQuantity} unidades por R$ ${totalGeral.toFixed(2).replace('.', ',')}. Recibo: ${receiptNumber}`,
+        variant: 'default'
+      });
+      
+      // Adicionar notificação
+      addNotification(
+        '🛒 Venda Múltiplos Produtos',
+        `Produtos: ${productsList}\nQuantidade Total: ${totalQuantity} unidades\nCliente: ${customer}\nTotal: R$ ${totalGeral.toFixed(2)}\nRecibo: ${receiptNumber}`,
+        'success'
+      );
+    } catch (e: any) {
+      toast({ title: 'Erro ao processar venda', description: e?.message || String(e), variant: 'destructive' });
+    }
+  };
+
+  // Carrinho (novo componente)
+  const RenderCart = ({ compact = false }: { compact?: boolean }) => (
+    <StockExitCart
+      items={cartItems}
+      total={getCartTotal()}
+      onRemove={removeCartItem}
+      onQuantityChange={updateCartItemQuantity}
+      onClear={clearCartNow}
+      onFinalize={processCartSale}
+      compact={compact}
+    />
+  );
 
   // Verificar se algum lote excede a quantidade disponível
   const hasExceedingBatches = () => {
@@ -187,6 +533,59 @@ const Saidas = () => {
 
   // Funções
   const handleAddExit = async (data: StockExitFormData) => {
+    // Se houver itens no carrinho, processa todos; caso contrário, segue o fluxo atual de único item
+    if (cartItems.length > 0) {
+      for (const item of cartItems) {
+        const product = products.find(p => p.id === item.productId);
+        if (!product) continue;
+        const quantity = item.quantity;
+        if (quantity <= 0 || (product.stock || 0) < quantity) {
+          toast({ title: "⚠️ Verifique o carrinho", description: `${product?.name || 'Produto'} com quantidade inválida ou estoque insuficiente.`, variant: "destructive" });
+          return;
+        }
+        const unitPrice = getProductPrice(item.productId);
+        const receiptNumber = generateReceiptNumber();
+
+        // Atualizar lotes se gerenciado por lote
+        if (item.managedByBatch && item.batches.length > 0 && user?.id) {
+          try {
+            const batches = await getBatchesByProduct(item.productId, user.id);
+            await Promise.all(item.batches.map(async sel => {
+              const batch = batches.find(b => b.id === sel.batchId);
+              if (batch) {
+                const newQuantity = Math.max(0, (batch.quantity || 0) - sel.quantity);
+                await updateBatchQuantity(batch.id, newQuantity, user.id);
+              }
+            }));
+          } catch (error) {
+            console.error('Erro ao atualizar lotes:', error);
+          }
+        }
+
+        addMovement({
+          type: 'saida',
+          productId: item.productId,
+          productName: product.name,
+          quantity,
+          unitPrice,
+          description: `Saída de ${quantity} unidades - ${data.customer || 'Cliente'}`,
+          date: data.exitDate,
+          paymentMethod: data.paymentMethod === "parcelado" ? `parcelado-${data.installments || 1}x` : (data.paymentMethod || 'avista'),
+          status: "confirmado",
+          receiptNumber,
+        });
+      }
+
+      setIsAddDialogOpen(false);
+      setSelectedBatches([]);
+      setSelectedProductId("");
+      setCartItems([]);
+      form.reset();
+      toast({ title: "✅ Venda Registrada!", description: `${cartItems.length} item(ns) processado(s).`, variant: "default" });
+      addNotification('🛒 Nova Venda', `${cartItems.length} item(ns) registrado(s) no pedido.`, 'success');
+      return;
+    }
+
     const product = products.find(p => p.id === data.productId);
     if (!product) {
       toast({
@@ -197,10 +596,65 @@ const Saidas = () => {
       return;
     }
 
-    // Calcular quantidade total e preço baseado nos lotes selecionados
-    const totalQuantity = getTotalSelectedQuantity();
-    const unitPrice = product.price; // Usar preço do produto
-    const totalPrice = totalQuantity * unitPrice;
+    // Verificar se o produto é gerenciado por lote
+    const managedByBatch = (product as any)?.managedByBatch === true;
+    
+    // Calcular quantidade total e preço baseado no tipo de gerenciamento
+    let totalQuantity: number;
+    let unitPrice: number;
+    
+    if (managedByBatch) {
+      // Se gerencia por lote, usar quantidade dos lotes selecionados
+      totalQuantity = getTotalSelectedQuantity();
+      unitPrice = getProductPrice(data.productId); // Usar preço de venda do produto
+      
+      // Validar se há lotes selecionados
+      if (totalQuantity === 0) {
+        toast({
+          title: "⚠️ Quantidade Inválida!",
+          description: "Selecione ao menos um lote com quantidade.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // Validar se há estoque suficiente nos lotes selecionados
+      if (selectedBatches.length > 0) {
+        for (const selectedBatch of selectedBatches) {
+          const batch = availableBatches.find(b => b.id === selectedBatch.batchId);
+          if (batch && selectedBatch.quantity > batch.quantity) {
+            toast({
+              title: "❌ Estoque Insuficiente no Lote!",
+              description: `Lote ${batch.batchNumber} tem apenas ${batch.quantity} unidades disponíveis`,
+              variant: "destructive",
+            });
+            return;
+          }
+          if (selectedBatch.quantity <= 0) {
+            toast({
+              title: "❌ Quantidade Inválida!",
+              description: "A quantidade deve ser maior que zero",
+              variant: "destructive",
+            });
+            return;
+          }
+        }
+      }
+    } else {
+      // Se NÃO gerencia por lote, usar quantidade do formulário e preço de venda do produto
+      totalQuantity = data.quantity || 0;
+      unitPrice = getProductPrice(data.productId); // Usar preço de venda do produto
+      
+      // Validar quantidade
+      if (totalQuantity <= 0) {
+        toast({
+          title: "⚠️ Quantidade Inválida!",
+          description: "Informe uma quantidade maior que zero.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
 
     // Verificar se há estoque suficiente
     if (product.stock < totalQuantity) {
@@ -212,16 +666,7 @@ const Saidas = () => {
       return;
     }
 
-    // Validar se há lotes selecionados ou quantidade
-    if (totalQuantity === 0) {
-      toast({
-        title: "⚠️ Quantidade Inválida!",
-        description: "Selecione ao menos um lote com quantidade.",
-        variant: "destructive",
-      });
-      return;
-    }
-
+    const totalPrice = totalQuantity * unitPrice;
     const receiptNumber = generateReceiptNumber();
     
     const newExit: StockExit = {
@@ -235,29 +680,6 @@ const Saidas = () => {
       exitDate: data.exitDate,
       receiptNumber: receiptNumber,
     };
-
-    // Validar se há estoque suficiente nos lotes selecionados
-    if (selectedBatches.length > 0) {
-      for (const selectedBatch of selectedBatches) {
-        const batch = availableBatches.find(b => b.id === selectedBatch.batchId);
-        if (batch && selectedBatch.quantity > batch.quantity) {
-          toast({
-            title: "❌ Estoque Insuficiente no Lote!",
-            description: `Lote ${batch.batchNumber} tem apenas ${batch.quantity} unidades disponíveis`,
-            variant: "destructive",
-          });
-          return;
-        }
-        if (selectedBatch.quantity <= 0) {
-          toast({
-            title: "❌ Quantidade Inválida!",
-            description: "A quantidade deve ser maior que zero",
-            variant: "destructive",
-          });
-          return;
-        }
-      }
-    }
 
     // Atualizar lotes selecionados no backend
     if (selectedBatches.length > 0 && user?.id) {
@@ -282,6 +704,13 @@ const Saidas = () => {
       }
     }
 
+    // Preparar informações de pagamento
+    const paymentMethod = data.paymentMethod || "avista";
+    const installments = data.installments || 1;
+    const paymentInfo = paymentMethod === "parcelado" 
+      ? `Pagamento: parcelado em ${installments}x`
+      : `Pagamento: à vista (${paymentMethod})`;
+    
     // Adicionar movimentação no contexto global (isso atualiza o estoque automaticamente e salva no Supabase)
     addMovement({
       type: 'saida',
@@ -289,8 +718,10 @@ const Saidas = () => {
       productName: product.name,
       quantity: totalQuantity,
       unitPrice: unitPrice,
-      description: `Saída de ${totalQuantity} unidades - ${data.customer}`,
+      description: `Saída de ${totalQuantity} unidades - ${data.customer} | ${paymentInfo}`,
       date: data.exitDate,
+      paymentMethod: paymentMethod === "parcelado" ? `parcelado-${installments}x` : paymentMethod,
+      status: "confirmado",
     });
 
     setIsAddDialogOpen(false);
@@ -459,6 +890,17 @@ const Saidas = () => {
 
   // Carregar dados do Supabase
   useEffect(() => {
+    // Restaurar carrinho do storage
+    try {
+      const raw = localStorage.getItem('fg_cart_items');
+      if (raw) {
+        const parsed: CartItem[] = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          setCartItems(parsed);
+          setIsCartPanelOpen(parsed.length > 0);
+        }
+      }
+    } catch {}
     // Simular carregamento inicial
     const timer = setTimeout(() => {
       setIsLoading(false);
@@ -466,6 +908,37 @@ const Saidas = () => {
     
     return () => clearTimeout(timer);
   }, []);
+
+  // Persistir carrinho no storage a cada mudança
+  useEffect(() => {
+    try {
+      localStorage.setItem('fg_cart_items', JSON.stringify(cartItems));
+    } catch {}
+  }, [cartItems]);
+
+  // Carregar clientes do banco de dados
+  useEffect(() => {
+    const loadCustomers = async () => {
+      if (!user?.id) return;
+      try {
+        const { data, error } = await supabase
+          .from('clientes')
+          .select('id, codigo, nome')
+          .order('nome', { ascending: true });
+        if (error) throw error;
+        const mapped = (data || []).map((c: any) => ({
+          id: c.id,
+          code: String(c.codigo ?? c.code ?? ''),
+          name: c.nome ?? c.name,
+        }));
+        setCustomers(mapped);
+      } catch (error: any) {
+        console.error('Erro ao carregar clientes:', error);
+      }
+    };
+    loadCustomers();
+  }, [user?.id]);
+
 
   // Filtros
   const filteredExits = exits.filter(exit =>
@@ -491,7 +964,7 @@ const Saidas = () => {
             <div className="w-16 h-16 bg-gradient-to-br from-red-500 to-red-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
               <TrendingDown className="w-8 h-8 text-white" />
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">📤 Carregando Saídas...</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">🛒 Carregando Vendas...</h3>
             <p className="text-gray-600">Preparando dados de vendas</p>
           </div>
         </div>
@@ -506,164 +979,468 @@ const Saidas = () => {
         <div className="text-center sm:text-left">
           <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent flex items-center gap-2 justify-center sm:justify-start">
             <TrendingDown className="w-8 h-8 text-blue-600" />
-            Saídas de Estoque
+            Vendas de Estoque
           </h1>
-          <p className="text-muted-foreground">Registre vendas e saídas do sistema</p>
+          <p className="text-muted-foreground">Registre vendas do sistema</p>
         </div>
-              <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button className="w-full sm:w-auto bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-xl sm:rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-200 transform hover:scale-105">
-                    <Plus className="w-5 h-5 sm:w-6 sm:h-6 mr-2 sm:mr-3" />
-                    Nova Saída
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-[70vw] sm:max-w-2xl max-h-[70vh] overflow-y-auto mx-auto">
-                  <DialogHeader className="space-y-2 pb-4 sm:pb-3">
-                    <DialogTitle className="text-base sm:text-xl font-bold">Registrar Nova Saída</DialogTitle>
-                    <DialogDescription className="text-sm">
-                      Preencha as informações da saída de estoque.
+      <div className="relative flex items-center gap-4 flex-wrap">
+        <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
+          setIsAddDialogOpen(open);
+          if (!open) {
+            // Limpar estados ao fechar
+            setSelectedProductId("");
+            setSelectedBatches([]);
+            setProductSearchTerm("");
+            setProductSearchOpen(false);
+            setSelectedCustomerId("");
+            setCustomerSearchTerm("");
+            form.reset({
+              productId: "",
+              quantity: 0,
+              unitPrice: 0,
+              customer: "",
+              exitDate: new Date(),
+              notes: "",
+              paymentMethod: "avista",
+              installments: 1,
+            });
+          }
+        }}>
+          <DialogTrigger asChild>
+            <Button className="w-full sm:w-auto bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-xl sm:rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-200 transform hover:scale-105">
+              <Plus className="w-5 h-5 sm:w-6 sm:h-6 mr-2 sm:mr-3" />
+              Nova Saída
+            </Button>
+          </DialogTrigger>
+                <DialogContent
+                  className="max-w-md sm:max-w-lg md:max-w-2xl max-h-[90vh] flex flex-col p-0"
+                  onInteractOutside={(e) => {
+                    const cart = document.getElementById('cart-panel');
+                    // Radix repassa o evento original em e.detail.originalEvent
+                    const original = (e as any)?.detail?.originalEvent as Event | undefined;
+                    const path = original && (original as any).composedPath ? (original as any).composedPath() as EventTarget[] : [];
+                    if (cart) {
+                      const isInCart = path.includes(cart) || (e.target instanceof Node && cart.contains(e.target as Node));
+                      if (isInCart) {
+                        e.preventDefault();
+                      }
+                    }
+                  }}
+                >
+                  <DialogHeader className="space-y-2 pb-4 px-6 pt-6 border-b">
+                    <DialogTitle className="text-base sm:text-xl font-bold text-neutral-900">
+                      🛒 Registrar Nova Venda
+                    </DialogTitle>
+                    <DialogDescription className="text-sm text-neutral-600">
+                      Preencha as informações detalhadas da venda para manter o controle preciso
                     </DialogDescription>
                   </DialogHeader>
                   <Form {...form}>
-                    <form onSubmit={form.handleSubmit(handleAddExit)} className="space-y-4 sm:space-y-3">
-                      <div className="grid grid-cols-2 gap-4 sm:gap-3">
-                        <FormField
-                          control={form.control}
-                          name="productId"
-                          render={({ field }) => (
-                            <FormItem className="space-y-3">
-                              <FormLabel className="text-base sm:text-sm font-semibold">📦 Produto</FormLabel>
-                              <Select 
-                                onValueChange={(value) => {
-                                  field.onChange(value);
-                                  loadBatchesForProduct(value);
-                                }} 
-                                defaultValue={field.value}
-                              >
-                                <FormControl>
-                                  <SelectTrigger className="h-12 sm:h-10 text-base sm:text-sm">
-                                    <SelectValue placeholder="Selecione um produto" />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  {products.map(product => (
-                                    <SelectItem key={product.id} value={product.id}>
-                                      {product.name} - {product.sku} (Estoque: {product.stock})
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={form.control}
-                          name="customer"
-                          render={({ field }) => (
-                            <FormItem className="space-y-3">
-                              <FormLabel className="text-base sm:text-sm font-semibold">👤 Cliente</FormLabel>
-                              <FormControl>
-                                <Input placeholder="Nome do cliente" className="h-12 sm:h-10 text-base sm:text-sm" {...field} />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
+                    <form onSubmit={form.handleSubmit(handleAddExit)} className="flex flex-col flex-1 min-h-0">
+                      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+                        {/* Primeira linha - Produto e Cliente */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-3">
+                          <FormField
+                            control={form.control}
+                            name="productId"
+                            render={({ field }) => {
+                              const selectedProduct = products.find(p => p.id === field.value);
+                              const filteredProducts = products.filter(product =>
+                                product.name.toLowerCase().includes(productSearchTerm.toLowerCase()) ||
+                                product.sku.toLowerCase().includes(productSearchTerm.toLowerCase())
+                              );
 
-                      {/* Seletor de Lotes Múltiplos */}
-                      {selectedProductId && (
-                        <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-300 rounded-xl p-5">
-                          <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center space-x-2">
-                              <Calendar className="h-5 w-5 text-indigo-600" />
-                              <h4 className="font-bold text-indigo-900">📦 Distribuir por Lotes</h4>
-                            </div>
-                            <Button
-                              type="button"
-                              size="sm"
-                              onClick={addBatchToSelection}
-                              className="bg-indigo-600 hover:bg-indigo-700 text-white"
-                            >
-                              <Plus className="h-4 w-4 mr-1" />
-                              Adicionar Lote
-                            </Button>
-                          </div>
-
-                          {availableBatches.length === 0 ? (
-                            <div className="text-center py-4 bg-yellow-50 rounded-lg border-2 border-dashed border-yellow-300">
-                              <Package className="h-10 w-10 mx-auto mb-2 text-yellow-600" />
-                              <p className="text-sm text-yellow-800 font-medium">⚠️ Este produto não tem lotes cadastrados</p>
-                              <p className="text-xs text-yellow-700 mt-1">
-                                💡 A saída será registrada normalmente sem rastreio por lote
-                              </p>
-                              <p className="text-xs text-yellow-700 mt-1">
-                                Para usar lotes, vá em Produtos → Lotes e cadastre primeiro
-                              </p>
-                            </div>
-                          ) : selectedBatches.length === 0 ? (
-                            <div className="text-center py-4 bg-white/60 rounded-lg border-2 border-dashed border-indigo-300">
-                              <Package className="h-10 w-10 mx-auto mb-2 text-indigo-400" />
-                              <p className="text-sm text-indigo-700 font-medium">Nenhum lote selecionado</p>
-                              <p className="text-xs text-indigo-600 mt-1">
-                                💡 Clique em "Adicionar Lote" para distribuir a venda entre lotes específicos
-                              </p>
-                              <p className="text-xs text-indigo-600 mt-1">
-                                ou deixe vazio para usar FIFO automático
-                              </p>
-                            </div>
-                          ) : (
-                            <div className="space-y-3">
-                              {selectedBatches.map((selectedBatch, index) => (
-                                <div key={index} className="bg-white rounded-lg p-3 border-2 border-indigo-200 shadow-sm">
-                                  <div className="flex items-center gap-3">
-                                    <div className="flex-1 grid grid-cols-2 gap-3">
-                                      <div>
-                                        <Label className="text-xs text-gray-600">Lote</Label>
-                                        <Select
-                                          value={selectedBatch.batchId}
-                                          onValueChange={(value) => updateSelectedBatch(index, value, selectedBatch.quantity)}
+                              return (
+                                <FormItem className="space-y-3">
+                                  <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
+                                    🏷️ Produto
+                                  </FormLabel>
+                                  <div className="relative">
+                                    {selectedProduct ? (
+                                      <div className="flex items-center gap-2">
+                                        <Input
+                                          value={selectedProduct.name}
+                                          readOnly
+                                          className="h-11 sm:h-10 border-2 border-neutral-200 rounded-xl pr-10 cursor-pointer"
+                                          onClick={() => {
+                                            setProductSearchTerm("");
+                                            field.onChange("");
+                                            setSelectedProductId("");
+                                            setSelectedBatches([]);
+                                          }}
+                                        />
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => {
+                                            setProductSearchTerm("");
+                                            field.onChange("");
+                                            setSelectedProductId("");
+                                            setSelectedBatches([]);
+                                          }}
+                                          className="absolute right-2 h-7 w-7 p-0"
                                         >
-                                          <SelectTrigger className="h-9">
-                                            <SelectValue placeholder="Selecione o lote" />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            {availableBatches.map(batch => {
-                                              const expiryDate = batch.expiryDate ? new Date(batch.expiryDate) : null;
-                                              const daysUntilExpiry = expiryDate 
-                                                ? Math.ceil((expiryDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
-                                                : null;
-                                              
-                                              const status = daysUntilExpiry !== null
-                                                ? daysUntilExpiry < 0 
-                                                  ? '🔴'
-                                                  : daysUntilExpiry <= 30
-                                                    ? '🟡'
-                                                    : '🟢'
-                                                : '⚪';
-
-                                              return (
-                                                <SelectItem key={batch.id} value={batch.id}>
-                                                  {status} Lote {batch.batchNumber} - {batch.quantity} un.
-                                                  {batch.expiryDate && ` (${new Date(batch.expiryDate).toLocaleDateString('pt-BR')})`}
-                                                </SelectItem>
-                                              );
-                                            })}
-                                          </SelectContent>
-                                        </Select>
+                                          <X className="h-4 w-4" />
+                                        </Button>
                                       </div>
-                                      <div className="flex-1">
-                                        <Label className="text-xs text-gray-600">Quantidade</Label>
-                                        {(() => {
-                                          const batch = availableBatches.find(b => b.id === selectedBatch.batchId);
-                                          const available = batch?.quantity || 0;
-                                          const exceeds = selectedBatch.quantity > available;
-                                          const warning = available > 0 && selectedBatch.quantity > available * 0.8 && !exceeds;
-                                          
-                                          return (
-                                            <div className="space-y-1">
+                                    ) : (
+                                      <>
+                                        <div className="relative">
+                                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                          <Input
+                                            placeholder="Digite o código ou nome do produto..."
+                                            value={productSearchTerm}
+                                            onChange={(e) => {
+                                              setProductSearchTerm(e.target.value);
+                                              // Se limpar o campo, limpar também a seleção
+                                              if (e.target.value === '') {
+                                                field.onChange("");
+                                                setSelectedProductId("");
+                                                setSelectedBatches([]);
+                                              }
+                                            }}
+                                            onKeyDown={(e) => {
+                                              if (e.key === 'Enter' && filteredProducts.length === 1) {
+                                                field.onChange(filteredProducts[0].id);
+                                                loadBatchesForProduct(filteredProducts[0].id);
+                                                setProductSearchTerm("");
+                                              } else if (e.key === 'Escape') {
+                                                setProductSearchTerm("");
+                                              }
+                                            }}
+                                            className="h-11 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 pl-10"
+                                            autoFocus={productSearchTerm !== ''}
+                                          />
+                                        </div>
+                                        
+                                        {productSearchTerm.trim() !== '' && (
+                                          <div className="absolute z-50 w-full mt-1 bg-white border-2 border-neutral-200 rounded-xl shadow-lg max-h-[300px] overflow-y-auto">
+                                            {filteredProducts.length === 0 ? (
+                                              <div className="p-4 text-center text-sm text-muted-foreground">
+                                                Nenhum produto encontrado
+                                              </div>
+                                            ) : (
+                                              filteredProducts.slice(0, 2).map(product => (
+                                                <button
+                                                  key={product.id}
+                                                  type="button"
+                                                  className="w-full px-4 py-3 text-left hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus:outline-none border-b last:border-b-0 transition-colors"
+                                                  onClick={() => {
+                                                    field.onChange(product.id);
+                                                    loadBatchesForProduct(product.id);
+                                                    setProductSearchTerm("");
+                                                  }}
+                                                >
+                                                  <div className="font-medium">{product.name}</div>
+                                                  <div className="text-xs text-muted-foreground">Código: {product.sku} (Estoque: {product.stock})</div>
+                                                </button>
+                                              ))
+                                            )}
+                                          </div>
+                                        )}
+                                      </>
+                                    )}
+                                  </div>
+                                  <FormMessage />
+                                  {/* Botão de adicionar ao carrinho movido para o footer */}
+                                </FormItem>
+                              );
+                            }}
+                          />
+                          <FormField
+                            control={form.control}
+                            name="customer"
+                            render={({ field }) => {
+                              const selectedCustomer = customers.find(c => c.id === selectedCustomerId);
+                              const filteredCustomers = customers.filter(customer =>
+                                customer.name.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
+                                customer.code.toLowerCase().includes(customerSearchTerm.toLowerCase())
+                              );
+
+                              return (
+                                <FormItem className="space-y-3">
+                                  <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
+                                    👤 Cliente
+                                  </FormLabel>
+                                  <div className="relative">
+                                    {selectedCustomer ? (
+                                      <div className="flex items-center gap-2">
+                                        <Input
+                                          value={selectedCustomer.name}
+                                          readOnly
+                                          className="h-12 sm:h-10 border-2 border-neutral-200 rounded-xl pr-10 cursor-pointer"
+                                          onClick={() => {
+                                            setCustomerSearchTerm("");
+                                            setSelectedCustomerId("");
+                                            field.onChange("");
+                                          }}
+                                        />
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => {
+                                            setCustomerSearchTerm("");
+                                            setSelectedCustomerId("");
+                                            field.onChange("");
+                                          }}
+                                          className="absolute right-2 h-7 w-7 p-0"
+                                        >
+                                          <X className="h-4 w-4" />
+                                        </Button>
+                                      </div>
+                                    ) : (
+                                      <>
+                                        <div className="relative">
+                                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                          <Input
+                                            placeholder="Digite o código ou nome do cliente..."
+                                            value={customerSearchTerm}
+                                            onChange={(e) => {
+                                              setCustomerSearchTerm(e.target.value);
+                                              if (e.target.value === '') {
+                                                setSelectedCustomerId("");
+                                                field.onChange("");
+                                              }
+                                            }}
+                                            onKeyDown={(e) => {
+                                              if (e.key === 'Enter' && filteredCustomers.length === 1) {
+                                                setSelectedCustomerId(filteredCustomers[0].id);
+                                                field.onChange(filteredCustomers[0].name);
+                                                setCustomerSearchTerm("");
+                                              } else if (e.key === 'Escape') {
+                                                setCustomerSearchTerm("");
+                                              }
+                                            }}
+                                            className="h-12 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 pl-10 text-base sm:text-sm"
+                                          />
+                                        </div>
+                                        
+                                        {customerSearchTerm.trim() !== '' && (
+                                          <div className="absolute z-50 w-full mt-1 bg-white border-2 border-neutral-200 rounded-xl shadow-lg max-h-[300px] overflow-y-auto">
+                                            {filteredCustomers.length === 0 ? (
+                                              <div className="p-4 text-center text-sm text-muted-foreground">
+                                                Nenhum cliente encontrado
+                                              </div>
+                                            ) : (
+                                              filteredCustomers.slice(0, 5).map(customer => (
+                                                <button
+                                                  key={customer.id}
+                                                  type="button"
+                                                  className="w-full px-4 py-3 text-left hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus:outline-none border-b last:border-b-0 transition-colors"
+                                                  onClick={() => {
+                                                    setSelectedCustomerId(customer.id);
+                                                    field.onChange(customer.name);
+                                                    setCustomerSearchTerm("");
+                                                  }}
+                                                >
+                                                  <div className="font-medium">{customer.name}</div>
+                                                  <div className="text-xs text-muted-foreground">Código: {customer.code}</div>
+                                                </button>
+                                              ))
+                                            )}
+                                          </div>
+                                        )}
+                                      </>
+                                    )}
+                                  </div>
+                                  <FormMessage />
+                                </FormItem>
+                              );
+                            }}
+                          />
+                        </div>
+
+                      {/* Interface de Gestão de Lotes - Aparece quando produto é selecionado E tem gerenciamento por lote */}
+                      {selectedProductId && (() => {
+                        const selectedProduct = products.find(p => p.id === selectedProductId);
+                        const managedByBatch = (selectedProduct as any)?.managedByBatch === true;
+                        
+                        // Se NÃO usa gerenciamento por lote, mostrar campos simples
+                        if (!managedByBatch) {
+                          return (
+                            <Card className="border-2 border-red-200">
+                              <CardHeader className="pb-3">
+                                <CardTitle className="text-lg font-semibold text-gray-900">
+                                  🧾 Informações da Venda
+                                </CardTitle>
+                                <p className="text-sm text-gray-600">{selectedProduct?.name || 'Produto selecionado'}</p>
+                              </CardHeader>
+                              <CardContent className="space-y-4">
+                                <FormField
+                                  control={form.control}
+                                  name="quantity"
+                                  render={({ field }) => (
+                                    <FormItem className="space-y-2">
+                                      <FormLabel className="text-sm font-semibold text-neutral-700">
+                                        🔢 Quantidade a Retirar *
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          type="number"
+                                          min="1"
+                                          max={selectedProduct?.stock || 0}
+                                          placeholder="Ex: 10"
+                                          {...field}
+                                          onChange={(e) => {
+                                            const value = e.target.value;
+                                            if (value === '' || value === null) {
+                                              field.onChange(0);
+                                              return;
+                                            }
+                                            const intValue = parseInt(value);
+                                            if (!isNaN(intValue)) {
+                                              const maxStock = selectedProduct?.stock || 0;
+                                              if (intValue > maxStock) {
+                                                toast({
+                                                  title: "⚠️ Quantidade Maior que o Permitido!",
+                                                  description: `A quantidade máxima permitida é ${maxStock} unidades (estoque disponível).`,
+                                                  variant: "destructive",
+                                                });
+                                                field.onChange(maxStock);
+                                              } else {
+                                                field.onChange(intValue);
+                                              }
+                                            }
+                                          }}
+                                          value={field.value === 0 ? '' : field.value}
+                                          className="h-11 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 text-base sm:text-sm"
+                                        />
+                                      </FormControl>
+                                      <FormMessage />
+                                      <p className="text-xs text-gray-500">
+                                        Estoque disponível: <strong>{selectedProduct?.stock || 0} unidades</strong>
+                                      </p>
+                                    </FormItem>
+                                  )}
+                                />
+
+                                {/* Datas removidas para saída de produtos sem lote */}
+                                
+                                {form.watch('quantity') > 0 && selectedProduct && (() => {
+                                  const unitPrice = getProductPrice(selectedProduct.id);
+                                  const totalPrice = form.watch('quantity') * unitPrice;
+                                  return (
+                                    <div className="pt-3 border-t border-red-200 space-y-2">
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-sm font-medium text-gray-900">💰 Preço Unitário:</span>
+                                        <span className="text-sm font-semibold text-gray-700">
+                                          R$ {unitPrice.toFixed(2)}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-sm font-medium text-gray-900">💰 Valor Total:</span>
+                                        <span className="text-lg font-bold text-green-600">
+                                          R$ {totalPrice.toFixed(2)}
+                                        </span>
+                                      </div>
+                                    {(() => {
+                                      const quantityToExit = form.watch('quantity');
+                                      const currentStock = selectedProduct?.stock || 0;
+                                      const remaining = currentStock - quantityToExit;
+                                      return (
+                                        <div className="flex items-center justify-between pt-2 border-t border-red-200">
+                                          <span className="text-sm font-medium text-gray-900">
+                                            📦 Estoque Restante:
+                                          </span>
+                                          <span className={`text-lg font-bold ${remaining < 0 ? 'text-red-600' : remaining < (currentStock * 0.2) ? 'text-yellow-600' : 'text-green-600'}`}>
+                                            {Math.max(0, remaining)} unidades
+                                          </span>
+                                        </div>
+                                      );
+                                    })()}
+                                  </div>
+                                  );
+                                })()}
+                              </CardContent>
+                            </Card>
+                          );
+                        }
+                        
+                        // Se usa gerenciamento por lote, mostrar Card de Lotes
+                        return (
+                          <Card className="border-2 border-red-200">
+                            <CardHeader className="pb-3">
+                              <div className="flex items-center justify-end">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  onClick={addBatchToSelection}
+                                  className="inline-flex items-center gap-2 h-9 rounded-md px-3 text-sm font-medium bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:from-indigo-700 hover:to-purple-700 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                >
+                                  <Plus className="h-4 w-4 mr-1" />
+                                  Selecionar Lote
+                                </Button>
+                              </div>
+                            </CardHeader>
+
+                            <CardContent className="space-y-4 max-h-[350px] overflow-y-auto">
+                              {availableBatches.length === 0 ? (
+                                <div className="text-center py-8">
+                                  <Package className="h-12 w-12 mx-auto mb-3 text-gray-400" />
+                                  <p className="text-gray-600">⚠️ Nenhum lote com estoque disponível</p>
+                                  <p className="text-sm text-gray-500 mt-1">Todos os lotes deste produto estão sem estoque</p>
+                                </div>
+                              ) : selectedBatches.length === 0 ? (
+                                <div className="text-center py-8">
+                                  <Package className="h-12 w-12 mx-auto mb-3 text-gray-400" />
+                                  <p className="text-gray-600">Nenhum lote selecionado</p>
+                                  <p className="text-sm text-gray-500 mt-1">Adicione um lote para começar a retirar estoque</p>
+                                </div>
+                              ) : (
+                                <div className="space-y-3">
+                                  {selectedBatches.map((selectedBatch, index) => {
+                                    const batch = availableBatches.find(b => b.id === selectedBatch.batchId);
+                                    const available = batch?.quantity || 0;
+                                    const exceeds = selectedBatch.quantity > available;
+                                    
+                                    return (
+                                      <Card key={index} className="hover:shadow-md transition-all border-gray-200">
+                                        <CardContent className="p-5 space-y-5">
+                                          {/* Primeira linha: Lote e Quantidade */}
+                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                                            {/* Campo Lote */}
+                                            <div className="space-y-2">
+                                              <Label htmlFor={`batch-${index}`} className="text-sm font-medium">
+                                                📦 Selecione o Lote
+                                              </Label>
                                               <Input
+                                                id={`batch-${index}`}
+                                                type="text"
+                                                value={selectedBatch.batchNumber || (batch?.batchNumber || '')}
+                                                onChange={(e) => {
+                                                  const value = e.target.value.trim();
+                                                  updateBatchNumber(index, value);
+                                                }}
+                                                placeholder="Digite o número do lote"
+                                                className="h-10 font-semibold"
+                                              />
+                                              {batch ? (
+                                                <p className="text-xs text-gray-500">
+                                                  ✅ Lote encontrado: {batch.quantity} unidades disponíveis
+                                                  {batch.expiryDate && ` • Validade: ${new Date(batch.expiryDate).toLocaleDateString('pt-BR')}`}
+                                                </p>
+                                              ) : selectedBatch.batchNumber ? (
+                                                <p className="text-xs text-yellow-600">
+                                                  ⚠️ Lote não encontrado. Verifique o número digitado.
+                                                </p>
+                                              ) : (
+                                                <p className="text-xs text-gray-500">
+                                                  💡 Digite o número do lote ou use "Usar Existente"
+                                                </p>
+                                              )}
+                                            </div>
+                                            {/* Campo Quantidade */}
+                                            <div className="space-y-2">
+                                              <div className="flex items-center justify-between gap-2 h-7">
+                                                <Label htmlFor={`quantity-${index}`} className="text-sm font-medium">
+                                                  🔢 Quantidade a Retirar
+                                                </Label>
+                                                <span className="h-7" />
+                                              </div>
+                                              <Input
+                                                id={`quantity-${index}`}
                                                 type="number"
                                                 min="1"
                                                 max={available}
@@ -673,158 +1450,432 @@ const Saidas = () => {
                                                   const value = e.target.value;
                                                   
                                                   if (value === '' || value === null) {
-                                                    updateSelectedBatch(index, selectedBatch.batchId, 0);
+                                                    updateSelectedBatch(index, selectedBatch.batchId, 0, selectedBatch.batchNumber);
                                                     return;
                                                   }
                                                   
-                                                  // Se o valor for "0" seguido de um dígito diferente de 0, apaga o zero
                                                   if (value.match(/^0[1-9]/) && value.length === 2) {
                                                     const newValue = value.substring(1);
-                                                    updateSelectedBatch(index, selectedBatch.batchId, Math.max(0, parseInt(newValue)));
+                                                    const intValue = Math.max(0, parseInt(newValue));
+                                                    updateSelectedBatch(index, selectedBatch.batchId, intValue, selectedBatch.batchNumber);
                                                     return;
                                                   }
                                                   
                                                   const intValue = parseInt(value);
                                                   if (!isNaN(intValue)) {
-                                                    updateSelectedBatch(index, selectedBatch.batchId, Math.max(0, intValue));
+                                                    // Permitir valores até a quantidade disponível (incluindo igual)
+                                                    if (intValue <= available) {
+                                                      updateSelectedBatch(index, selectedBatch.batchId, intValue, selectedBatch.batchNumber);
+                                                    } else {
+                                                      toast({
+                                                        title: "⚠️ Quantidade Maior que o Permitido!",
+                                                        description: `A quantidade máxima permitida para o lote ${selectedBatch.batchNumber || ''} é ${available} unidades.`,
+                                                        variant: "destructive",
+                                                      });
+                                                      updateSelectedBatch(index, selectedBatch.batchId, available, selectedBatch.batchNumber);
+                                                    }
                                                   }
                                                 }}
-                                                className={`h-9 ${exceeds ? 'border-red-500 focus:ring-red-500' : warning ? 'border-yellow-500 focus:ring-yellow-500' : ''}`}
+                                                className={`h-10 font-semibold ${exceeds ? 'border-2 border-red-500 focus:border-red-500 focus:ring-red-500' : available > 0 && selectedBatch.quantity >= available * 0.8 && selectedBatch.quantity < available ? 'border-2 border-yellow-500 focus:border-yellow-500 focus:ring-yellow-500' : ''}`}
                                               />
                                               {selectedBatch.batchId && (
-                                                <div className="flex items-center gap-1 text-xs">
+                                                <p className={`text-xs ${exceeds ? 'text-red-600 bg-red-50 p-2 rounded-md border border-red-200' : selectedBatch.quantity === available ? 'text-green-600 bg-green-50 p-2 rounded-md border border-green-200' : 'text-gray-500'}`}>
                                                   {exceeds ? (
-                                                    <span className="text-red-600 font-medium flex items-center gap-1">
-                                                      ❌ Excede! Disponível: {available} un.
-                                                    </span>
-                                                  ) : warning ? (
-                                                    <span className="text-yellow-600 font-medium flex items-center gap-1">
-                                                      ⚠️ Disponível: {available} un.
-                                                    </span>
+                                                    <>❌ Excede disponível! Disponível: <strong>{available} un.</strong></>
+                                                  ) : selectedBatch.quantity === available ? (
+                                                    <>✅ Usando todo o estoque disponível: <strong>{available} un.</strong></>
                                                   ) : (
-                                                    <span className="text-green-600 font-medium flex items-center gap-1">
-                                                      ✅ Disponível: {available} un.
-                                                    </span>
+                                                    <>✅ Disponível: <strong>{available} un.</strong></>
                                                   )}
-                                                </div>
+                                                </p>
                                               )}
                                             </div>
-                                          );
-                                        })()}
+                                          </div>
+                                          {/* Botão Remover */}
+                                          <div className="flex gap-2 pt-3 border-t border-gray-200">
+                                            <Button
+                                              type="button"
+                                              size="sm"
+                                              onClick={() => removeBatchFromSelection(index)}
+                                              className="flex-1 bg-red-600 hover:bg-red-700 text-white focus:ring-red-600 transition-colors"
+                                            >
+                                              <Trash2 className="h-4 w-4 mr-1" />
+                                              Remover Lote
+                                            </Button>
+                                          </div>
+                                        </CardContent>
+                                      </Card>
+                                    );
+                                  })}
+                                  
+                                  {/* Resumo da distribuição */}
+                                  <Card className="bg-gradient-to-r from-red-50 to-orange-50 border-red-200">
+                                    <CardContent className="p-4 space-y-2">
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-sm font-medium text-gray-900">
+                                          📊 Total a Sair:
+                                        </span>
+                                        <span className="text-lg font-bold text-red-600">
+                                          {getTotalSelectedQuantity()} unidades
+                                        </span>
+                                      </div>
+                                      {(() => {
+                                        const product = products.find(p => p.id === selectedProductId);
+                                        const totalStock = product?.stock || 0;
+                                        const totalToExit = getTotalSelectedQuantity();
+                                        const remaining = totalStock - totalToExit;
+                                        // Buscar entradas diretamente para calcular o preço
+                                        // Comparação mais robusta: normalizar IDs (pode ser UUID, string ou número)
+                                        const normalizeId = (id: any): string => {
+                                          if (!id) return '';
+                                          return String(id).trim().toLowerCase();
+                                        };
+                                        
+                                        const allMovementsForProduct = movements.filter(m => {
+                                          const mProductId = normalizeId(m.productId);
+                                          const selectedId = normalizeId(selectedProductId);
+                                          const matches = mProductId === selectedId;
+                                          return matches;
+                                        });
+                                        
+                                        // Buscar entradas (tipo pode estar em diferentes formatos)
+                                        const productEntries = allMovementsForProduct
+                                          .filter(m => {
+                                            const typeStr = String(m.type || '').toLowerCase().trim();
+                                            const isEntry = typeStr === 'entrada' || typeStr === 'entrada';
+                                            return isEntry;
+                                          })
+                                          .sort((a, b) => {
+                                            const dateA = a.date instanceof Date ? a.date : new Date(a.date);
+                                            const dateB = b.date instanceof Date ? b.date : new Date(b.date);
+                                            return dateB.getTime() - dateA.getTime();
+                                          });
+                                        
+                                        // Obter preço unitário da última entrada ou do produto
+                                        let unitPrice = 0;
+                                        if (productEntries.length > 0) {
+                                          // Pegar o primeiro (mais recente) e verificar se tem unitPrice válido
+                                          const latestEntry = productEntries[0];
+                                          if (latestEntry.unitPrice && latestEntry.unitPrice > 0) {
+                                            unitPrice = latestEntry.unitPrice;
+                                          } else if (latestEntry.total && latestEntry.quantity && latestEntry.quantity > 0) {
+                                            // Se não tiver unitPrice, calcular a partir do total e quantidade
+                                            unitPrice = latestEntry.total / latestEntry.quantity;
+                                          }
+                                        }
+                                        
+                                        // Fallback para preço do produto se não encontrou nas entradas
+                                        if (unitPrice === 0 && product && product.price > 0) {
+                                          unitPrice = product.price;
+                                        }
+                                        
+                                        const totalPrice = totalToExit * unitPrice;
+                                        
+                                        // Debug temporário - sempre logar quando houver produto selecionado
+                                        if (selectedProductId) {
+                                          console.log('=== DEBUG SAIDAS - PREÇO UNITÁRIO ===');
+                                          console.log('ProductId selecionado:', selectedProductId, `(tipo: ${typeof selectedProductId})`);
+                                          console.log('Produto encontrado:', product?.name, `(ID: ${product?.id})`);
+                                          console.log('Total de movimentações no sistema:', movements.length);
+                                          console.log('Movimentações do produto encontradas:', allMovementsForProduct.length);
+                                          console.log('Detalhes das movimentações:', allMovementsForProduct.map(m => ({
+                                            id: m.id,
+                                            type: m.type,
+                                            productId: m.productId,
+                                            productIdNormalized: normalizeId(m.productId),
+                                            productName: m.productName,
+                                            unitPrice: m.unitPrice,
+                                            total: m.total,
+                                            quantity: m.quantity,
+                                            date: m.date
+                                          })));
+                                          console.log('Entradas encontradas:', productEntries.length);
+                                          if (productEntries.length > 0) {
+                                            console.log('Detalhes da última entrada:', {
+                                              ...productEntries[0],
+                                              unitPriceCalculated: productEntries[0].unitPrice || (productEntries[0].total / productEntries[0].quantity)
+                                            });
+                                          } else {
+                                            console.log('⚠️ NENHUMA ENTRADA ENCONTRADA!');
+                                            console.log('Tipos de movimentações encontradas:', [...new Set(allMovementsForProduct.map(m => m.type))]);
+                                          }
+                                          console.log('Preço unitário final calculado:', unitPrice);
+                                          console.log('Valor total:', totalPrice);
+                                          console.log('=====================================');
+                                        }
+                                        
+                                        return (
+                                          <>
+                                            {totalToExit > 0 && (
+                                              <>
+                                                <div className="flex items-center justify-between pt-2 border-t border-red-200">
+                                                  <span className="text-sm font-medium text-gray-900">
+                                                    💵 Preço Unitário:
+                                                  </span>
+                                                  <span className="text-sm font-semibold text-gray-700">
+                                                    {unitPrice > 0 ? `R$ ${unitPrice.toFixed(2).replace('.', ',')}` : 'Não encontrado'}
+                                                  </span>
+                                                </div>
+                                                <div className="flex items-center justify-between pt-2 border-t border-red-200">
+                                                  <span className="text-sm font-medium text-gray-900">
+                                                    💰 Valor Total:
+                                                  </span>
+                                                  <span className="text-lg font-bold text-blue-600">
+                                                    R$ {totalPrice.toFixed(2).replace('.', ',')}
+                                                  </span>
+                                                </div>
+                                                {unitPrice === 0 && productEntries.length === 0 && (
+                                                  <div className="pt-2 text-xs text-orange-600 bg-orange-50 p-2 rounded border border-orange-200">
+                                                    ⚠️ Este produto não possui entradas registradas. O preço será R$ 0,00. Por favor, cadastre uma entrada no módulo "Entradas".
+                                                  </div>
+                                                )}
+                                              </>
+                                            )}
+                                            <div className="flex items-center justify-between pt-2 border-t border-red-200">
+                                              <span className="text-sm font-medium text-gray-900">
+                                                📦 Estoque Restante:
+                                              </span>
+                                              <span className={`text-lg font-bold ${remaining < 0 ? 'text-red-600' : remaining < (totalStock * 0.2) ? 'text-yellow-600' : 'text-green-600'}`}>
+                                                {Math.max(0, remaining)} unidades
+                                              </span>
+                                            </div>
+                                          </>
+                                        );
+                                      })()}
+                                    </CardContent>
+                                  </Card>
+                                </div>
+                              )}
+                            </CardContent>
+                          </Card>
+                        );
+                      })()}
+                      
+                        {/* Carrinho (aparece quando há itens) */}
+                        {cartItems.length > 0 && (
+                          <Card className="border-2 border-amber-200">
+                            <CardHeader className="pb-3">
+                              <CardTitle className="text-lg font-semibold text-gray-900">🧺 Itens no Carrinho</CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                              {cartItems.map((ci, idx) => {
+                                const p = products.find(p => p.id === ci.productId);
+                                return (
+                                  <div key={idx} className="flex items-center justify-between rounded-lg border p-3">
+                                    <div className="text-sm">
+                                      <div className="font-medium">{p?.name || 'Produto'}</div>
+                                      <div className="text-xs text-muted-foreground">
+                                        {ci.managedByBatch ? `${ci.batches.reduce((s, b) => s + (b.quantity || 0), 0)} un em ${ci.batches.length} lote(s)` : `${ci.quantity} un`}
                                       </div>
                                     </div>
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => removeBatchFromSelection(index)}
-                                      className="text-red-600 hover:text-red-700 hover:bg-red-50 h-9 w-9 p-0"
-                                    >
-                                      <Trash2 className="h-4 w-4" />
+                                    <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => removeCartItem(idx)}>
+                                      <Trash2 className="w-4 h-4" />
                                     </Button>
                                   </div>
-                                </div>
-                              ))}
-                              
-                              {/* Resumo da distribuição */}
-                              <div className="bg-white/60 rounded-lg p-3 border-2 border-indigo-300">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-sm font-medium text-indigo-900">
-                                    📊 Total a Sair:
-                                  </span>
-                                  <span className="text-lg font-bold text-indigo-600">
-                                    {getTotalSelectedQuantity()} unidades
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                          
-                          <p className="text-xs text-indigo-700 mt-3 bg-white/40 p-2 rounded">
-                            💡 <strong>Dica:</strong> Se não adicionar lotes, o sistema usará FIFO automático (primeiro a vencer, primeiro a sair)
-                          </p>
+                                );
+                              })}
+                            </CardContent>
+                          </Card>
+                        )}
+
+                        {/* Segunda linha - Data da Venda e Forma de Pagamento */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-3">
+                          <FormField
+                            control={form.control}
+                            name="exitDate"
+                            render={({ field }) => (
+                              <FormItem className="space-y-3">
+                                <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
+                                  📅 Data da Venda
+                                </FormLabel>
+                                <FormControl>
+                                  <Input 
+                                    type="date"
+                                    {...field}
+                                    value={field.value instanceof Date ? field.value.toISOString().split('T')[0] : ''}
+                                    onChange={(e) => field.onChange(new Date(e.target.value))}
+                                    className="h-11 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 text-base sm:text-sm"
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={form.control}
+                            name="paymentMethod"
+                            render={({ field }) => (
+                              <FormItem className="space-y-3">
+                                <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
+                                  💳 Forma de Pagamento
+                                </FormLabel>
+                                <Select onValueChange={(v) => {
+                                  field.onChange(v);
+                                  if (v !== "parcelado") {
+                                    form.setValue("installments", 1);
+                                  }
+                                }} defaultValue={field.value || "avista"}>
+                                  <FormControl>
+                                    <SelectTrigger className="h-12 sm:h-10 border-neutral-200 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 text-base sm:text-sm">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    <SelectItem value="avista">À vista</SelectItem>
+                                    <SelectItem value="pix">Pix</SelectItem>
+                                    <SelectItem value="debito">Cartão débito</SelectItem>
+                                    <SelectItem value="credito">Cartão crédito</SelectItem>
+                                    <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                                    <SelectItem value="parcelado">Parcelado</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
                         </div>
-                      )}
-                      
-                      <div className="grid grid-cols-2 gap-4 sm:gap-3">
+                        
+                        {/* Terceira linha - Parcelas (se parcelado) */}
+                        {form.watch("paymentMethod") === "parcelado" && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-3">
+                            <FormField
+                              control={form.control}
+                              name="installments"
+                              render={({ field }) => (
+                                <FormItem className="space-y-3">
+                                  <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
+                                    📊 Parcelas
+                                  </FormLabel>
+                                  <Select 
+                                    value={String(field.value || 1)} 
+                                    onValueChange={(v) => field.onChange(Number(v))}
+                                  >
+                                    <FormControl>
+                                      <SelectTrigger className="h-12 sm:h-10 border-neutral-200 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 text-base sm:text-sm">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                      {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
+                                        <SelectItem key={n} value={String(n)}>
+                                          {n}x
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+                        )}
+                        
+                        {/* Campo de Observações */}
                         <FormField
                           control={form.control}
-                          name="exitDate"
+                          name="notes"
                           render={({ field }) => (
                             <FormItem className="space-y-3">
-                              <FormLabel className="text-base sm:text-sm font-semibold">Data de Saída</FormLabel>
+                              <FormLabel className="text-sm font-semibold text-neutral-700">
+                                📝 Observações
+                              </FormLabel>
                               <FormControl>
-                                <Input 
-                                  type="date"
-                                  className="h-12 sm:h-10 text-base sm:text-sm"
+                                <Textarea 
+                                  placeholder="Observações adicionais sobre a saída..." 
                                   {...field}
-                                  value={field.value instanceof Date ? field.value.toISOString().split('T')[0] : ''}
-                                  onChange={(e) => field.onChange(new Date(e.target.value))}
+                                  rows={3}
+                                  className="min-h-[80px] border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 text-base sm:text-sm resize-none"
                                 />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
                           )}
                         />
-                        <FormField
-                          control={form.control}
-                          name="status"
-                          render={({ field }) => (
-                            <FormItem className="space-y-3">
-                              <FormLabel className="text-base sm:text-sm font-semibold">Status</FormLabel>
-                              <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                <FormControl>
-                                  <SelectTrigger className="h-12 sm:h-10 text-base sm:text-sm">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  <SelectItem value="pendente">Pendente</SelectItem>
-                                  <SelectItem value="confirmado">Confirmado</SelectItem>
-                                  <SelectItem value="cancelado">Cancelado</SelectItem>
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
                       </div>
                       
-                      <FormField
-                        control={form.control}
-                        name="notes"
-                        render={({ field }) => (
-                          <FormItem className="space-y-3">
-                            <FormLabel className="text-base sm:text-sm font-semibold">Observações</FormLabel>
-                            <FormControl>
-                              <Input placeholder="Observações adicionais..." className="h-12 sm:h-10 text-base sm:text-sm" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      
-                      <DialogFooter className="flex flex-col sm:flex-row gap-2 pt-2 sm:pt-3">
-                        <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)} className="w-full sm:w-auto h-11 sm:h-8 text-sm sm:text-xs">
-                          ❌ Cancelar
-                        </Button>
-                        <Button 
-                          type="submit" 
-                          className="w-full sm:w-auto bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white shadow-lg hover:shadow-xl transition-all duration-200 h-11 sm:h-8 text-sm sm:text-xs"
-                          disabled={hasExceedingBatches()}
-                        >
-                          {hasExceedingBatches() ? '⚠️ Quantidade Excedida' : '📦 Registrar Saída'}
-                        </Button>
-                      </DialogFooter>
+                      {/* Carrinho dentro do Dialog */}
+                      <div className="px-6 pt-2 pb-4">
+                        <RenderCart compact={true} />
+                      </div>
+
+                        {/* Footer do Modal */}
+                        <DialogFooter className="px-6 py-4 border-t border-neutral-200 bg-neutral-50/50 flex flex-col sm:flex-row gap-2">
+                          <Button 
+                            type="button" 
+                            variant="outline" 
+                            onClick={() => {
+                              setIsAddDialogOpen(false);
+                              setProductSearchTerm("");
+                              setSelectedProductId("");
+                              setSelectedBatches([]);
+                              form.reset({
+                                productId: "",
+                                quantity: 0,
+                                unitPrice: 0,
+                                customer: "",
+                                exitDate: new Date(),
+                                notes: "",
+                                paymentMethod: "avista",
+                                installments: 1,
+                              });
+                            }}
+                            className="w-full sm:w-auto border-2 border-neutral-300 text-neutral-700 hover:bg-neutral-50 h-9 text-sm"
+                          >
+                            ❌ Cancelar
+                          </Button>
+                          <Button
+                            type="button"
+                            onClick={addCurrentSelectionToCart}
+                            className="w-auto px-4 h-9 text-sm rounded-md bg-green-600 hover:bg-green-700 text-white"
+                            disabled={(() => {
+                              const selectedProduct = products.find(p => p.id === selectedProductId);
+                              if (!selectedProduct) return true;
+                              const managedByBatch = (selectedProduct as any)?.managedByBatch === true;
+                              if (managedByBatch) {
+                                const totalQty = selectedBatches.reduce((s, b) => s + (b.quantity || 0), 0);
+                                return totalQty <= 0;
+                              }
+                              return (form.getValues('quantity') || 0) <= 0;
+                            })()}
+                          >
+                            ➕ Adicionar ao Carrinho
+                          </Button>
+                          <Button 
+                            type="button"
+                            onClick={() => {
+                              if (cartItems.length > 0) {
+                                processCartSale();
+                              } else {
+                                form.handleSubmit(handleAddExit)();
+                              }
+                            }}
+                            className="w-full sm:w-auto bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white shadow-lg hover:shadow-xl transition-all duration-200 h-9 text-sm"
+                            disabled={(() => {
+                              if (cartItems.length > 0) return false;
+                              const selectedProduct = products.find(p => p.id === selectedProductId);
+                              if (!selectedProduct) return true;
+                              const managedByBatch = (selectedProduct as any)?.managedByBatch === true;
+                              if (managedByBatch) {
+                                const totalQty = selectedBatches.reduce((s, b) => s + (b.quantity || 0), 0);
+                                return totalQty <= 0;
+                              }
+                              return (form.getValues('quantity') || 0) <= 0;
+                            })()}
+                          >
+                            📤 Registrar Saída
+                          </Button>
+                        </DialogFooter>
                     </form>
                   </Form>
                 </DialogContent>
-              </Dialog>
+        </Dialog>
+        
+      </div>
             </div>
             
             {/* Cards de Estatísticas */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
-              {/* Card Total de Saídas */}
+              {/* Card Total de Vendas */}
               <div className="group bg-gradient-to-br from-red-100 to-red-200 rounded-2xl sm:rounded-3xl p-4 sm:p-6 text-red-800 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 border border-red-200/50">
                 <div className="flex items-center justify-between mb-3 sm:mb-4">
                   <div className="w-10 h-10 sm:w-12 sm:h-12 bg-red-300/50 rounded-xl sm:rounded-2xl flex items-center justify-center backdrop-blur-sm">
@@ -835,8 +1886,8 @@ const Saidas = () => {
                     <div className="text-xs sm:text-sm opacity-90">Total</div>
                   </div>
                 </div>
-                <h3 className="text-base sm:text-lg font-semibold mb-2">📤 Total de Saídas</h3>
-                <p className="text-xs sm:text-sm opacity-80">Saídas registradas</p>
+                <h3 className="text-base sm:text-lg font-semibold mb-2">🛒 Total de Vendas</h3>
+                <p className="text-xs sm:text-sm opacity-80">Vendas registradas</p>
               </div>
 
               {/* Card Valor Total */}
@@ -851,7 +1902,7 @@ const Saidas = () => {
                   </div>
                 </div>
                 <h3 className="text-base sm:text-lg font-semibold mb-2">💰 Valor Total</h3>
-                <p className="text-xs sm:text-sm opacity-80">Valor total das saídas</p>
+                <p className="text-xs sm:text-sm opacity-80">Valor total das vendas</p>
               </div>
 
               {/* Card Saídas do Mês */}
@@ -866,7 +1917,7 @@ const Saidas = () => {
                   </div>
                 </div>
                 <h3 className="text-base sm:text-lg font-semibold mb-2">📅 Este Mês</h3>
-                <p className="text-xs sm:text-sm opacity-80">Saídas do mês atual</p>
+                <p className="text-xs sm:text-sm opacity-80">Vendas do mês atual</p>
               </div>
 
               {/* Card Produtos Vendidos */}
@@ -893,7 +1944,7 @@ const Saidas = () => {
                 <div className="relative">
                   <Search className="absolute left-3 sm:left-4 top-1/2 transform -translate-y-1/2 text-neutral-400 w-4 h-4 sm:w-5 sm:h-5" />
                   <Input
-                    placeholder="🔍 Buscar saídas por produto ou cliente..."
+                    placeholder="Buscar saídas por produto ou cliente..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="pl-10 sm:pl-12 h-11 sm:h-14 border-2 border-neutral-200 rounded-xl sm:rounded-2xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-neutral-50"
@@ -905,8 +1956,8 @@ const Saidas = () => {
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
                     <span className="text-sm font-medium text-blue-800">
-                      {filteredExits.length === 0 ? 'Nenhuma saída encontrada' : 
-                       `${filteredExits.length} saída${filteredExits.length !== 1 ? 's' : ''} encontrada${filteredExits.length !== 1 ? 's' : ''}`
+                      {filteredExits.length === 0 ? 'Nenhuma venda encontrada' : 
+                       `${filteredExits.length} venda${filteredExits.length !== 1 ? 's' : ''} encontrada${filteredExits.length !== 1 ? 's' : ''}`
                       }
                     </span>
                   </div>
@@ -914,12 +1965,12 @@ const Saidas = () => {
               </CardContent>
             </Card>
 
-            {/* Tabela de Saídas */}
+            {/* Tabela de Vendas */}
             <Card className="bg-white border-slate-200 shadow-sm">
               <CardHeader className="pb-4">
                 <CardTitle className="flex items-center gap-2 text-slate-800">
                   <Package className="w-5 h-5 text-slate-600" />
-                  📋 Lista de Saídas
+                  📋 Lista de Vendas
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -945,8 +1996,8 @@ const Saidas = () => {
                             <div className="flex flex-col items-center gap-3">
                               <Package className="w-12 h-12 text-slate-300" />
                               <div className="text-slate-500">
-                                <p className="font-medium">Nenhuma saída encontrada</p>
-                                <p className="text-sm">Comece registrando sua primeira saída de estoque</p>
+                                <p className="font-medium">Nenhuma venda encontrada</p>
+                                <p className="text-sm">Comece registrando sua primeira venda</p>
                               </div>
                             </div>
                           </TableCell>
@@ -1020,10 +2071,10 @@ const Saidas = () => {
                                   variant="ghost" 
                                   size="sm"
                                   onClick={() => handleDeleteExit(exit)}
-                                  className="hover:bg-red-50 hover:text-red-600 transition-colors"
+                                  className="text-red-600 hover:text-red-700 hover:bg-red-50 transition-colors rounded-md h-8 w-8 sm:h-9 sm:w-9 p-0"
                                   title="Excluir saída"
                                 >
-                                  <Trash2 className="h-4 w-4" />
+                                  <Trash2 className="h-4 w-4 text-red-600" />
                                 </Button>
                               </div>
                             </TableCell>
@@ -1038,21 +2089,21 @@ const Saidas = () => {
 
       {/* Modal de Confirmação de Exclusão */}
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg">
               <Trash2 className="h-5 w-5 text-red-600" />
               Confirmar Exclusão
             </DialogTitle>
             <DialogDescription>
-              Esta ação não pode ser desfeita. A saída será removida e o estoque será ajustado.
+              Esta ação não pode ser desfeita. A venda será removida e o estoque será ajustado.
             </DialogDescription>
           </DialogHeader>
 
           {exitToDelete && (
             <div className="py-4">
               <div className="bg-red-50 rounded-lg p-4 border border-red-200">
-                <h4 className="font-semibold text-sm mb-2 text-red-900">Saída a ser excluída:</h4>
+                <h4 className="font-semibold text-sm mb-2 text-red-900">Venda a ser excluída:</h4>
                 <div className="space-y-1 text-sm">
                   <p><strong>Produto:</strong> {exitToDelete.productName}</p>
                   <p><strong>Quantidade:</strong> {exitToDelete.quantity} unidades</p>
@@ -1082,6 +2133,7 @@ const Saidas = () => {
               variant="destructive"
               onClick={confirmDelete}
               disabled={isDeleting}
+              className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 bg-red-600 hover:bg-red-700 text-white h-10 px-4 py-2"
             >
               {isDeleting ? (
                 <>
@@ -1091,7 +2143,7 @@ const Saidas = () => {
               ) : (
                 <>
                   <Trash2 className="h-4 w-4 mr-2" />
-                  Excluir Saída
+                  Excluir Venda
                 </>
               )}
             </Button>
@@ -1101,7 +2153,7 @@ const Saidas = () => {
 
       {/* Modal de Edição de Saída */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg">
               <Edit className="h-5 w-5 text-blue-600" />
@@ -1197,16 +2249,17 @@ const Saidas = () => {
 
       {/* Modal de Receita */}
       <Dialog open={showReceipt} onOpenChange={setShowReceipt}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-green-600">
-              <CheckCircle className="h-6 w-6" />
-              Receita de Saída
-            </DialogTitle>
-          </DialogHeader>
-          
-          {selectedExit && (
-            <div className="space-y-4">
+        <DialogContent className="max-w-md sm:max-w-lg max-h-[90vh] flex flex-col p-0 overflow-hidden !md:overflow-hidden">
+          <div className="overflow-y-auto flex-1 px-6 pt-6 pb-6 min-h-0">
+            <DialogHeader className="pb-4 border-b">
+              <DialogTitle className="flex items-center gap-2 text-green-600">
+                <CheckCircle className="h-6 w-6" />
+                Receita de Venda
+              </DialogTitle>
+            </DialogHeader>
+            
+            {selectedExit && (
+              <div className="space-y-4 pt-4">
               {/* Cabeçalho da Receita */}
               <div className="border-b pb-4">
                 <div className="text-center mb-3">
@@ -1286,7 +2339,7 @@ const Saidas = () => {
               {/* Botões de Ação */}
               <div className="space-y-2 pt-2">
                 <Button 
-                  className="w-full bg-green-600 hover:bg-green-700"
+                  className="w-full bg-green-600 hover:bg-green-700 text-white"
                   onClick={() => handleDownloadReceipt(selectedExit)}
                 >
                   <Share2 className="mr-2 h-4 w-4" />
@@ -1316,7 +2369,8 @@ const Saidas = () => {
                 <p className="mt-1">💚 Flexi Gestor - Gestão Inteligente</p>
               </div>
             </div>
-          )}
+            )}
+          </div>
         </DialogContent>
       </Dialog>
                     </main>

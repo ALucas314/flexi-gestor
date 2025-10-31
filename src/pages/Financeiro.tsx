@@ -439,7 +439,7 @@ Compra registrada com sucesso!
             <CardHeader className="pb-4">
               <CardTitle className="flex items-center gap-2 text-slate-800">
                 <Filter className="w-5 h-5 text-slate-600" />
-                🔍 Filtros e Busca
+                Filtros e Busca
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -448,7 +448,7 @@ Compra registrada com sucesso!
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-500 w-5 h-5" />
                   <Input
-                    placeholder="🔍 Buscar movimentações..."
+                    placeholder="Buscar movimentações..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="pl-10 bg-white border-slate-300"
@@ -503,6 +503,7 @@ Compra registrada com sucesso!
                       <TableHead className="font-semibold text-slate-700 hidden sm:table-cell">🏷️ Tipo</TableHead>
                       <TableHead className="font-semibold text-slate-700">📦 Produto</TableHead>
                       <TableHead className="font-semibold text-slate-700 hidden lg:table-cell">📝 Descrição</TableHead>
+                      <TableHead className="font-semibold text-slate-700 hidden md:table-cell">💳 Pagamento</TableHead>
                       <TableHead className="font-semibold text-slate-700 hidden sm:table-cell">🔢 Qtd</TableHead>
                       <TableHead className="font-semibold text-slate-700">💰 Valor</TableHead>
                       <TableHead className="font-semibold text-slate-700">📄 Doc</TableHead>
@@ -549,6 +550,15 @@ Compra registrada com sucesso!
                           
                           <TableCell className="hidden lg:table-cell">
                             <span className="text-sm text-slate-600">{movement.description}</span>
+                          </TableCell>
+                          <TableCell className="hidden md:table-cell">
+                            {movement.paymentMethod ? (
+                              <Badge className="bg-violet-100 text-violet-800 border-violet-300 text-xs">
+                                {movement.paymentMethod.startsWith('parcelado-') ? movement.paymentMethod.replace('parcelado-', '') : movement.paymentMethod}
+                              </Badge>
+                            ) : (
+                              <span className="text-slate-400 text-sm">—</span>
+                            )}
                           </TableCell>
                           
                           <TableCell className="hidden sm:table-cell">
@@ -622,16 +632,17 @@ Compra registrada com sucesso!
 
       {/* Modal de Receita (Saída) */}
       <Dialog open={showReceipt} onOpenChange={setShowReceipt}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-green-600">
-              <CheckCircle className="h-6 w-6" />
-              Detalhes da Receita
-            </DialogTitle>
-          </DialogHeader>
-          
-          {selectedMovement && (
-            <div className="space-y-4">
+        <DialogContent className="max-w-md sm:max-w-lg max-h-[90vh] flex flex-col p-0 overflow-hidden !md:overflow-hidden">
+          <div className="overflow-y-auto flex-1 px-6 pt-6 pb-6 min-h-0">
+            <DialogHeader className="pb-4 border-b">
+              <DialogTitle className="flex items-center gap-2 text-green-600">
+                <CheckCircle className="h-6 w-6" />
+                Detalhes da Receita
+              </DialogTitle>
+            </DialogHeader>
+            
+            {selectedMovement && (
+              <div className="space-y-4 pt-4">
               {/* Cabeçalho da Receita */}
               <div className="border-b pb-4">
                 <div className="text-center mb-3">
@@ -656,6 +667,14 @@ Compra registrada com sucesso!
                     <span className="text-gray-600">Tipo:</span>
                     <span className="font-semibold">Venda PDV</span>
                   </div>
+                  {selectedMovement.paymentMethod && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Pagamento:</span>
+                      <span className="font-semibold">
+                        {selectedMovement.paymentMethod.startsWith('parcelado-') ? selectedMovement.paymentMethod.replace('parcelado-', '') : selectedMovement.paymentMethod}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -700,7 +719,7 @@ Compra registrada com sucesso!
               {/* Botões de Ação */}
               <div className="space-y-2 pt-2">
                 <Button 
-                  className="w-full bg-green-600 hover:bg-green-700"
+                  className="w-full bg-green-600 hover:bg-green-700 text-white"
                   onClick={() => downloadReceipt(selectedMovement)}
                 >
                   <Share2 className="mr-2 h-4 w-4" />
@@ -732,22 +751,24 @@ Compra registrada com sucesso!
                 <p className="mt-1">💚 Flexi Gestor - Gestão Inteligente</p>
               </div>
             </div>
-          )}
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 
       {/* Modal de Compra (Entrada) */}
       <Dialog open={showPurchase} onOpenChange={setShowPurchase}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-blue-600">
-              <CheckCircle className="h-6 w-6" />
-              Comprovante de Compra
-            </DialogTitle>
-          </DialogHeader>
-          
-          {selectedMovement && (
-            <div className="space-y-4">
+        <DialogContent className="max-w-md sm:max-w-lg max-h-[90vh] flex flex-col p-0 overflow-hidden !md:overflow-hidden">
+          <div className="overflow-y-auto flex-1 px-6 pt-6 pb-6 min-h-0">
+            <DialogHeader className="pb-4 border-b">
+              <DialogTitle className="flex items-center gap-2 text-blue-600">
+                <CheckCircle className="h-6 w-6" />
+                Comprovante de Compra
+              </DialogTitle>
+            </DialogHeader>
+            
+            {selectedMovement && (
+              <div className="space-y-4 pt-4">
               {/* Cabeçalho do Comprovante */}
               <div className="border-b pb-4">
                 <div className="text-center mb-3">
@@ -848,7 +869,8 @@ Compra registrada com sucesso!
                 <p className="mt-1">📦 Flexi Gestor - Controle de Estoque</p>
               </div>
             </div>
-          )}
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </main>

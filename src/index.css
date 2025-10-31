@@ -150,8 +150,9 @@ All colors MUST be HSL.
     --warning: 45 90% 75%;
     --warning-foreground: 220 15% 25%;
 
-    --destructive: 0 70% 75%;
-    --destructive-foreground: 220 15% 25%;
+    /* Vermelho forte (equivalente ao Tailwind red-600) */
+    --destructive: 0 72% 45%;
+    --destructive-foreground: 0 0% 98%;
 
     /* Cores de Informação - Azul suave */
     --info: 210 100% 80%;
@@ -198,6 +199,13 @@ All colors MUST be HSL.
     margin: 0;
     padding: 0;
     overflow-x: hidden;
+    overflow-y: auto;
+  }
+  
+  /* Desabilitar scroll do body quando estiver em telas de login */
+  body.no-scroll {
+    overflow: hidden !important;
+    height: 100vh !important;
   }
   
   #root {
@@ -207,7 +215,21 @@ All colors MUST be HSL.
     flex-direction: column;
   }
   
-  /* Correções específicas para mobile */
+  /* Garantir que todos os elementos respeitem o viewport */
+  * {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  
+  /* Correções específicas para mobile e telas pequenas */
+  @media (max-width: 1440px) {
+    /* Em telas menores, garantir que diálogos sejam mais responsivos */
+    [role="dialog"] {
+      max-width: 95vw !important;
+      margin: 0.5rem !important;
+    }
+  }
+  
   @media (max-width: 768px) {
     html {
       font-size: 14px;
@@ -216,12 +238,6 @@ All colors MUST be HSL.
     body {
       font-size: 0.875rem;
       line-height: 1.5;
-    }
-    
-    /* Garantir que elementos não saiam da tela */
-    * {
-      max-width: 100%;
-      box-sizing: border-box;
     }
     
     /* Corrigir problemas de layout mobile */
@@ -233,6 +249,12 @@ All colors MUST be HSL.
     .container {
       padding-left: 1rem !important;
       padding-right: 1rem !important;
+    }
+    
+    /* Diálogos em mobile devem ser quase fullscreen */
+    [role="dialog"] {
+      max-width: 98vw !important;
+      margin: 1rem !important;
     }
   }
   

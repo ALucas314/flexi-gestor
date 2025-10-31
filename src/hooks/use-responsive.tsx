@@ -43,10 +43,11 @@ export const useResponsive = (): ResponsiveInfo => {
       let deviceType: DeviceType = 'desktop';
       let breakpoint = 'desktop';
       
+      // Considerar telas menores que 1440px como tablet para melhor responsividade
       if (width < 768) {
         deviceType = 'mobile';
         breakpoint = 'mobile';
-      } else if (width >= 768 && width < 1024) {
+      } else if (width >= 768 && width < 1440) {
         deviceType = 'tablet';
         breakpoint = 'tablet';
       } else {

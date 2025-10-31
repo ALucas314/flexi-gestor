@@ -43,14 +43,19 @@ export const Header = () => {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
 
   // Mostrar burger apenas se: for mobile OU sidebar não está pinado
-  const showBurger = isMobile || isTablet || !isPinned;
+  // Em telas >= 768px com sidebar pinada, não mostrar burger
+  const showBurger = isMobile || (screenWidth < 768) || !isPinned;
+  
+  // Mostrar botão de pin em telas >= 1024px (não mobile)
+  // Mesmo que a sidebar não fique fixa em telas menores que 1440px, o usuário pode tentar fixar
+  const showPinButton = !isMobile && screenWidth >= 1024;
 
   // Calcular notificações não lidas
   const unreadCount = notifications?.filter(n => !n.read).length || 0;
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-indigo-50 via-indigo-100/60 to-indigo-100 backdrop-blur-md border-b border-indigo-200 shadow-lg">
-      <div className={`flex items-center justify-between ${isMobile ? 'px-3 py-3' : 'px-2 sm:px-4 md:px-6 py-3 sm:py-4'} ${isMobile ? 'gap-2' : 'gap-2 sm:gap-4'}`}>
+      <div className={`flex items-center justify-between ${isMobile ? 'px-3 py-2' : 'px-2 sm:px-4 md:px-6 py-3 sm:py-4'} ${isMobile ? 'gap-2' : 'gap-2 sm:gap-4'}`}>
         {/* Logo e Navegação */}
         <div className={`flex items-center ${isMobile ? 'space-x-2' : 'space-x-2 md:space-x-3 lg:space-x-4'}`}>
           {/* Menu Burger - Visível apenas se não estiver pinado OU for mobile */}
@@ -60,21 +65,21 @@ export const Header = () => {
                 <Button 
                   variant="ghost" 
                   size={isMobile ? "default" : "sm"}
-                  className={`${isMobile ? 'p-3 h-12 w-12' : 'p-1.5 md:p-2'} hover:bg-indigo-50 rounded-xl transition-all duration-200`}
+                  className={`${isMobile ? 'p-3 h-16 w-16' : 'p-1.5 md:p-2'} hover:bg-indigo-50 rounded-xl transition-all duration-200`}
                 >
-                  <Menu className={`${isMobile ? 'h-6 w-6' : 'h-5 w-5'} text-indigo-600`} />
+                  <Menu className={`${isMobile ? 'h-8 w-8' : 'h-5 w-5'} text-indigo-600`} strokeWidth={isMobile ? 3 : 2} />
                 </Button>
               </SheetTrigger>
               <SheetContent 
                 side="left" 
-                className={`${isMobile ? 'w-full max-w-sm' : 'w-80'} p-0`}
-                showPin={!isMobile && !isTablet}
+                className={`p-0 bg-gradient-to-br from-indigo-50 via-indigo-100/60 to-indigo-100 flex flex-col ${!isMobile ? '!w-80' : ''}`}
+                showPin={showPinButton}
                 onPinClick={() => {
                   togglePin();
                   setIsSheetOpen(false);
                 }}
               >
-                <SheetHeader className="sr-only">
+                <SheetHeader className="sr-only !m-0 !p-0">
                   <SheetTitle>Navegação</SheetTitle>
                   <SheetDescription>Menu de navegação principal</SheetDescription>
                 </SheetHeader>
@@ -113,7 +118,7 @@ export const Header = () => {
                 )}
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align={isMobile ? "center" : "end"} className={`${isMobile ? 'w-[calc(100vw-2rem)] max-w-md mx-4' : 'w-96'} p-0 rounded-2xl border border-gray-200/50 shadow-2xl bg-white/95 backdrop-blur-lg`}>
+            <DropdownMenuContent align={isMobile ? "center" : "end"} className={`${isMobile ? 'w-[calc(100vw-2rem)] max-w-md mx-4' : 'w-80 max-w-sm'} p-0 rounded-xl border border-gray-200/50 shadow-lg bg-white backdrop-blur-sm`}>
               <div className={`${isMobile ? 'p-4' : 'p-6'} border-b border-neutral-200 bg-gradient-to-r from-indigo-50 to-purple-50`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
@@ -233,7 +238,7 @@ export const Header = () => {
                 )}
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align={isMobile ? "center" : "end"} className={`${isMobile ? 'w-[calc(100vw-2rem)] max-w-sm mx-4' : 'w-72 sm:w-80'} rounded-2xl border border-gray-200/50 shadow-2xl bg-white/95 backdrop-blur-lg p-2`}>
+            <DropdownMenuContent align={isMobile ? "center" : "end"} className={`${isMobile ? 'w-[calc(100vw-2rem)] max-w-sm mx-4' : 'w-64 sm:w-72'} rounded-xl border border-gray-200/50 shadow-lg bg-white backdrop-blur-sm p-2`}>
               {/* Informações do Usuário */}
               <div className="px-4 py-4 border-b border-gray-200/50 bg-gradient-to-br from-indigo-50/50 to-purple-50/50 rounded-xl mb-2">
                 <div className="flex items-center space-x-3">
@@ -244,7 +249,7 @@ export const Header = () => {
                     <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-green-500 border-2 border-white rounded-full"></div>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-900 truncate">{user?.username || user?.name}</p>
+                    <p className="text-sm font-semibold text-gray-900 truncate">{user?.username || user?.name || user?.email?.split('@')[0]}</p>
                     <p className="text-xs text-gray-600 truncate">{user?.email}</p>
                     <div className="flex items-center gap-1.5 mt-1.5">
                       <Shield className="w-3.5 h-3.5 text-indigo-600" />
@@ -291,7 +296,15 @@ export const Header = () => {
               {/* Logout com destaque */}
               <DropdownMenuItem 
                 className="flex items-center gap-3 px-4 py-3 mx-1 cursor-pointer bg-gradient-to-r from-red-50 to-red-100/50 hover:from-red-100 hover:to-red-200/50 rounded-xl text-red-600 hover:text-red-700 transition-all duration-200 group mb-1"
-                onClick={logout}
+                onSelect={async (e) => {
+                  e.preventDefault();
+                  await logout();
+                }}
+                onClick={async (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  await logout();
+                }}
               >
                 <div className="w-9 h-9 bg-red-200/50 rounded-lg flex items-center justify-center group-hover:bg-red-300/50 group-hover:scale-110 transition-all duration-200">
                   <LogOut className="h-4 w-4" />

@@ -1,4 +1,4 @@
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { TrendingUp } from 'lucide-react';
 import { FullscreenChart } from '../ui/fullscreen-chart';
@@ -53,7 +53,7 @@ export function SalesChart({ movements }: SalesChartProps) {
 
   const chartContent = chartData.length > 0 ? (
     <ResponsiveContainer width="100%" height={300}>
-      <AreaChart data={chartData}>
+      <BarChart data={chartData} barCategoryGap="20%">
         <CartesianGrid strokeDasharray="3 3" />
         <XAxis dataKey="month" />
         <YAxis />
@@ -64,15 +64,25 @@ export function SalesChart({ movements }: SalesChartProps) {
           ]}
           labelFormatter={(label) => `Mês: ${label}`}
         />
-        <Area 
-          type="monotone" 
+        <Bar 
           dataKey="vendas" 
-          stroke="#8884d8" 
-          fill="#8884d8" 
-          fillOpacity={0.3}
+          fill="#3b82f6" 
+          radius={[4, 4, 0, 0]}
           name="Quantidade Vendida"
-        />
-      </AreaChart>
+          barSize={180}
+        >
+          <LabelList 
+            dataKey="vendas" 
+            position="top"
+            formatter={(value: number) => `${value} un`}
+            style={{ 
+              fill: '#2563eb', 
+              fontSize: '10px', 
+              fontWeight: '700' 
+            }}
+          />
+        </Bar>
+      </BarChart>
     </ResponsiveContainer>
   ) : (
     <div className="flex items-center justify-center h-[300px] text-muted-foreground">
@@ -81,7 +91,7 @@ export function SalesChart({ movements }: SalesChartProps) {
   );
 
   return (
-    <Card className="col-span-1 lg:col-span-4 relative">
+    <Card className="w-full h-full relative">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm sm:text-base font-medium">Quantidade de Vendas Mensais</CardTitle>
         <TrendingUp className="h-4 w-4 text-muted-foreground" />
@@ -96,7 +106,7 @@ export function SalesChart({ movements }: SalesChartProps) {
         icon={<TrendingUp className="h-5 w-5" />}
       >
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={chartData}>
+          <BarChart data={chartData} barCategoryGap="20%">
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="month" />
             <YAxis />
@@ -107,15 +117,25 @@ export function SalesChart({ movements }: SalesChartProps) {
               ]}
               labelFormatter={(label) => `Mês: ${label}`}
             />
-            <Area 
-              type="monotone" 
+            <Bar 
               dataKey="vendas" 
-              stroke="#8884d8" 
-              fill="#8884d8" 
-              fillOpacity={0.3}
+              fill="#3b82f6" 
+              radius={[4, 4, 0, 0]}
               name="Quantidade Vendida"
-            />
-          </AreaChart>
+              barSize={180}
+            >
+              <LabelList 
+                dataKey="vendas" 
+                position="top"
+                formatter={(value: number) => `${value} un`}
+                style={{ 
+                  fill: '#2563eb', 
+                  fontSize: '10px', 
+                  fontWeight: '700' 
+                }}
+              />
+            </Bar>
+          </BarChart>
         </ResponsiveContainer>
       </FullscreenChart>
     </Card>

@@ -33,8 +33,8 @@
     X-XSS-Protection = "1; mode=block"
     Referrer-Policy = "strict-origin-when-cross-origin"
     
-    # Permitir conexão com Supabase
-    Content-Security-Policy = "default-src 'self'; connect-src 'self' https://ujohzrebqzeochsozmac.supabase.co https://*.supabase.co; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:;"
+    # Permitir conexão com Supabase (incluindo WebSocket wss://)
+    Content-Security-Policy = "default-src 'self'; connect-src 'self' https://ujohzrebqzeochsozmac.supabase.co https://*.supabase.co wss://ujohzrebqzeochsozmac.supabase.co wss://*.supabase.co ws://localhost:*; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:;"
 
 # ========================================
 # CACHE E PERFORMANCE

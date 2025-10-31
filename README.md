@@ -8,7 +8,7 @@
 
 *Sistema completo de gestão empresarial para controlar estoque, vendas e finanças com precisão e eficiência*
 
-[📱 **Demo Online**](#) • [📋 **Documentação**](#) • [🚀 **Começar**](#)
+[📱 **Demo Online**](https://flexigestor5.netlify.app/login) 
 
 </div>
 
@@ -16,14 +16,13 @@
 
 ## ✨ **Visão Geral**
 
-O **Flexi Gestor** é uma solução empresarial moderna e intuitiva desenvolvida com as mais recentes tecnologias web. Especialmente otimizado para gestão de produtos de açaí e complementos, oferece controle total sobre estoque, movimentações financeiras e relatórios analíticos.
+O **Flexi Gestor** é uma solução empresarial moderna e intuitiva desenvolvida com as mais recentes tecnologias web. Especialmente otimizado para gestão de produtos, oferece controle total sobre estoque, movimentações financeiras e relatórios analíticos.
 
 ### 🎯 **Principais Benefícios**
 - **⚡ Interface Moderna**: Design responsivo e intuitivo
 - **📊 Controle Total**: Gestão completa de estoque e vendas
 - **🔒 Segurança**: Sistema robusto e confiável
 - **📱 Multi-dispositivo**: Funciona perfeitamente em qualquer tela
-- **🎨 Personalizável**: Cores e temas adaptáveis
 
 ---
 
@@ -76,7 +75,6 @@ O **Flexi Gestor** é uma solução empresarial moderna e intuitiva desenvolvida
 - ✅ Busca avançada por produtos
 - ✅ Filtros por categoria e status
 - ✅ Histórico de movimentações
-- ✅ Relatórios personalizáveis
 
 ---
 
@@ -262,16 +260,6 @@ VITE_SUPABASE_ANON_KEY=sua_chave_aqui
 
 ---
 
-## 📞 **Suporte e Contato**
-
-<div align="center">
-
-![Email](https://img.shields.io/badge/Email-suporte@flexigestor.com-blue?style=for-the-badge&logo=gmail)
-![WhatsApp](https://img.shields.io/badge/WhatsApp-+55%2011%2099999--9999-green?style=for-the-badge&logo=whatsapp)
-![LinkedIn](https://img.shields.io/badge/LinkedIn-Flexi%20Gestor-blue?style=for-the-badge&logo=linkedin)
-
-</div>
-
 
 
 ---
@@ -280,9 +268,11 @@ VITE_SUPABASE_ANON_KEY=sua_chave_aqui
 
 <div align="center">
 
-![License](https://img.shields.io/badge/Licença-MIT-green?style=for-the-badge)
+![License](https://img.shields.io/badge/Licença-Uso%20Não%20Comercial-orange?style=for-the-badge)
 
-Este projeto está licenciado sob a **MIT License** - veja o arquivo [LICENSE](LICENSE) para detalhes.
+Este projeto está licenciado sob **Uso Não Comercial** - veja o arquivo [LICENSE](LICENSE) para detalhes.
+
+⚠️ **Uso comercial é EXPRESSAMENTE PROIBIDO** sem autorização do autor.
 
 </div>
 
@@ -294,7 +284,7 @@ Este projeto está licenciado sob a **MIT License** - veja o arquivo [LICENSE](L
 
 *Desenvolvido com ❤️ pela equipe Flexi Gestor*
 
-**Contribuidores**: [Seu Nome](https://github.com/seu-usuario)
+**Contribuidores**: [Antônio Lucas Costa Araújo](https://github.com/ALucas314)
 
 </div>
 
@@ -303,7 +293,5 @@ Este projeto está licenciado sob a **MIT License** - veja o arquivo [LICENSE](L
 <div align="center">
 
 **⭐ Se este projeto te ajudou, considere dar uma estrela! ⭐**
-
-[![GitHub stars](https://img.shields.io/github/stars/seu-usuario/flexi-gestor?style=social)](https://github.com/seu-usuario/flexi-gestor)
 
 </div>

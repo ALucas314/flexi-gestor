@@ -38,7 +38,8 @@ const PAGINAS_DISPONIVEIS = [
   { id: 'saidas', label: 'Saídas', icon: '📤' },
   { id: 'relatorios', label: 'Relatórios', icon: '📊' },
   { id: 'financeiro', label: 'Financeiro', icon: '💰' },
-  { id: 'pdv', label: 'PDV', icon: '🛒' }
+  { id: 'fornecedores', label: 'Fornecedores', icon: '🏢' },
+  { id: 'clientes', label: 'Clientes', icon: '👤' }
 ];
 
 const Compartilhar = () => {
@@ -48,7 +49,7 @@ const Compartilhar = () => {
   const { confirm, dialogState, closeDialog, handleConfirm } = useConfirmDialog();
   const [emailCompartilhar, setEmailCompartilhar] = useState('');
   const [permissoesSelecionadas, setPermissoesSelecionadas] = useState<string[]>([
-    'produtos', 'entradas', 'saidas', 'relatorios', 'financeiro', 'pdv'
+    'produtos', 'entradas', 'saidas', 'relatorios', 'financeiro', 'fornecedores', 'clientes'
   ]);
   const [compartilhamentos, setCompartilhamentos] = useState<Compartilhamento[]>([]);
   const [compartilhadosComigo, setCompartilhadosComigo] = useState<Compartilhamento[]>([]);
@@ -314,9 +315,14 @@ const Compartilhar = () => {
   const removerCompartilhamento = (compartilhamentoId: string, nomeUsuario: string) => {
     confirm(
       'Remover Acesso?',
-      `Deseja remover o acesso de ${nomeUsuario}?\n\nOs dados permanecerão, mas o usuário não poderá mais visualizar ou editar.`,
+      `Deseja remover o acesso de ${nomeUsuario}?\n\nIsso desconectará ambos os lados automaticamente. Os dados permanecerão, mas o usuário não poderá mais visualizar ou editar.`,
       async () => {
         try {
+          // Buscar o compartilhamento para pegar o ID do usuário compartilhado
+          const compartilhamento = compartilhamentos.find(c => c.id === compartilhamentoId);
+          const usuarioCompartilhadoId = compartilhamento?.usuario_compartilhado_id;
+          
+          // Inativar o compartilhamento
           const { error } = await supabase
             .from('compartilhamentos')
             .update({ status: 'inativo' })
@@ -324,9 +330,24 @@ const Compartilhar = () => {
 
           if (error) throw error;
 
-          toast.success('Acesso removido com sucesso');
+          toast.success('✅ Acesso removido com sucesso! Ambos os lados foram desconectados.');
+          
+          // Verificar se o workspace ativo é o que foi removido
+          const workspaceAtivoId = localStorage.getItem('flexi_workspace_ativo');
+          
+          if (workspaceAtivoId === usuarioCompartilhadoId) {
+            // Se estamos visualizando o workspace do usuário que teve o acesso removido,
+            // voltar para o próprio workspace
+            localStorage.setItem('flexi_workspace_ativo', user?.id || '');
+            toast.info('Voltando para seu workspace...');
+          }
+          
           carregarCompartilhamentos();
-          // Não precisa recarregar a página aqui porque a pessoa que teve o acesso removido vai ver a mudança quando atualizar
+          
+          // Atualizar header/WorkspaceSelector sem reload forçando evento global
+          setTimeout(() => {
+            window.dispatchEvent(new Event('workspace-changed'));
+          }, 300);
         } catch (error) {
           console.error('Erro ao remover compartilhamento:', error);
           toast.error('Erro ao remover acesso');
@@ -343,7 +364,7 @@ const Compartilhar = () => {
   const revogarAcessoCompartilhado = (compartilhamentoId: string, nomeUsuario: string) => {
     confirm(
       'Revogar Acesso?',
-      `Deseja remover seu acesso aos dados de ${nomeUsuario}?\n\nVocê não poderá mais visualizar ou editar esses dados.\n\nIsso também removerá o botão deste workspace no menu superior.`,
+      `Deseja remover seu acesso aos dados de ${nomeUsuario}?\n\nIsso desconectará ambos os lados automaticamente. Você não poderá mais visualizar ou editar esses dados.\n\nIsso também removerá o botão deste workspace no menu superior.`,
       async () => {
         try {
       // Buscar o compartilhamento para pegar o ID do dono
@@ -363,7 +384,7 @@ const Compartilhar = () => {
 
       if (error) throw error;
 
-      toast.success('✅ Seu acesso foi removido com sucesso!');
+      toast.success('✅ Seu acesso foi removido com sucesso! Ambos os lados foram desconectados.');
 
       // Verificar se o workspace ativo é o que foi removido
       const workspaceAtivoId = localStorage.getItem('flexi_workspace_ativo');
@@ -377,10 +398,10 @@ const Compartilhar = () => {
       // Atualizar a lista de compartilhamentos
       carregarCompartilhamentos();
       
-      // Recarregar após um momento para atualizar o header
+      // Atualizar header sem reload: emite evento global
       setTimeout(() => {
-        window.location.reload();
-      }, 1000);
+        window.dispatchEvent(new Event('workspace-changed'));
+      }, 300);
         } catch (error) {
           toast.error('Erro ao remover acesso');
         }

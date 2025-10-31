@@ -32,9 +32,9 @@ const getMovementIcon = (type: string) => {
 const getMovementBadge = (type: string) => {
   switch (type) {
     case 'entrada':
-      return <Badge variant="secondary" className="bg-blue-100 text-blue-700 border-blue-200 px-2 py-1 rounded-full text-xs font-medium">📥 Entrada</Badge>;
+      return <Badge variant="secondary" className="bg-blue-100 text-blue-700 border-blue-200 px-2 py-1 rounded-full text-xs font-medium">📥 Compra</Badge>;
     case 'saida':
-      return <Badge variant="secondary" className="bg-red-100 text-red-700 border-red-200 px-2 py-1 rounded-full text-xs font-medium">📤 Saída</Badge>;
+      return <Badge variant="secondary" className="bg-red-100 text-red-700 border-red-200 px-2 py-1 rounded-full text-xs font-medium">📤 Venda</Badge>;
     case 'ajuste':
       return <Badge variant="secondary" className="bg-purple-100 text-purple-700 border-purple-200 px-2 py-1 rounded-full text-xs font-medium">⚙️ Ajuste</Badge>;
     default:
