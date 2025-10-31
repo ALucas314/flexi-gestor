@@ -93,6 +93,53 @@ const Financeiro = () => {
   const totalSaidas = saidas.reduce((sum, m) => sum + m.total, 0); // Receitas de venda
   const saldo = totalSaidas - totalEntradas; // Lucro = Receitas - Custos
 
+  // Calcular lucro por produto (considerando apenas o custo das unidades vendidas)
+  const profitByProduct = products.map(product => {
+    const productEntradas = entradas.filter(m => m.productId === product.id);
+    const productSaidas = saidas.filter(m => m.productId === product.id);
+    
+    const quantidadeVendida = productSaidas.reduce((sum, m) => sum + m.quantity, 0);
+    const quantidadeComprada = productEntradas.reduce((sum, m) => sum + m.quantity, 0);
+    const totalVenda = productSaidas.reduce((sum, m) => sum + m.total, 0); // Receita de venda
+    
+    // Calcular custo médio ponderado das compras
+    let custoMedioPonderado = 0;
+    let totalGastoCompras = 0;
+    let totalQuantidadeCompras = 0;
+    
+    if (productEntradas.length > 0) {
+      totalGastoCompras = productEntradas.reduce((sum, m) => sum + m.total, 0);
+      totalQuantidadeCompras = productEntradas.reduce((sum, m) => sum + m.quantity, 0);
+      custoMedioPonderado = totalQuantidadeCompras > 0 ? totalGastoCompras / totalQuantidadeCompras : 0;
+    }
+    
+    // Custo apenas das unidades vendidas (não de todas as compras)
+    const custoDasVendas = quantidadeVendida * custoMedioPonderado;
+    const totalCompraVendas = custoDasVendas; // Custo apenas do que foi vendido
+    
+    // Lucro = Receita de Venda - Custo das unidades vendidas
+    const lucro = totalVenda - custoDasVendas;
+    
+    return {
+      productId: product.id,
+      productName: product.name,
+      productSku: product.sku,
+      totalCompra: totalCompraVendas, // Custo apenas das vendas
+      totalCompraTotal: totalGastoCompras, // Custo total de todas as compras (para referência)
+      totalVenda,
+      lucro,
+      quantidadeVendida,
+      quantidadeComprada,
+      custoMedio: custoMedioPonderado,
+    };
+  }).filter(p => p.totalVenda > 0 || p.totalCompraTotal > 0); // Apenas produtos com movimentações
+
+  // Lucro total de todos os produtos
+  const lucroTotal = profitByProduct.reduce((sum, p) => sum + p.lucro, 0);
+  
+  // Ordenar por lucro (maior para menor)
+  const profitByProductSorted = [...profitByProduct].sort((a, b) => b.lucro - a.lucro);
+
   // Movimentações do mês atual
   const now = new Date();
   const thisMonthMovements = movements.filter(m => {
@@ -366,6 +413,102 @@ Compra registrada com sucesso!
                     </p>
                   </div>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Card de Lucro Total */}
+          <Card className={`bg-gradient-to-br ${lucroTotal >= 0 ? 'from-green-50 to-emerald-50 border-green-200' : 'from-red-50 to-rose-50 border-red-200'} shadow-xl`}>
+            <CardHeader>
+              <CardTitle className={`text-xl font-bold flex items-center gap-2 ${lucroTotal >= 0 ? 'text-green-900' : 'text-red-900'}`}>
+                <TrendingUp className={`h-6 w-6 ${lucroTotal >= 0 ? 'text-green-600' : 'text-red-600'}`} />
+                Lucro Total por Produtos
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between p-6 bg-white/60 rounded-xl border-2 border-green-300">
+                <div>
+                  <p className="text-sm text-gray-600 mb-2">💰 Lucro Total de Todos os Produtos</p>
+                  <p className={`text-4xl font-bold ${lucroTotal >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {lucroTotal >= 0 ? '+' : ''}R$ {lucroTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </p>
+                  <p className={`text-xs ${lucroTotal >= 0 ? 'text-green-600' : 'text-red-600'} mt-2 font-semibold`}>
+                    {lucroTotal >= 0 ? '✅ Lucro positivo' : '⚠️ Prejuízo'}
+                  </p>
+                </div>
+                <div className={`w-20 h-20 ${lucroTotal >= 0 ? 'bg-green-300/50' : 'bg-red-300/50'} rounded-full flex items-center justify-center backdrop-blur-sm`}>
+                  <TrendingUp className={`w-10 h-10 ${lucroTotal >= 0 ? 'text-green-700' : 'text-red-700'}`} />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Lucro por Produto */}
+          <Card className="bg-white border-slate-200 shadow-sm">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-slate-800">
+                <Package className="w-5 h-5 text-slate-600" />
+                📊 Lucro por Produto
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="rounded-md border border-slate-200 overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-slate-50 hover:bg-slate-100">
+                      <TableHead className="font-semibold text-slate-700">📦 Produto</TableHead>
+                      <TableHead className="font-semibold text-slate-700 hidden md:table-cell">SKU</TableHead>
+                      <TableHead className="font-semibold text-slate-700">💵 Total Compra</TableHead>
+                      <TableHead className="font-semibold text-slate-700">💸 Total Venda</TableHead>
+                      <TableHead className="font-semibold text-slate-700">💰 Lucro</TableHead>
+                      <TableHead className="font-semibold text-slate-700 hidden lg:table-cell">🔢 Qtd Vendida</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {profitByProductSorted.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-12">
+                          <div className="flex flex-col items-center gap-3">
+                            <Package className="w-12 h-12 text-slate-300" />
+                            <div className="text-slate-500">
+                              <p className="font-medium">Nenhum produto com movimentações encontrado</p>
+                              <p className="text-sm">Registre compras e vendas para ver o lucro por produto</p>
+                            </div>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      profitByProductSorted.map((item) => (
+                        <TableRow key={item.productId} className="hover:bg-slate-50 transition-colors">
+                          <TableCell>
+                            <div className="font-medium text-slate-900 text-sm">{item.productName}</div>
+                          </TableCell>
+                          <TableCell className="hidden md:table-cell">
+                            <span className="text-sm text-slate-600">{item.productSku || '—'}</span>
+                          </TableCell>
+                          <TableCell>
+                            <span className="font-semibold text-blue-600 text-sm">
+                              R$ {item.totalCompra.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <span className="font-semibold text-orange-600 text-sm">
+                              R$ {item.totalVenda.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <span className={`font-bold text-sm ${item.lucro >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              {item.lucro >= 0 ? '+' : ''}R$ {item.lucro.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </span>
+                          </TableCell>
+                          <TableCell className="hidden lg:table-cell">
+                            <span className="font-semibold text-slate-900">{item.quantidadeVendida}</span>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
               </div>
             </CardContent>
           </Card>
