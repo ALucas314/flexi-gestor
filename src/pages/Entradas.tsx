@@ -2459,17 +2459,7 @@ const Entradas = () => {
 
       {/* Modal de Gerenciamento de Lotes */}
       <Dialog open={isBatchDialogOpen} onOpenChange={setIsBatchDialogOpen}>
-        <DialogContent className="max-w-md sm:max-w-lg md:max-w-xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl">
-              <Calendar className="h-5 w-5 text-indigo-600" />
-              Gerenciar Lotes
-            </DialogTitle>
-            <DialogDescription className="text-sm sm:text-base">
-              Controle os lotes deste produto com datas de fabricação e validade
-            </DialogDescription>
-          </DialogHeader>
-
+        <DialogContent className="max-w-md sm:max-w-lg md:max-w-xl max-h-[90vh] overflow-y-auto pt-8">
           {selectedProductForBatch && (
             <BatchManager
               productId={selectedProductForBatch.id}
@@ -2482,18 +2472,6 @@ const Entradas = () => {
               }}
             />
           )}
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setIsBatchDialogOpen(false);
-                setSelectedProductForBatch(null);
-              }}
-            >
-              Fechar
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </main>

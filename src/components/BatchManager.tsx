@@ -273,115 +273,196 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
 
   return (
     <>
-    <div className="space-y-4">
-      {/* Cabeçalho com botão de adicionar */}
-      <div className="flex items-center justify-end">
+    <div className="space-y-3 pt-4">
+      {/* Header com título e botão */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <h3 className="font-semibold flex items-center gap-1.5 text-base text-gray-900">
+            <Calendar className="h-4 w-4 text-indigo-600" />
+            Gerenciar Lotes
+          </h3>
+        </div>
         <Button 
           onClick={async () => {
+            // Recarregar lotes atualizados antes de gerar o próximo número
+            if (user?.id && productId) {
+              await loadBatches();
+            }
+            
+            // Abrir diálogo
             setIsDialogOpen(!isDialogOpen);
             
             // Gerar automaticamente o próximo número de lote disponível
             if (user?.id && productId) {
               try {
-                const nextBatchNumber = await generateNextAvailableBatchNumber(productId, user.id, batches);
+                // A função generateNextAvailableBatchNumber busca TODOS os lotes de TODOS os produtos
+                // para garantir numeração global (1, 2, 3...) independente do produto
+                const nextBatchNumber = await generateNextAvailableBatchNumber(productId, user.id, []);
+                
+                console.log('Próximo número de lote gerado (global):', nextBatchNumber);
+                
                 setFormData({
                   batchNumber: nextBatchNumber,
                   quantity: ''
                 });
               } catch (error) {
                 console.error('Erro ao gerar número do lote:', error);
-                // Fallback: usar SKU do produto
+                // Fallback: contar lotes manualmente a partir dos batches atualizados
+                const usedNumbers = new Set<number>();
+                batches.forEach(b => {
+                  if (b.batchNumber) {
+                    const numberMatch = b.batchNumber.match(/\d+/);
+                    if (numberMatch) {
+                      const num = parseInt(numberMatch[0], 10);
+                      if (!isNaN(num)) {
+                        usedNumbers.add(num);
+                      }
+                    }
+                  }
+                });
+                let nextNumber = 1;
+                while (usedNumbers.has(nextNumber)) {
+                  nextNumber++;
+                }
+                console.log('Fallback - Próximo número:', nextNumber, 'Números usados:', Array.from(usedNumbers));
                 setFormData({
-                  batchNumber: productSku,
+                  batchNumber: String(nextNumber),
                   quantity: ''
                 });
               }
             } else {
-              // Fallback: usar SKU do produto
+              // Fallback: contar lotes manualmente
+              const usedNumbers = new Set<number>();
+              batches.forEach(b => {
+                if (b.batchNumber) {
+                  const numberMatch = b.batchNumber.match(/\d+/);
+                  if (numberMatch) {
+                    const num = parseInt(numberMatch[0], 10);
+                    if (!isNaN(num)) {
+                      usedNumbers.add(num);
+                    }
+                  }
+                }
+              });
+              let nextNumber = 1;
+              while (usedNumbers.has(nextNumber)) {
+                nextNumber++;
+              }
               setFormData({
-                batchNumber: productSku,
+                batchNumber: String(nextNumber),
                 quantity: ''
               });
             }
           }}
-          className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white"
+          className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white shadow-sm hover:shadow-md transition-all text-xs h-8 px-2.5"
+          size="sm"
         >
-          <Plus className="mr-2 h-4 w-4" />
+          <Plus className="mr-1 h-3 w-3" />
           Novo Lote
         </Button>
       </div>
 
-      {/* Formulário inline para adicionar lote */}
+      {/* Formulário para adicionar lote */}
       {isDialogOpen && (
-        <Card className="bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200">
-          <CardContent className="p-4 space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="batchNumber" className="flex items-center justify-between">
-                <span>📦 Número do Lote *</span>
-                <span className="text-xs text-gray-500 font-normal">
-                  SKU: {productSku}
-                </span>
-              </Label>
-              <Input
-                id="batchNumber"
-                placeholder={formData.batchNumber || "Gerado automaticamente"}
-                value={formData.batchNumber}
-                onChange={(e) => setFormData(prev => ({ ...prev, batchNumber: e.target.value }))}
-                className="font-semibold"
-              />
+        <Card className="bg-gradient-to-br from-indigo-50 via-purple-50 to-indigo-50 border-2 border-indigo-200 shadow-sm">
+          <CardContent className="p-3 space-y-3">
+            <div className="flex items-center justify-between pb-1.5 border-b border-indigo-200">
+              <h4 className="text-xs font-semibold text-gray-900 flex items-center gap-1">
+                <Package className="h-3.5 w-3.5 text-indigo-600" />
+                Adicionar Novo Lote
+              </h4>
+              <span className="text-xs text-gray-500 bg-white px-1.5 py-0.5 rounded border border-indigo-100">
+                SKU: {productSku}
+              </span>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="quantity">🔢 Quantidade *</Label>
-              {(() => {
-                const totalAllocated = batches.reduce((sum, b) => sum + b.quantity, 0);
-                const availableStock = productStock - totalAllocated;
-                
-                return (
-                  <>
-                    <Input
-                      id="quantity"
-                      type="number"
-                      min="1"
-                      max={availableStock}
-                      placeholder={`Máximo: ${availableStock} unidades`}
-                      value={formData.quantity}
-                      onChange={(e) => {
-                        const value = parseInt(e.target.value) || 0;
-                        if (value <= availableStock || e.target.value === '') {
-                          setFormData(prev => ({ ...prev, quantity: e.target.value }));
-                        }
-                      }}
-                      className={`text-lg font-semibold ${
-                        parseInt(formData.quantity) > availableStock ? 'border-red-500' : ''
-                      }`}
-                    />
-                    <div className="text-xs space-y-1">
-                      <p className="text-gray-600">
-                        📦 Disponível: <span className="font-bold text-green-600">{availableStock} unidades</span>
-                      </p>
-                      {parseInt(formData.quantity) > availableStock && (
-                        <span className="block text-red-600 font-semibold">
-                          ⚠️ Quantidade excede o estoque disponível!
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label htmlFor="batchNumber" className="text-xs font-medium text-gray-700">
+                  📦 Número do Lote <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="batchNumber"
+                  placeholder="Gerado automaticamente"
+                  value={formData.batchNumber}
+                  onChange={(e) => setFormData(prev => ({ ...prev, batchNumber: e.target.value }))}
+                  className="font-semibold border-2 border-indigo-200 focus:border-indigo-500 focus:ring-indigo-500 h-8 text-xs"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="quantity" className="text-xs font-medium text-gray-700">
+                  🔢 Quantidade <span className="text-red-500">*</span>
+                </Label>
+                {(() => {
+                  const totalAllocated = batches.reduce((sum, b) => sum + b.quantity, 0);
+                  const availableStock = productStock - totalAllocated;
+                  
+                  return (
+                    <>
+                      <Input
+                        id="quantity"
+                        type="number"
+                        min="1"
+                        max={availableStock}
+                        placeholder={`Máx: ${availableStock}`}
+                        value={formData.quantity}
+                        onChange={(e) => {
+                          const value = parseInt(e.target.value) || 0;
+                          if (value <= availableStock || e.target.value === '') {
+                            setFormData(prev => ({ ...prev, quantity: e.target.value }));
+                          }
+                        }}
+                        className={`text-xs font-semibold border-2 focus:ring-indigo-500 h-8 ${
+                          parseInt(formData.quantity || '0') > availableStock 
+                            ? 'border-red-500 focus:border-red-500 focus:ring-red-500' 
+                            : 'border-indigo-200 focus:border-indigo-500'
+                        }`}
+                      />
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-gray-600">
+                          📦 Disponível: <span className="font-bold text-green-600">{availableStock}</span>
                         </span>
-                      )}
-                    </div>
-                  </>
-                );
-              })()}
+                        {parseInt(formData.quantity || '0') > availableStock && (
+                          <span className="text-red-600 font-semibold flex items-center gap-0.5 text-xs">
+                            <AlertTriangle className="h-2.5 w-2.5" />
+                            Excede!
+                          </span>
+                        )}
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex gap-2 pt-0.5">
               <Button 
                 onClick={handleAddBatch} 
-                disabled={isLoading}
-                className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white"
+                disabled={isLoading || !formData.batchNumber || !formData.quantity}
+                className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white shadow-sm hover:shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed h-8 text-xs"
+                size="sm"
               >
-                {isLoading ? 'Adicionando...' : 'Adicionar Lote'}
+                {isLoading ? (
+                  <>
+                    <div className="animate-spin h-3 w-3 border-2 border-white border-t-transparent rounded-full mr-1"></div>
+                    Adicionando...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="mr-1 h-3 w-3" />
+                    Adicionar Lote
+                  </>
+                )}
               </Button>
               <Button 
                 variant="outline" 
-                onClick={() => setIsDialogOpen(false)}
+                onClick={() => {
+                  setIsDialogOpen(false);
+                  setFormData({ batchNumber: '', quantity: '' });
+                }}
+                className="border-2 border-gray-300 hover:bg-gray-50 h-8 text-xs"
+                size="sm"
               >
                 Cancelar
               </Button>
@@ -390,89 +471,160 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
         </Card>
       )}
 
-      {/* Lista de lotes */}
-      <div className="grid gap-3">
-        {isLoading && batches.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
-            <div className="animate-spin h-8 w-8 border-2 border-indigo-600 border-t-transparent rounded-full mx-auto mb-2"></div>
-            Carregando lotes...
+      {/* Lista de Lotes Cadastrados */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <h3 className="text-xs font-semibold text-gray-900 flex items-center gap-1">
+              <Package className="h-3.5 w-3.5 text-indigo-600" />
+              Lotes Cadastrados
+            </h3>
           </div>
-        ) : batches.length === 0 ? (
+          {batches.length > 0 && (
+            <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200 px-1.5 py-0.5 text-xs shrink-0">
+              {batches.length} {batches.length === 1 ? 'lote' : 'lotes'}
+            </Badge>
+          )}
+        </div>
+
+        {isLoading && batches.length === 0 ? (
           <Card className="bg-gray-50 border-dashed">
-            <CardContent className="pt-6 text-center">
-              <Package className="h-12 w-12 mx-auto mb-3 text-gray-400" />
-              <p className="text-gray-600">Nenhum lote cadastrado</p>
-              <p className="text-sm text-gray-500 mt-1">Adicione um lote para começar</p>
+            <CardContent className="py-12 text-center">
+              <div className="animate-spin h-10 w-10 border-3 border-indigo-600 border-t-transparent rounded-full mx-auto mb-4"></div>
+              <p className="text-gray-600 font-medium">Carregando lotes...</p>
+            </CardContent>
+          </Card>
+        ) : batches.length === 0 ? (
+          <Card className="bg-gradient-to-br from-gray-50 to-indigo-50 border-2 border-dashed border-gray-300">
+            <CardContent className="py-8 text-center">
+              <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <Package className="h-6 w-6 text-indigo-600" />
+              </div>
+              <h4 className="text-sm font-semibold text-gray-900 mb-1">Nenhum lote cadastrado</h4>
+              <p className="text-xs text-gray-600 mb-3">Adicione um lote para começar</p>
+              <Button
+                onClick={() => setIsDialogOpen(true)}
+                className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white h-8 text-xs px-3"
+                size="sm"
+              >
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Criar Primeiro Lote
+              </Button>
             </CardContent>
           </Card>
         ) : (
-          batches.map((batch) => {
-            return (
-              <Card 
-                key={batch.id} 
-                className="hover:shadow-md transition-all border-gray-200"
-              >
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1 space-y-2">
-                      <div className="flex items-center space-x-2">
-                        <Badge variant="outline" className="font-mono font-bold text-sm">
-                          📦 {batch.batchNumber}
-                        </Badge>
-                      </div>
-
-                      <div className="grid grid-cols-1 gap-2 text-sm">
-                        <div>
-                          <p className="text-gray-600">📦 Quantidade:</p>
-                          <p className="font-semibold text-gray-900">{batch.quantity} unidades</p>
+          <div className="grid gap-2 grid-cols-1">
+            {batches.map((batch) => {
+              const status = getBatchStatus(batch.expiryDate);
+              return (
+                <Card 
+                  key={batch.id} 
+                  className="hover:shadow-sm transition-all border-2 border-gray-200 hover:border-indigo-300 bg-white"
+                >
+                  <CardContent className="p-2.5">
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                        <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center shadow-sm shrink-0">
+                          <Package className="h-4 w-4 text-white" />
+                        </div>
+                        <div className="min-w-0">
+                          <Badge variant="outline" className="font-mono font-bold text-xs border-2 border-indigo-200 bg-indigo-50 text-indigo-700">
+                            📦 {batch.batchNumber}
+                          </Badge>
                         </div>
                       </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteBatch(batch.id, batch.batchNumber)}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50 rounded-full h-6 w-6 p-0 shrink-0"
+                        title="Deletar lote"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
                     </div>
 
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDeleteBatch(batch.id, batch.batchNumber)}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })
+                    <div className="space-y-1.5">
+                      <div className="bg-gray-50 rounded-lg p-1.5 border border-gray-200">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-gray-600">📦 Quantidade</span>
+                          <span className="text-sm font-bold text-gray-900">{batch.quantity}</span>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-0.5">unidades</p>
+                      </div>
+
+                      {batch.expiryDate && (
+                        <div className="bg-blue-50 rounded-lg p-1.5 border border-blue-200">
+                          <div className="flex items-center justify-between mb-0.5">
+                            <span className="text-xs text-blue-700">📅 Validade</span>
+                            <Badge 
+                              className={`text-xs px-1 py-0.5 ${
+                                status.color === 'red' ? 'bg-red-100 text-red-700 border-red-300' :
+                                status.color === 'yellow' ? 'bg-yellow-100 text-yellow-700 border-yellow-300' :
+                                'bg-green-100 text-green-700 border-green-300'
+                              }`}
+                            >
+                              {new Date(batch.expiryDate).toLocaleDateString('pt-BR')}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-blue-600">{status.label}</p>
+                        </div>
+                      )}
+
+                      <div className="pt-1 border-t border-gray-200">
+                        <p className="text-xs text-gray-500">
+                          Criado: {new Date(batch.createdAt).toLocaleDateString('pt-BR')}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
         )}
       </div>
 
-      {/* Resumo total */}
-      <Card className="bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200">
-        <CardContent className="p-5">
-          <div className="space-y-4">
+      {/* Resumo de Distribuição */}
+      <Card className="bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-200 shadow-md">
+        <CardContent className="p-3">
+          <div className="space-y-2">
             {/* Cabeçalho do Resumo */}
-            <div className="flex items-center space-x-3 pb-3 border-b border-indigo-200">
-              <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center">
-                <Package className="h-5 w-5 text-white" />
-              </div>
-              <div>
-                <h4 className="font-semibold text-gray-900">📊 Resumo de Distribuição</h4>
-                <p className="text-xs text-gray-600">Distribuição do estoque em lotes</p>
+            <div className="flex items-center justify-between pb-1.5 border-b-2 border-indigo-200">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center shadow-sm">
+                  <Package className="h-3.5 w-3.5 text-white" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-gray-900">📊 Resumo de Distribuição</h4>
+                  <p className="text-xs text-gray-600">Distribuição do estoque</p>
+                </div>
               </div>
             </div>
 
             {/* Grid de Informações */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 gap-1.5">
               {/* Estoque Total */}
-              <div className="bg-white rounded-lg p-3 border border-indigo-100">
-                <p className="text-xs text-gray-600 mb-1">📦 Estoque Total</p>
-                <p className="text-2xl font-bold text-gray-900">{productStock}</p>
+              <div className="bg-white rounded-lg p-2 border-2 border-indigo-200 shadow-sm">
+                <div className="flex items-center gap-1 mb-0.5">
+                  <div className="w-5 h-5 bg-indigo-100 rounded flex items-center justify-center">
+                    <Package className="h-2.5 w-2.5 text-indigo-600" />
+                  </div>
+                  <p className="text-xs font-medium text-gray-600">Estoque Total</p>
+                </div>
+                <p className="text-lg font-bold text-gray-900">{productStock}</p>
                 <p className="text-xs text-gray-500">unidades</p>
               </div>
 
               {/* Distribuídos em Lotes */}
-              <div className="bg-white rounded-lg p-3 border border-green-100">
-                <p className="text-xs text-gray-600 mb-1">✅ Em Lotes</p>
-                <p className="text-2xl font-bold text-green-600">
+              <div className="bg-white rounded-lg p-2 border-2 border-green-200 shadow-sm">
+                <div className="flex items-center gap-1 mb-0.5">
+                  <div className="w-5 h-5 bg-green-100 rounded flex items-center justify-center">
+                    <CheckCircle className="h-2.5 w-2.5 text-green-600" />
+                  </div>
+                  <p className="text-xs font-medium text-gray-600">Em Lotes</p>
+                </div>
+                <p className="text-lg font-bold text-green-600">
                   {batches.reduce((sum, b) => sum + b.quantity, 0)}
                 </p>
                 <p className="text-xs text-gray-500">
@@ -484,9 +636,14 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
               </div>
 
               {/* Não Alocados */}
-              <div className="bg-white rounded-lg p-3 border border-orange-100">
-                <p className="text-xs text-gray-600 mb-1">📋 Não Alocados</p>
-                <p className="text-2xl font-bold text-orange-600">
+              <div className="bg-white rounded-lg p-2 border-2 border-orange-200 shadow-sm">
+                <div className="flex items-center gap-1 mb-0.5">
+                  <div className="w-5 h-5 bg-orange-100 rounded flex items-center justify-center">
+                    <AlertTriangle className="h-2.5 w-2.5 text-orange-600" />
+                  </div>
+                  <p className="text-xs font-medium text-gray-600">Não Alocados</p>
+                </div>
+                <p className="text-lg font-bold text-orange-600">
                   {Math.max(0, productStock - batches.reduce((sum, b) => sum + b.quantity, 0))}
                 </p>
                 <p className="text-xs text-gray-500">
@@ -498,9 +655,14 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
               </div>
 
               {/* Total de Lotes */}
-              <div className="bg-white rounded-lg p-3 border border-indigo-100">
-                <p className="text-xs text-gray-600 mb-1">🏷️ Total Lotes</p>
-                <p className="text-2xl font-bold text-indigo-600">{batches.length}</p>
+              <div className="bg-white rounded-lg p-2 border-2 border-purple-200 shadow-sm">
+                <div className="flex items-center gap-1 mb-0.5">
+                  <div className="w-5 h-5 bg-purple-100 rounded flex items-center justify-center">
+                    <Package className="h-2.5 w-2.5 text-purple-600" />
+                  </div>
+                  <p className="text-xs font-medium text-gray-600">Total Lotes</p>
+                </div>
+                <p className="text-lg font-bold text-purple-600">{batches.length}</p>
                 <p className="text-xs text-gray-500">
                   {batches.length === 1 ? 'lote' : 'lotes'}
                 </p>

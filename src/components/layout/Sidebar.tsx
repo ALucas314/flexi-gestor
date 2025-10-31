@@ -241,7 +241,7 @@ export const Sidebar = ({ className, variant = 'overlay', onNavigate }: SidebarP
       {/* Footer do Sidebar - Responsivo */}
       <div className={`mt-auto ${isMobile ? 'p-3' : 'p-4'} border-t border-indigo-200 bg-gradient-to-br from-indigo-100 to-indigo-200`}>
         <div className="text-center">
-          <p className={`${isMobile ? 'text-xs' : 'text-xs'} text-indigo-700 font-semibold ${isMobile ? 'mb-0.5' : 'mb-1'}`}>Versão 2.0.0</p>
+          <p className={`${isMobile ? 'text-xs' : 'text-xs'} text-indigo-700 font-semibold ${isMobile ? 'mb-0.5' : 'mb-1'}`}>Versão 1.1</p>
           <p className={`${isMobile ? 'text-xs' : 'text-xs'} text-indigo-600 font-medium`}>© 2024 Flexi Gestor</p>
         </div>
       </div>

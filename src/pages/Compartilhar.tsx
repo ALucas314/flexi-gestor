@@ -38,7 +38,8 @@ const PAGINAS_DISPONIVEIS = [
   { id: 'saidas', label: 'Saídas', icon: '📤' },
   { id: 'relatorios', label: 'Relatórios', icon: '📊' },
   { id: 'financeiro', label: 'Financeiro', icon: '💰' },
-  { id: 'fornecedores', label: 'Fornecedores', icon: '🏢' }
+  { id: 'fornecedores', label: 'Fornecedores', icon: '🏢' },
+  { id: 'clientes', label: 'Clientes', icon: '👤' }
 ];
 
 const Compartilhar = () => {
@@ -48,7 +49,7 @@ const Compartilhar = () => {
   const { confirm, dialogState, closeDialog, handleConfirm } = useConfirmDialog();
   const [emailCompartilhar, setEmailCompartilhar] = useState('');
   const [permissoesSelecionadas, setPermissoesSelecionadas] = useState<string[]>([
-    'produtos', 'entradas', 'saidas', 'relatorios', 'financeiro', 'fornecedores'
+    'produtos', 'entradas', 'saidas', 'relatorios', 'financeiro', 'fornecedores', 'clientes'
   ]);
   const [compartilhamentos, setCompartilhamentos] = useState<Compartilhamento[]>([]);
   const [compartilhadosComigo, setCompartilhadosComigo] = useState<Compartilhamento[]>([]);

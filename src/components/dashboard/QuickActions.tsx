@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, TrendingUp, TrendingDown, Package, ArrowRight, Settings, Edit, Trash2, Save, X, DollarSign, BarChart3 } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, Package, ArrowRight, Settings, Edit, Trash2, Save, X, DollarSign, BarChart3, UserCircle, Truck, Users } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useResponsive } from "@/hooks/use-responsive";
 
@@ -73,6 +73,16 @@ const defaultActions = [
     hoverColor: "from-amber-600 to-amber-700",
     path: "/financeiro",
     order: 4
+  },
+  {
+    id: "clientes",
+    title: "Clientes",
+    description: "Cadastro de clientes",
+    icon: "UserCircle",
+    color: "from-cyan-500 to-cyan-600",
+    hoverColor: "from-cyan-600 to-cyan-700",
+    path: "/clientes",
+    order: 5
   }
 ];
 
@@ -107,6 +117,24 @@ const availablePages = [
     path: "/financeiro", 
     description: "Controle financeiro",
     icon: "DollarSign"
+  },
+  { 
+    name: "Clientes", 
+    path: "/clientes", 
+    description: "Cadastro de clientes",
+    icon: "UserCircle"
+  },
+  { 
+    name: "Fornecedores", 
+    path: "/fornecedores", 
+    description: "Cadastro de fornecedores",
+    icon: "Truck"
+  },
+  { 
+    name: "Compartilhar", 
+    path: "/compartilhar", 
+    description: "Gerenciar acesso",
+    icon: "Users"
   }
 ];
 
@@ -116,7 +144,10 @@ const iconMap = {
   TrendingUp: TrendingUp,
   TrendingDown: TrendingDown,
   BarChart3: BarChart3,
-  DollarSign: DollarSign
+  DollarSign: DollarSign,
+  UserCircle: UserCircle,
+  Truck: Truck,
+  Users: Users
 };
 
 // Cores disponíveis
