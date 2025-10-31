@@ -1,4 +1,4 @@
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Cell, LabelList } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { TrendingUp, Package } from 'lucide-react';
 import { FullscreenChart } from '../ui/fullscreen-chart';
@@ -47,7 +47,7 @@ export function ItemsRankingChart({ movements }: ItemsRankingChartProps) {
     return acc;
   }, {} as Record<string, { productName: string; type: string; quantity: number; total: number; count: number }>);
 
-  // Converter para array, separar compras e vendas, e ordenar do menor para o maior por valor
+  // Converter para array, separar compras e vendas, e ordenar do maior para o menor por valor
   const purchasesData = Object.values(itemsByProduct)
     .filter(item => item.type === 'entrada')
     .map(item => ({
@@ -58,7 +58,7 @@ export function ItemsRankingChart({ movements }: ItemsRankingChartProps) {
       count: item.count,
       tipo: 'Compra'
     }))
-    .sort((a, b) => a.valor - b.valor) // Ordenar do menor para o maior
+    .sort((a, b) => b.valor - a.valor) // Ordenar do maior para o menor
     .slice(0, 10); // Top 10
 
   const salesData = Object.values(itemsByProduct)
@@ -71,21 +71,21 @@ export function ItemsRankingChart({ movements }: ItemsRankingChartProps) {
       count: item.count,
       tipo: 'Venda'
     }))
-    .sort((a, b) => a.valor - b.valor) // Ordenar do menor para o maior
+    .sort((a, b) => b.valor - a.valor) // Ordenar do maior para o menor
     .slice(0, 10); // Top 10
 
   // Gráfico de Valor
   const valueChartData = [
     ...purchasesData.map(item => ({ ...item, name: `[Compra] ${item.name}`, tipo: 'Compra' })),
     ...salesData.map(item => ({ ...item, name: `[Venda] ${item.name}`, tipo: 'Venda' }))
-  ].sort((a, b) => a.valor - b.valor).slice(0, 10);
+  ].sort((a, b) => b.valor - a.valor).slice(0, 10);
 
   const valueChartContent = valueChartData.length > 0 ? (
     <ResponsiveContainer width="100%" height={400}>
       <BarChart 
         data={valueChartData} 
         layout="vertical"
-        margin={{ top: 5, right: 30, left: 150, bottom: 5 }}
+        margin={{ top: 5, right: 80, left: 150, bottom: 5 }}
       >
         <CartesianGrid strokeDasharray="3 3" />
         <XAxis type="number" />
@@ -129,6 +129,12 @@ export function ItemsRankingChart({ movements }: ItemsRankingChartProps) {
           {valueChartData.map((entry, index) => (
             <Cell key={`cell-${index}`} fill={entry.tipo === 'Compra' ? '#10b981' : '#ef4444'} />
           ))}
+          <LabelList 
+            dataKey="valor" 
+            position="right"
+            formatter={(value: number) => formatarMoeda(value)}
+            style={{ fill: '#374151', fontSize: '11px', fontWeight: '600' }}
+          />
         </Bar>
       </BarChart>
     </ResponsiveContainer>
@@ -144,7 +150,7 @@ export function ItemsRankingChart({ movements }: ItemsRankingChartProps) {
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm sm:text-base font-medium flex items-center gap-2">
           <TrendingUp className="h-4 w-4 text-indigo-600" />
-          Ranking de Itens - Maior Valor (do menor para o maior)
+          Ranking de Itens - Maior Valor (do maior para o menor)
         </CardTitle>
         <Package className="h-4 w-4 text-muted-foreground" />
       </CardHeader>
@@ -153,14 +159,14 @@ export function ItemsRankingChart({ movements }: ItemsRankingChartProps) {
       </CardContent>
       
       <FullscreenChart 
-        title="Ranking de Itens - Maior Valor (do menor para o maior)" 
+        title="Ranking de Itens - Maior Valor (do maior para o menor)" 
         icon={<TrendingUp className="h-5 w-5" />}
       >
         <ResponsiveContainer width="100%" height="100%">
           <BarChart 
             data={valueChartData.slice(0, 20)} 
             layout="vertical"
-            margin={{ top: 5, right: 30, left: 200, bottom: 5 }}
+            margin={{ top: 5, right: 100, left: 200, bottom: 5 }}
           >
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis type="number" />
@@ -201,6 +207,12 @@ export function ItemsRankingChart({ movements }: ItemsRankingChartProps) {
               {valueChartData.map((entry, index) => (
                 <Cell key={`cell-fullscreen-${index}`} fill={entry.tipo === 'Compra' ? '#10b981' : '#ef4444'} />
               ))}
+              <LabelList 
+                dataKey="valor" 
+                position="right"
+                formatter={(value: number) => formatarMoeda(value)}
+                style={{ fill: '#374151', fontSize: '11px', fontWeight: '600' }}
+              />
             </Bar>
           </BarChart>
         </ResponsiveContainer>

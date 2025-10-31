@@ -1,4 +1,4 @@
-import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Bar } from 'recharts';
+import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Bar, LabelList } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
 import { FullscreenChart } from '../ui/fullscreen-chart';
@@ -72,7 +72,7 @@ export function PurchasesSalesDiffChart({ movements }: PurchasesSalesDiffChartPr
 
   const chartContent = chartData.length > 0 ? (
     <ResponsiveContainer width="100%" height={400}>
-      <ComposedChart data={chartData}>
+      <ComposedChart data={chartData} margin={{ top: 70, right: 20, left: 0, bottom: 5 }}>
         <CartesianGrid strokeDasharray="3 3" />
         <XAxis dataKey="month" />
         <YAxis yAxisId="left" />
@@ -89,8 +89,22 @@ export function PurchasesSalesDiffChart({ movements }: PurchasesSalesDiffChartPr
         <Legend 
           wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }}
         />
-        <Bar yAxisId="left" dataKey="comprasValor" name="Compras (R$)" fill="#10b981" radius={[4, 4, 0, 0]} />
-        <Bar yAxisId="left" dataKey="vendasValor" name="Vendas (R$)" fill="#ef4444" radius={[4, 4, 0, 0]} />
+        <Bar yAxisId="left" dataKey="comprasValor" name="Compras (R$)" fill="#10b981" radius={[4, 4, 0, 0]}>
+          <LabelList 
+            dataKey="comprasValor" 
+            position="top"
+            formatter={(value: number) => formatarMoeda(value)}
+            style={{ fill: '#059669', fontSize: '10px', fontWeight: '600' }}
+          />
+        </Bar>
+        <Bar yAxisId="left" dataKey="vendasValor" name="Vendas (R$)" fill="#ef4444" radius={[4, 4, 0, 0]}>
+          <LabelList 
+            dataKey="vendasValor" 
+            position="top"
+            formatter={(value: number) => formatarMoeda(value)}
+            style={{ fill: '#dc2626', fontSize: '10px', fontWeight: '600' }}
+          />
+        </Bar>
         <Line 
           yAxisId="right"
           type="monotone" 
@@ -99,7 +113,15 @@ export function PurchasesSalesDiffChart({ movements }: PurchasesSalesDiffChartPr
           stroke="#3b82f6" 
           strokeWidth={3}
           dot={{ fill: '#3b82f6', r: 4 }}
-        />
+        >
+          <LabelList 
+            dataKey="diferencaValor" 
+            position="top"
+            offset={10}
+            formatter={(value: number) => formatarMoeda(value)}
+            style={{ fill: '#2563eb', fontSize: '12px', fontWeight: '700', backgroundColor: 'white', padding: '2px 4px', borderRadius: '3px' }}
+          />
+        </Line>
       </ComposedChart>
     </ResponsiveContainer>
   ) : (
@@ -130,7 +152,7 @@ export function PurchasesSalesDiffChart({ movements }: PurchasesSalesDiffChartPr
         icon={<DollarSign className="h-5 w-5" />}
       >
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={chartData}>
+          <ComposedChart data={chartData} margin={{ top: 80, right: 30, left: 0, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="month" />
             <YAxis yAxisId="left" />
@@ -144,8 +166,22 @@ export function PurchasesSalesDiffChart({ movements }: PurchasesSalesDiffChartPr
               }}
             />
             <Legend />
-            <Bar yAxisId="left" dataKey="comprasValor" name="Compras (R$)" fill="#10b981" radius={[4, 4, 0, 0]} />
-            <Bar yAxisId="left" dataKey="vendasValor" name="Vendas (R$)" fill="#ef4444" radius={[4, 4, 0, 0]} />
+            <Bar yAxisId="left" dataKey="comprasValor" name="Compras (R$)" fill="#10b981" radius={[4, 4, 0, 0]}>
+              <LabelList 
+                dataKey="comprasValor" 
+                position="top"
+                formatter={(value: number) => formatarMoeda(value)}
+                style={{ fill: '#059669', fontSize: '10px', fontWeight: '600' }}
+              />
+            </Bar>
+            <Bar yAxisId="left" dataKey="vendasValor" name="Vendas (R$)" fill="#ef4444" radius={[4, 4, 0, 0]}>
+              <LabelList 
+                dataKey="vendasValor" 
+                position="top"
+                formatter={(value: number) => formatarMoeda(value)}
+                style={{ fill: '#dc2626', fontSize: '10px', fontWeight: '600' }}
+              />
+            </Bar>
             <Line 
               yAxisId="right"
               type="monotone" 
@@ -154,7 +190,15 @@ export function PurchasesSalesDiffChart({ movements }: PurchasesSalesDiffChartPr
               stroke="#3b82f6" 
               strokeWidth={3}
               dot={{ fill: '#3b82f6', r: 4 }}
-            />
+            >
+              <LabelList 
+                dataKey="diferencaValor" 
+                position="top"
+                offset={10}
+                formatter={(value: number) => formatarMoeda(value)}
+                style={{ fill: '#2563eb', fontSize: '12px', fontWeight: '700', backgroundColor: 'white', padding: '2px 4px', borderRadius: '3px' }}
+              />
+            </Line>
           </ComposedChart>
         </ResponsiveContainer>
       </FullscreenChart>
