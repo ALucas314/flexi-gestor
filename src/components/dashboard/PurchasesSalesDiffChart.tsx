@@ -1,6 +1,6 @@
 import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Bar, LabelList } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { TrendingUp, TrendingDown, DollarSign, Calculator, X } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Calculator, X, Download } from 'lucide-react';
 import { FullscreenChart } from '../ui/fullscreen-chart';
 import { useConfig } from '@/contexts/ConfigContext';
 import { useResponsive } from '@/hooks/use-responsive';
@@ -85,6 +85,49 @@ export function PurchasesSalesDiffChart({ movements }: PurchasesSalesDiffChartPr
     vendas: acc.vendas + month.vendasValor,
     diferenca: acc.diferenca + month.diferencaValor
   }), { compras: 0, vendas: 0, diferenca: 0 });
+
+  // Função para exportar para CSV
+  const exportToCSV = () => {
+    // Preparar dados CSV
+    const csvData = [
+      ['Mês', 'Compras (R$)', 'Vendas (R$)', 'Diferença (R$)'],
+      ...allMonthsData.map(month => [
+        month.month,
+        month.comprasValor.toFixed(2).replace('.', ','),
+        month.vendasValor.toFixed(2).replace('.', ','),
+        month.diferencaValor.toFixed(2).replace('.', ',')
+      ]),
+      [
+        'TOTAL GERAL',
+        totalGeral.compras.toFixed(2).replace('.', ','),
+        totalGeral.vendas.toFixed(2).replace('.', ','),
+        totalGeral.diferenca.toFixed(2).replace('.', ',')
+      ]
+    ];
+
+    // Converter para string CSV
+    const csvContent = csvData.map(row => row.join(';')).join('\n');
+    
+    // Adicionar BOM para Excel reconhecer UTF-8
+    const BOM = '\uFEFF';
+    const csvWithBOM = BOM + csvContent;
+
+    // Criar blob e fazer download
+    const blob = new Blob([csvWithBOM], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    
+    link.setAttribute('href', url);
+    link.setAttribute('download', `compras-vs-vendas-${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    // Limpar URL do objeto
+    URL.revokeObjectURL(url);
+  };
 
   const chartContent = chartData.length > 0 ? (
     <ResponsiveContainer width="100%" height={isMobile ? 450 : 400}>
@@ -289,10 +332,21 @@ export function PurchasesSalesDiffChart({ movements }: PurchasesSalesDiffChartPr
         <DialogContent className={`${isMobile ? 'max-w-[95vw]' : 'max-w-3xl'} max-h-[90vh] flex flex-col p-0 overflow-hidden !md:overflow-hidden`}>
           <div className="overflow-y-auto flex-1 px-6 pt-6 pb-6 min-h-0">
             <DialogHeader className="pb-4 border-b">
-              <DialogTitle className="flex items-center gap-2">
-                <Calculator className="h-5 w-5 text-indigo-600" />
-                Detalhes de Compras vs Vendas
-              </DialogTitle>
+              <div className="flex items-center gap-4">
+                <DialogTitle className="flex items-center gap-2 flex-1">
+                  <Calculator className="h-5 w-5 text-indigo-600" />
+                  Detalhes de Compras vs Vendas
+                </DialogTitle>
+                <Button
+                  variant="outline"
+                  size={isMobile ? "sm" : "default"}
+                  onClick={exportToCSV}
+                  className={`${isMobile ? 'h-8 px-2 text-xs' : 'h-9 px-3'} flex items-center gap-1.5 ml-auto mr-2`}
+                >
+                  <Download className={`${isMobile ? 'h-3 w-3' : 'h-4 w-4'}`} />
+                  {!isMobile && <span>Exportar CSV</span>}
+                </Button>
+              </div>
             </DialogHeader>
 
             <div className="mt-6 space-y-4">
