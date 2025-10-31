@@ -624,9 +624,17 @@ const Saidas = () => {
         }
         let unitPrice = getProductPrice(item.productId);
         // Aplicar desconto se informado (subtrair percentual do preço de venda)
-        const discount = (data as any).discount || 0;
+        const discount = form.watch('discount') || (data as any).discount || 0;
+        const basePriceBeforeDiscount = unitPrice;
         if (discount > 0 && unitPrice > 0) {
-          unitPrice = unitPrice * (1 - discount / 100);
+          const discountValue = discount;
+          if (typeof discountValue === 'number' && !isNaN(discountValue)) {
+            unitPrice = unitPrice * (1 - discountValue / 100);
+            console.log(`[SAIDAS-CARRINHO] Aplicando desconto no item ${item.productId}:`);
+            console.log(`  - Preço base: R$ ${basePriceBeforeDiscount.toFixed(2)}`);
+            console.log(`  - Desconto: ${discountValue}%`);
+            console.log(`  - Preço final: R$ ${unitPrice.toFixed(2)}`);
+          }
         }
         const receiptNumber = generateReceiptNumber();
 
@@ -687,6 +695,9 @@ const Saidas = () => {
     let totalQuantity: number;
     let unitPrice: number;
     
+    // Flag para indicar se o desconto já foi aplicado
+    let discountAlreadyApplied = false;
+    
     if (managedByBatch) {
       // Se gerencia por lote, usar quantidade dos lotes selecionados
       totalQuantity = getTotalSelectedQuantity();
@@ -694,12 +705,22 @@ const Saidas = () => {
       let baseUnitPrice = getProductPrice(data.productId);
       
       // Aplicar desconto se informado (subtrair percentual do preço de venda)
-      const discount = (data as any).discount || 0;
+      const discount = form.watch('discount') || (data as any).discount || 0;
       if (discount > 0 && baseUnitPrice > 0) {
         // Calcular preço com desconto: Preço Base * (1 - Desconto/100)
         // Exemplo: 26 * (1 - 10/100) = 26 * 0.90 = 23.40
-        unitPrice = baseUnitPrice * (1 - discount / 100);
-        console.log(`[SAIDAS-LOTE] Aplicando desconto: Preço base R$ ${baseUnitPrice.toFixed(2)} - ${discount}% = R$ ${unitPrice.toFixed(2)}`);
+        const discountValue = discount;
+        if (typeof discountValue === 'number' && !isNaN(discountValue)) {
+          unitPrice = baseUnitPrice * (1 - discountValue / 100);
+          discountAlreadyApplied = true; // Marcar que desconto já foi aplicado
+          console.log(`[SAIDAS-LOTE] Aplicando desconto:`);
+          console.log(`  - Preço base: R$ ${baseUnitPrice.toFixed(2)}`);
+          console.log(`  - Desconto: ${discountValue}%`);
+          console.log(`  - Preço final: R$ ${unitPrice.toFixed(2)}`);
+        } else {
+          console.error('[SAIDAS-LOTE] Erro: Desconto inválido:', discount);
+          unitPrice = baseUnitPrice;
+        }
       } else {
         unitPrice = baseUnitPrice;
       }
@@ -752,20 +773,32 @@ const Saidas = () => {
       }
     }
 
-    // Aplicar desconto se informado (subtrair percentual do preço de venda)
-    const discount = (data as any).discount || 0;
-    const basePriceBeforeDiscount = unitPrice; // Guardar preço base para debug
-    if (discount > 0 && unitPrice > 0) {
-      // Calcular preço com desconto: Preço Base * (1 - Desconto/100)
-      // Exemplo: Se preço base é R$ 26,00 e desconto é 10%:
-      // 26 * (1 - 10/100) = 26 * 0.90 = 23.40
-      const originalPrice = unitPrice;
-      unitPrice = unitPrice * (1 - discount / 100);
-      console.log(`[SAIDAS] Aplicando desconto:`);
-      console.log(`  - Preço base: R$ ${originalPrice.toFixed(2)}`);
-      console.log(`  - Desconto: ${discount}%`);
-      console.log(`  - Preço final: R$ ${unitPrice.toFixed(2)}`);
-      console.log(`  - Fórmula: ${originalPrice.toFixed(2)} * (1 - ${discount}/100) = ${originalPrice.toFixed(2)} * ${(1 - discount / 100).toFixed(4)} = ${unitPrice.toFixed(2)}`);
+    // Aplicar desconto se informado (apenas se ainda não foi aplicado no bloco de lote)
+    if (!discountAlreadyApplied) {
+      const discount = form.watch('discount') || (data as any).discount || 0;
+      const basePriceBeforeDiscount = unitPrice; // Guardar preço base para debug
+      if (discount > 0 && unitPrice > 0) {
+        // Calcular preço com desconto: Preço Base * (1 - Desconto/100)
+        // Exemplo: Se preço base é R$ 26,00 e desconto é 10%:
+        // 26 * (1 - 10/100) = 26 * 0.90 = 23.40
+        const originalPrice = unitPrice;
+        const discountValue = discount; // Garantir que é um número
+        if (typeof discountValue !== 'number' || isNaN(discountValue)) {
+          console.error('[SAIDAS] Erro: Desconto inválido:', discount);
+        } else {
+          unitPrice = unitPrice * (1 - discountValue / 100);
+          console.log(`[SAIDAS] Aplicando desconto:`);
+          console.log(`  - Preço base ANTES desconto: R$ ${originalPrice.toFixed(2)}`);
+          console.log(`  - Desconto informado: ${discountValue}%`);
+          console.log(`  - Multiplicador: ${(1 - discountValue / 100).toFixed(4)}`);
+          console.log(`  - Preço final DEPOIS desconto: R$ ${unitPrice.toFixed(2)}`);
+          console.log(`  - Fórmula: ${originalPrice.toFixed(2)} * (1 - ${discountValue}/100) = ${originalPrice.toFixed(2)} * ${(1 - discountValue / 100).toFixed(4)} = ${unitPrice.toFixed(2)}`);
+        }
+      } else {
+        console.log(`[SAIDAS] Sem desconto aplicado. Preço base: R$ ${unitPrice.toFixed(2)}`);
+      }
+    } else {
+      console.log(`[SAIDAS] Desconto já foi aplicado anteriormente. Preço final: R$ ${unitPrice.toFixed(2)}`);
     }
 
     // Verificar se há estoque suficiente
