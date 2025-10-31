@@ -86,7 +86,7 @@ const Clientes = () => {
   const { user } = useAuth();
 
   const [clients, setClients] = useState<Client[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editing, setEditing] = useState<Client | null>(null);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
@@ -136,8 +136,9 @@ const Clientes = () => {
 
   // Carrega clientes do Supabase
   const loadClients = async () => {
+    // Não limpar a lista se não houver workspace - manter dados existentes
     if (!workspaceAtivo?.id) {
-      setClients([]);
+      // Apenas retornar sem limpar a lista, mantendo os dados existentes
       return;
     }
     
@@ -146,14 +147,15 @@ const Clientes = () => {
       const { data, error } = await supabase
         .from('clientes')
         .select('*')
-        .eq('usuario_id', workspaceAtivo.id)
+        .eq('usuario_id', workspaceAtivo.id) // Sempre usar workspaceAtivo.id
         .order('codigo', { ascending: true });
       
       if (error) {
         // Tratar erros específicos
         if (error.code === '42501') {
           console.warn('Erro de permissão RLS ao carregar clientes. Verifique as políticas.');
-          setClients([]);
+          // Não limpar lista em caso de erro de permissão, manter dados existentes
+          setIsLoading(false);
           return;
         }
         if (error.code === '42P01') {
@@ -162,11 +164,13 @@ const Clientes = () => {
             description: 'A tabela de clientes não existe. Execute o script SQL de criação.',
             variant: 'destructive'
           });
+          setIsLoading(false);
           return;
         }
         throw error;
       }
       
+      // Mapear dados recebidos
       const mapped: Client[] = (data || []).map((c: any) => ({
         id: c.id,
         codigo: c.codigo,
@@ -175,32 +179,50 @@ const Clientes = () => {
         phone: c.telefone ?? c.phone,
         created_at: c.criado_em ?? c.created_at,
       }));
+      
+      // Sempre atualizar com os dados recebidos do banco
+      // Se não houver dados, ainda assim atualizar para mostrar lista vazia (não manter dados antigos)
       setClients(mapped);
+      console.log(`[CLIENTES] Carregados ${mapped.length} clientes do workspace ${workspaceAtivo.id}`);
     } catch (error: any) {
-      toast({
-        title: 'Erro ao carregar clientes',
-        description: error.message || 'Verifique nomes de colunas: id, nome (ou name), cpf, telefone (ou phone).',
-        variant: 'destructive'
-      });
+      console.error('Erro ao carregar clientes:', error);
+      // Não limpar a lista em caso de erro - manter dados existentes
+      // Apenas mostrar toast se for um erro crítico
+      if (error.code !== '42501') {
+        toast({
+          title: 'Erro ao carregar clientes',
+          description: error.message || 'Verifique nomes de colunas: id, nome (ou name), cpf, telefone (ou phone).',
+          variant: 'destructive'
+        });
+      }
+      // Não limpar clients[] em caso de erro
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Recarregar quando usuário ou workspace mudar (incluindo reconexão de token)
+  // Recarregar quando workspace mudar (mas não limpar se workspace for null temporariamente)
   useEffect(() => {
-    if (user?.id && workspaceAtivo?.id) {
+    if (workspaceAtivo?.id) {
       loadClients();
+    } else {
+      // Se não houver workspace, não mostrar loading indefinidamente
+      setIsLoading(false);
     }
-  }, [user?.id, workspaceAtivo?.id]);
+    // Não limpar lista quando workspace mudar para null - manter dados em memória
+  }, [workspaceAtivo?.id]);
 
   // Escutar mudanças de autenticação para recarregar após reconexão
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        if (workspaceAtivo?.id) {
-          loadClients();
-        }
+      // Recarregar apenas quando houver sessão ativa e workspace definido
+      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session && workspaceAtivo?.id) {
+        // Pequeno delay para garantir que o workspace está disponível
+        setTimeout(() => {
+          if (workspaceAtivo?.id) {
+            loadClients();
+          }
+        }, 500);
       }
     });
 
@@ -294,6 +316,22 @@ const Clientes = () => {
       toast({ title: 'Erro ao remover', description: error.message, variant: 'destructive' });
     }
   };
+
+  if (isLoading) {
+    return (
+      <main className="flex-1 p-3 sm:p-6 space-y-4 sm:space-y-6">
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+              <UserCircle className="w-8 h-8 text-white" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">👥 Carregando Clientes...</h3>
+            <p className="text-gray-600">Preparando sua lista de clientes</p>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="flex-1 p-2 sm:p-6 space-y-3 sm:space-y-6">
