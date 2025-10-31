@@ -317,9 +317,13 @@ const Fornecedores = () => {
   };
 
   const confirmDelete = async () => {
-    if (!supplierToDelete) return;
+    if (!supplierToDelete || !workspaceAtivo?.id) return;
     try {
-      const { error } = await supabase.from('fornecedores').delete().eq('id', supplierToDelete.id);
+      const { error } = await supabase
+        .from('fornecedores')
+        .delete()
+        .eq('id', supplierToDelete.id)
+        .eq('usuario_id', workspaceAtivo.id); // Garantir que só deleta do workspace correto
       if (error) throw error;
       toast({ title: '🗑️ Fornecedor removido' });
       setIsDeleteOpen(false);

@@ -41,6 +41,7 @@ interface StockExit {
 type StockExitFormData = Omit<StockExit, 'id' | 'productName' | 'productSku' | 'totalPrice' | 'receiptNumber'> & {
   paymentMethod?: string;
   installments?: number;
+  discount?: number; // Percentual de desconto para aplicar no preço de venda
 };
 
 // Carrinho
@@ -83,20 +84,27 @@ const Saidas = () => {
   // Filtrar apenas as vendas (type 'saida') dos movements
   const exits = movements
     .filter(m => m.type === 'saida')
-    .map(m => ({
-      id: m.id,
-      productId: m.productId,
-      productName: m.productName || m.product?.name || 'Desconhecido',
-      productSku: m.product?.sku || '',
-      quantity: m.quantity,
-      unitPrice: m.unitPrice,
-      totalPrice: m.total,
-      customer: m.description.includes(' - ') ? m.description.split(' - ')[1] : 'Cliente',
-      exitDate: m.date,
-      notes: m.description,
-      status: (m.status || 'confirmado') as 'pendente' | 'confirmado' | 'cancelado', // Usar status real do banco
-      receiptNumber: m.receiptNumber
-    }));
+    .map(m => {
+      // Usar o preço salvo na movimentação (já inclui desconto se foi aplicado na venda)
+      // O preço da movimentação é o preço efetivamente cobrado, então deve ser usado
+      const displayUnitPrice = m.unitPrice || 0;
+      const displayTotalPrice = m.total || (m.quantity * displayUnitPrice);
+      
+      return {
+        id: m.id,
+        productId: m.productId,
+        productName: m.productName || m.product?.name || 'Desconhecido',
+        productSku: m.product?.sku || '',
+        quantity: m.quantity,
+        unitPrice: displayUnitPrice, // Usar preço salvo na movimentação (já com desconto aplicado se houver)
+        totalPrice: displayTotalPrice, // Usar total salvo na movimentação
+        customer: m.description.includes(' - ') ? m.description.split(' - ')[1] : 'Cliente',
+        exitDate: m.date,
+        notes: m.description,
+        status: (m.status || 'confirmado') as 'pendente' | 'confirmado' | 'cancelado', // Usar status real do banco
+        receiptNumber: m.receiptNumber
+      };
+    });
 
   // Formulário
   const form = useForm<StockExitFormData>({
@@ -110,6 +118,7 @@ const Saidas = () => {
       status: "pendente",
       paymentMethod: "avista",
       installments: 1,
+      discount: 0, // Desconto padrão em percentual
     },
   });
 
@@ -179,13 +188,18 @@ const Saidas = () => {
 
   // Obter preço de venda do produto ou preço da última entrada como fallback (igual ao PDV)
   const getProductPrice = (productId: string): number => {
-    if (!productId || !movements || movements.length === 0) {
-      const product = products.find(p => p.id === productId);
+    // SEMPRE priorizar o preço de VENDA do produto (já calculado com markup)
+    const product = products.find(p => p.id === productId);
+    if (product && product.price > 0) {
+      // Retornar o preço de venda do produto (já calculado com markup na compra)
+      return product.price;
+    }
+    
+    // Se o produto não tem preço de venda cadastrado, buscar do preço de compra da última entrada como fallback
+    if (!movements || movements.length === 0) {
       return product?.price || 0;
     }
     
-    // Buscar preço baseado na entrada (última movimentação de entrada)
-    // Filtro mais robusto: verificar tipo e productId (pode ser string ou pode ter case diferente)
     const productEntries = movements.filter(m => {
       const typeStr = String(m.type || '').toLowerCase().trim();
       const isEntry = typeStr === 'entrada';
@@ -198,12 +212,11 @@ const Saidas = () => {
     });
 
     if (productEntries.length > 0 && productEntries[0].unitPrice > 0) {
-      // Retornar o preço unitário da última entrada
+      // Usar preço de compra como fallback (mas deveria ter sido atualizado com markup)
       return productEntries[0].unitPrice;
     }
     
-    // Se não houver entrada, buscar do produto
-    const product = products.find(p => p.id === productId);
+    // Último fallback: preço do produto (mesmo que seja 0)
     return product?.price || 0;
   };
 
@@ -609,7 +622,12 @@ const Saidas = () => {
           toast({ title: "⚠️ Verifique o carrinho", description: `${product?.name || 'Produto'} com quantidade inválida ou estoque insuficiente.`, variant: "destructive" });
           return;
         }
-        const unitPrice = getProductPrice(item.productId);
+        let unitPrice = getProductPrice(item.productId);
+        // Aplicar desconto se informado (subtrair percentual do preço de venda)
+        const discount = (data as any).discount || 0;
+        if (discount > 0 && unitPrice > 0) {
+          unitPrice = unitPrice * (1 - discount / 100);
+        }
         const receiptNumber = generateReceiptNumber();
 
         // Atualizar lotes se gerenciado por lote
@@ -672,7 +690,19 @@ const Saidas = () => {
     if (managedByBatch) {
       // Se gerencia por lote, usar quantidade dos lotes selecionados
       totalQuantity = getTotalSelectedQuantity();
-      unitPrice = getProductPrice(data.productId); // Usar preço de venda do produto
+      // Usar preço de venda do produto (não o custo médio dos lotes)
+      let baseUnitPrice = getProductPrice(data.productId);
+      
+      // Aplicar desconto se informado (subtrair percentual do preço de venda)
+      const discount = (data as any).discount || 0;
+      if (discount > 0 && baseUnitPrice > 0) {
+        // Calcular preço com desconto: Preço Base * (1 - Desconto/100)
+        // Exemplo: 26 * (1 - 10/100) = 26 * 0.90 = 23.40
+        unitPrice = baseUnitPrice * (1 - discount / 100);
+        console.log(`[SAIDAS-LOTE] Aplicando desconto: Preço base R$ ${baseUnitPrice.toFixed(2)} - ${discount}% = R$ ${unitPrice.toFixed(2)}`);
+      } else {
+        unitPrice = baseUnitPrice;
+      }
       
       // Validar se há lotes selecionados
       if (totalQuantity === 0) {
@@ -720,6 +750,22 @@ const Saidas = () => {
         });
         return;
       }
+    }
+
+    // Aplicar desconto se informado (subtrair percentual do preço de venda)
+    const discount = (data as any).discount || 0;
+    const basePriceBeforeDiscount = unitPrice; // Guardar preço base para debug
+    if (discount > 0 && unitPrice > 0) {
+      // Calcular preço com desconto: Preço Base * (1 - Desconto/100)
+      // Exemplo: Se preço base é R$ 26,00 e desconto é 10%:
+      // 26 * (1 - 10/100) = 26 * 0.90 = 23.40
+      const originalPrice = unitPrice;
+      unitPrice = unitPrice * (1 - discount / 100);
+      console.log(`[SAIDAS] Aplicando desconto:`);
+      console.log(`  - Preço base: R$ ${originalPrice.toFixed(2)}`);
+      console.log(`  - Desconto: ${discount}%`);
+      console.log(`  - Preço final: R$ ${unitPrice.toFixed(2)}`);
+      console.log(`  - Fórmula: ${originalPrice.toFixed(2)} * (1 - ${discount}/100) = ${originalPrice.toFixed(2)} * ${(1 - discount / 100).toFixed(4)} = ${unitPrice.toFixed(2)}`);
     }
 
     // Verificar se há estoque suficiente
@@ -1385,16 +1431,29 @@ const Saidas = () => {
                                 {/* Datas removidas para saída de produtos sem lote */}
                                 
                                 {form.watch('quantity') > 0 && selectedProduct && (() => {
-                                  const unitPrice = getProductPrice(selectedProduct.id);
-                                  const totalPrice = form.watch('quantity') * unitPrice;
+                                  const baseUnitPrice = getProductPrice(selectedProduct.id);
+                                  const discount = form.watch('discount') || 0;
+                                  // Calcular preço com desconto (subtrair percentual do preço base)
+                                  const unitPriceWithDiscount = discount > 0 && baseUnitPrice > 0 
+                                    ? baseUnitPrice * (1 - discount / 100) 
+                                    : baseUnitPrice;
+                                  const totalPrice = form.watch('quantity') * unitPriceWithDiscount;
                                   return (
                                     <div className="pt-3 border-t border-red-200 space-y-2">
                                       <div className="flex items-center justify-between">
-                                        <span className="text-sm font-medium text-gray-900">💰 Preço Unitário:</span>
+                                        <span className="text-sm font-medium text-gray-900">💰 Preço Unitário (Base):</span>
                                         <span className="text-sm font-semibold text-gray-700">
-                                          R$ {unitPrice.toFixed(2)}
+                                          R$ {baseUnitPrice.toFixed(2)}
                                         </span>
                                       </div>
+                                      {discount > 0 && (
+                                        <div className="flex items-center justify-between">
+                                          <span className="text-sm font-medium text-gray-900">💰 Preço Unitário (com desconto):</span>
+                                          <span className="text-sm font-bold text-red-600">
+                                            R$ {unitPriceWithDiscount.toFixed(2)}
+                                          </span>
+                                        </div>
+                                      )}
                                       <div className="flex items-center justify-between">
                                         <span className="text-sm font-medium text-gray-900">💰 Valor Total:</span>
                                         <span className="text-lg font-bold text-green-600">
@@ -1617,23 +1676,29 @@ const Saidas = () => {
                                             return dateB.getTime() - dateA.getTime();
                                           });
                                         
-                                        // Obter preço unitário da última entrada ou do produto
-                                        let unitPrice = 0;
-                                        if (productEntries.length > 0) {
+                                        // SEMPRE priorizar o preço de VENDA do produto (já calculado com markup)
+                                        let baseUnitPrice = 0;
+                                        // Primeiro: usar preço de venda do produto (com markup aplicado)
+                                        if (product && product.price > 0) {
+                                          baseUnitPrice = product.price;
+                                        }
+                                        // Se o produto não tem preço de venda, usar preço de compra da última entrada como fallback
+                                        else if (productEntries.length > 0) {
                                           // Pegar o primeiro (mais recente) e verificar se tem unitPrice válido
                                           const latestEntry = productEntries[0];
                                           if (latestEntry.unitPrice && latestEntry.unitPrice > 0) {
-                                            unitPrice = latestEntry.unitPrice;
+                                            baseUnitPrice = latestEntry.unitPrice;
                                           } else if (latestEntry.total && latestEntry.quantity && latestEntry.quantity > 0) {
                                             // Se não tiver unitPrice, calcular a partir do total e quantidade
-                                            unitPrice = latestEntry.total / latestEntry.quantity;
+                                            baseUnitPrice = latestEntry.total / latestEntry.quantity;
                                           }
                                         }
                                         
-                                        // Fallback para preço do produto se não encontrou nas entradas
-                                        if (unitPrice === 0 && product && product.price > 0) {
-                                          unitPrice = product.price;
-                                        }
+                                        // Aplicar desconto se informado
+                                        const discount = form.watch('discount') || 0;
+                                        const unitPrice = discount > 0 && baseUnitPrice > 0 
+                                          ? baseUnitPrice * (1 - discount / 100) 
+                                          : baseUnitPrice;
                                         
                                         const totalPrice = totalToExit * unitPrice;
                                         
@@ -1676,12 +1741,22 @@ const Saidas = () => {
                                               <>
                                                 <div className="flex items-center justify-between pt-2 border-t border-red-200">
                                                   <span className="text-sm font-medium text-gray-900">
-                                                    💵 Preço Unitário:
+                                                    💵 Preço Unitário {discount > 0 ? '(Base)' : ''}:
                                                   </span>
                                                   <span className="text-sm font-semibold text-gray-700">
-                                                    {unitPrice > 0 ? `R$ ${unitPrice.toFixed(2).replace('.', ',')}` : 'Não encontrado'}
+                                                    {baseUnitPrice > 0 ? `R$ ${baseUnitPrice.toFixed(2).replace('.', ',')}` : 'Não encontrado'}
                                                   </span>
                                                 </div>
+                                                {discount > 0 && baseUnitPrice > 0 && (
+                                                  <div className="flex items-center justify-between pt-2 border-t border-red-200">
+                                                    <span className="text-sm font-medium text-gray-900">
+                                                      💵 Preço Unitário (com desconto):
+                                                    </span>
+                                                    <span className="text-sm font-bold text-red-600">
+                                                      R$ {unitPrice.toFixed(2).replace('.', ',')}
+                                                    </span>
+                                                  </div>
+                                                )}
                                                 <div className="flex items-center justify-between pt-2 border-t border-red-200">
                                                   <span className="text-sm font-medium text-gray-900">
                                                     💰 Valor Total:
@@ -1716,6 +1791,77 @@ const Saidas = () => {
                           </Card>
                         );
                       })()}
+                      
+                        {/* Configuração de Desconto */}
+                        {selectedProductId && (
+                          <Card className="border-2 border-red-200">
+                            <CardHeader className="pb-3">
+                              <CardTitle className="text-base font-semibold text-gray-900">
+                                📉 Configuração de Desconto
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <FormField
+                                control={form.control}
+                                name="discount"
+                                render={({ field }) => (
+                                  <FormItem className="space-y-2">
+                                    <FormLabel className="text-sm font-semibold text-neutral-700">
+                                      📉 Desconto (%) - Percentual para aplicar no preço de venda
+                                    </FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        type="number"
+                                        step="0.1"
+                                        min="0"
+                                        max="100"
+                                        placeholder="Ex: 10 (para 10% de desconto)"
+                                        {...field}
+                                        onChange={(e) => {
+                                          const value = e.target.value;
+                                          if (value === '' || value === null) {
+                                            field.onChange(0);
+                                            return;
+                                          }
+                                          const numValue = parseFloat(value);
+                                          if (!isNaN(numValue) && numValue >= 0 && numValue <= 100) {
+                                            field.onChange(numValue);
+                                          }
+                                        }}
+                                        value={field.value === undefined || field.value === null || field.value === 0 ? '' : field.value}
+                                        className="h-11 sm:h-10 border-2 border-red-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 text-base sm:text-sm bg-red-50/50"
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                    {(() => {
+                                      const selectedProduct = products.find(p => p.id === selectedProductId);
+                                      if (!selectedProduct) return null;
+                                      
+                                      const basePrice = getProductPrice(selectedProduct.id);
+                                      const discount = field.value || 0;
+                                      const priceWithDiscount = discount > 0 && basePrice > 0 
+                                        ? basePrice * (1 - discount / 100) 
+                                        : basePrice;
+                                      
+                                      return (
+                                        discount > 0 && basePrice > 0 && (
+                                          <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                                            <p className="text-sm font-semibold text-red-700">
+                                              💰 Preço Final com Desconto: R$ {priceWithDiscount.toFixed(2)}
+                                            </p>
+                                            <p className="text-xs text-red-600 mt-1">
+                                              Preço base: R$ {basePrice.toFixed(2)} - {discount}% = R$ {priceWithDiscount.toFixed(2)}
+                                            </p>
+                                          </div>
+                                        )
+                                      );
+                                    })()}
+                                  </FormItem>
+                                )}
+                              />
+                            </CardContent>
+                          </Card>
+                        )}
                       
                         {/* Carrinho (aparece quando há itens) */}
                         {cartItems.length > 0 && (

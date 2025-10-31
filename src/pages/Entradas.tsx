@@ -675,6 +675,18 @@ const Entradas = () => {
         if (markup > 0 && averageCost > 0) {
           const salePrice = averageCost * (1 + markup / 100);
           await updateProduct(data.productId, { price: salePrice });
+          toast({
+            title: "💰 Preço de Venda Atualizado",
+            description: `Preço de venda do produto atualizado para R$ ${salePrice.toFixed(2)} (baseado no custo médio de R$ ${averageCost.toFixed(2)} + ${markup}% de markup)`,
+            variant: "default",
+          });
+        } else if (markup === 0 || markup === undefined || markup === null) {
+          // Aviso se markup não foi informado
+          toast({
+            title: "⚠️ Markup não informado",
+            description: "O preço de venda não foi atualizado. Informe um percentual de markup para calcular o preço de venda automaticamente.",
+            variant: "default",
+          });
         }
 
         setIsAddDialogOpen(false);
@@ -734,6 +746,18 @@ const Entradas = () => {
       if (markup > 0 && data.unitCost > 0) {
         const salePrice = data.unitCost * (1 + markup / 100);
         await updateProduct(data.productId, { price: salePrice });
+        toast({
+          title: "💰 Preço de Venda Atualizado",
+          description: `Preço de venda do produto atualizado para R$ ${salePrice.toFixed(2)} (baseado no custo de R$ ${data.unitCost.toFixed(2)} + ${markup}% de markup)`,
+          variant: "default",
+        });
+      } else if (markup === 0 || markup === undefined || markup === null) {
+        // Aviso se markup não foi informado
+        toast({
+          title: "⚠️ Markup não informado",
+          description: "O preço de venda não foi atualizado. Informe um percentual de markup para calcular o preço de venda automaticamente.",
+          variant: "default",
+        });
       }
 
       setIsAddDialogOpen(false);
@@ -1339,14 +1363,14 @@ const Entradas = () => {
                                 render={({ field }) => (
                                   <FormItem className="space-y-2">
                                     <FormLabel className="text-sm font-semibold text-neutral-700">
-                                      📈 Markup (%) - Para calcular preço de venda
+                                      📈 Markup (%) - Percentual para calcular preço de venda
                                     </FormLabel>
                                     <FormControl>
                                       <Input
                                         type="number"
                                         step="0.1"
                                         min="0"
-                                        placeholder="0.00"
+                                        placeholder="Ex: 30 (para 30% de margem)"
                                         {...field}
                                         onChange={(e) => {
                                           const value = e.target.value;
@@ -1360,14 +1384,19 @@ const Entradas = () => {
                                           }
                                         }}
                                         value={field.value === undefined || field.value === null || field.value === 0 ? '' : field.value}
-                                        className="h-11 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-base sm:text-sm"
+                                        className="h-11 sm:h-10 border-2 border-indigo-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-base sm:text-sm bg-indigo-50/50"
                                       />
                                     </FormControl>
                                     <FormMessage />
                                     {form.watch('unitCost') > 0 && form.watch('markup') > 0 && (
-                                      <p className="text-xs text-emerald-600 font-medium">
-                                        💰 Preço de Venda: R$ {(form.watch('unitCost') * (1 + (form.watch('markup') || 0) / 100)).toFixed(2)}
-                                      </p>
+                                      <div className="mt-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+                                        <p className="text-sm font-semibold text-emerald-700">
+                                          💰 Preço de Venda Calculado: R$ {(form.watch('unitCost') * (1 + (form.watch('markup') || 0) / 100)).toFixed(2)}
+                                        </p>
+                                        <p className="text-xs text-emerald-600 mt-1">
+                                          Custo: R$ {form.watch('unitCost').toFixed(2)} + {form.watch('markup')}% = R$ {(form.watch('unitCost') * (1 + (form.watch('markup') || 0) / 100)).toFixed(2)}
+                                        </p>
+                                      </div>
                                     )}
                                   </FormItem>
                                 )}
@@ -1897,6 +1926,98 @@ const Entradas = () => {
                                     R$ {selectedBatches.reduce((total, batch) => total + (batch.quantity * (batch.unitCost || 0)), 0).toFixed(2)}
                                   </span>
                                 </div>
+                                {selectedBatches.length > 0 && (() => {
+                                  const totalCost = selectedBatches.reduce((total, batch) => total + (batch.quantity * (batch.unitCost || 0)), 0);
+                                  const totalQuantity = getTotalBatchQuantity();
+                                  const averageCost = totalQuantity > 0 ? totalCost / totalQuantity : 0;
+                                  const markup = form.watch('markup') || 0;
+                                  const salePrice = markup > 0 && averageCost > 0 ? averageCost * (1 + markup / 100) : 0;
+                                  
+                                  return (
+                                    <>
+                                      {markup > 0 && averageCost > 0 && (
+                                        <div className="flex items-center justify-between pt-2 border-t border-indigo-200">
+                                          <span className="text-sm font-medium text-gray-900">
+                                            💰 Custo Médio Unitário:
+                                          </span>
+                                          <span className="text-base font-semibold text-indigo-600">
+                                            R$ {averageCost.toFixed(2)}
+                                          </span>
+                                        </div>
+                                      )}
+                                      {salePrice > 0 && (
+                                        <div className="flex items-center justify-between pt-2 border-t border-indigo-200">
+                                          <span className="text-sm font-medium text-gray-900">
+                                            💰 Preço de Venda Unitário:
+                                          </span>
+                                          <span className="text-base font-bold text-emerald-600">
+                                            R$ {salePrice.toFixed(2)}
+                                          </span>
+                                        </div>
+                                      )}
+                                    </>
+                                  );
+                                })()}
+                              </CardContent>
+                            </Card>
+                            
+                            {/* Campo de Markup para produtos com lote */}
+                            <Card className="border-2 border-indigo-200">
+                              <CardHeader className="pb-3">
+                                <CardTitle className="text-base font-semibold text-gray-900">
+                                  📈 Configuração de Preço de Venda
+                                </CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                <FormField
+                                  control={form.control}
+                                  name="markup"
+                                  render={({ field }) => (
+                                    <FormItem className="space-y-2">
+                                      <FormLabel className="text-sm font-semibold text-neutral-700">
+                                        📈 Markup (%) - Percentual para calcular preço de venda
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          type="number"
+                                          step="0.1"
+                                          min="0"
+                                          placeholder="Ex: 30 (para 30% de margem)"
+                                          {...field}
+                                          onChange={(e) => {
+                                            const value = e.target.value;
+                                            if (value === '' || value === null) {
+                                              field.onChange(0);
+                                              return;
+                                            }
+                                            const numValue = parseFloat(value);
+                                            if (!isNaN(numValue) && numValue >= 0) {
+                                              field.onChange(numValue);
+                                            }
+                                          }}
+                                          value={field.value === undefined || field.value === null || field.value === 0 ? '' : field.value}
+                                          className="h-11 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-base sm:text-sm"
+                                        />
+                                      </FormControl>
+                                      <FormMessage />
+                                      {(() => {
+                                        const totalCost = selectedBatches.reduce((total, batch) => total + (batch.quantity * (batch.unitCost || 0)), 0);
+                                        const totalQuantity = getTotalBatchQuantity();
+                                        const averageCost = totalQuantity > 0 ? totalCost / totalQuantity : 0;
+                                        const markup = field.value || 0;
+                                        const salePrice = markup > 0 && averageCost > 0 ? averageCost * (1 + markup / 100) : 0;
+                                        
+                                        return (
+                                          markup > 0 && averageCost > 0 && (
+                                            <p className="text-xs text-emerald-600 font-medium mt-2">
+                                              💰 Preço de Venda Calculado: R$ {salePrice.toFixed(2)} (Custo médio: R$ {averageCost.toFixed(2)} + {markup}%)
+                                            </p>
+                                          )
+                                        );
+                                      })()}
+                                    </FormItem>
+                                  )}
+                                />
                               </CardContent>
                             </Card>
                           </div>

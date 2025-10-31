@@ -233,7 +233,7 @@ const Clientes = () => {
             nome: data.name,
             cpf: data.cpf || null,
             telefone: data.phone || null,
-            usuario_id: user.id,
+            usuario_id: workspaceAtivo.id,
           } as any);
         if (error) throw error;
         toast({ title: '✅ Cliente cadastrado' });
@@ -245,7 +245,8 @@ const Clientes = () => {
             cpf: data.cpf || null,
             telefone: data.phone || null,
           })
-          .eq('id', editing.id);
+          .eq('id', editing.id)
+          .eq('usuario_id', workspaceAtivo.id); // Garantir que só atualiza do workspace correto
         if (error) throw error;
         toast({ title: '🔄 Cliente atualizado' });
       }
@@ -277,9 +278,13 @@ const Clientes = () => {
   };
 
   const confirmDelete = async () => {
-    if (!clientToDelete) return;
+    if (!clientToDelete || !workspaceAtivo?.id) return;
     try {
-      const { error } = await supabase.from('clientes').delete().eq('id', clientToDelete.id);
+      const { error } = await supabase
+        .from('clientes')
+        .delete()
+        .eq('id', clientToDelete.id)
+        .eq('usuario_id', workspaceAtivo.id); // Garantir que só deleta do workspace correto
       if (error) throw error;
       toast({ title: '🗑️ Cliente removido' });
       setIsDeleteOpen(false);

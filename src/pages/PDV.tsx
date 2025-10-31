@@ -31,18 +31,24 @@ const PDV = () => {
   
   // Função para obter o preço baseado na entrada (última entrada do produto)
   const getPriceFromEntry = (productId: string): number => {
-    // Buscar a última entrada do produto
+    // SEMPRE priorizar o preço de VENDA do produto (já calculado com markup)
+    const product = products.find(p => p.id === productId);
+    if (product && product.price > 0) {
+      // Retornar o preço de venda do produto (já calculado com markup na compra)
+      return product.price;
+    }
+    
+    // Se o produto não tem preço de venda cadastrado, buscar do preço de compra da última entrada como fallback
     const productEntries = movements
       .filter(m => m.type === 'entrada' && m.productId === productId)
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     
-    if (productEntries.length > 0) {
-      // Retornar o preço unitário da última entrada
+    if (productEntries.length > 0 && productEntries[0].unitPrice > 0) {
+      // Usar preço de compra como fallback (mas deveria ter sido atualizado com markup)
       return productEntries[0].unitPrice;
     }
     
-    // Se não houver entrada, buscar do produto
-    const product = products.find(p => p.id === productId);
+    // Último fallback: preço do produto (mesmo que seja 0)
     return product?.price || 0;
   };
   const [isProcessingSale, setIsProcessingSale] = useState(false);
