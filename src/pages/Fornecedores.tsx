@@ -8,7 +8,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Plus, Trash2, Edit, Phone, User2, Truck, Search } from 'lucide-react';
+import { Plus, Trash2, Edit, Phone, User2, Truck, Search, Download } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabase';
@@ -353,6 +353,70 @@ const Fornecedores = () => {
     }
   };
 
+  // Função para exportar fornecedores em CSV
+  const exportToCSV = () => {
+    // Cabeçalho do CSV
+    const headers = ['Código', 'Nome', 'CPF/CNPJ', 'Telefone', 'Data de Cadastro'];
+    
+    // Dados dos fornecedores (se há termo de busca, usar filtrados, senão usar todos)
+    const dataToExport = searchTerm && searchTerm.trim() ? filteredSuppliers : suppliers;
+    
+    // Função helper para formatar data
+    const formatDateForExcel = (dateString?: string) => {
+      if (!dateString) return '';
+      const date = new Date(dateString);
+      const day = String(date.getDate()).padStart(2, '0');
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const year = date.getFullYear();
+      return `${day}/${month}/${year}`;
+    };
+    
+    // Dados dos fornecedores
+    const data = dataToExport.map(s => [
+      s.codigo || '',
+      s.name || '',
+      s.cpf || '',
+      s.phone || '',
+      formatDateForExcel(s.created_at)
+    ]);
+    
+    // Adicionar informações do relatório
+    data.push([]);
+    data.push(['RELATÓRIO DE FORNECEDORES']);
+    data.push([]);
+    data.push(['Total de Fornecedores', '', '', '', dataToExport.length.toString()]);
+    data.push(['Data do Relatório', '', '', '', formatDateForExcel(new Date().toISOString())]);
+    
+    // Criar CSV
+    const csvContent = [
+      headers.join(';'),
+      ...data.map(row => row.map(field => {
+        // Envolver campos em aspas se contiverem ponto e vírgula ou aspas
+        if (typeof field === 'string' && (field.includes(';') || field.includes('"') || field.includes('\n'))) {
+          return `"${field.replace(/"/g, '""')}"`;
+        }
+        return field;
+      }).join(';'))
+    ].join('\n');
+    
+    // Adicionar BOM para UTF-8 (suporte a caracteres especiais)
+    const BOM = '\uFEFF';
+    const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Fornecedores_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+    
+    toast({ 
+      title: '✅ Arquivo CSV exportado', 
+      description: `Arquivo com ${dataToExport.length} fornecedor(es) foi baixado.` 
+    });
+  };
+
   if (isLoading) {
     return (
       <main className="flex-1 p-3 sm:p-6 space-y-4 sm:space-y-6">
@@ -408,8 +472,20 @@ const Fornecedores = () => {
       {/* Tabela */}
       <Card className="shadow-lg">
         <CardHeader className="bg-gradient-to-r from-indigo-50 to-purple-50">
-          <CardTitle>Lista de Fornecedores</CardTitle>
-          <CardDescription>Gerencie seus fornecedores cadastrados</CardDescription>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+              <CardTitle>Lista de Fornecedores</CardTitle>
+              <CardDescription>Gerencie seus fornecedores cadastrados</CardDescription>
+            </div>
+            <Button
+              onClick={exportToCSV}
+              variant="outline"
+              className="w-full sm:w-auto bg-white hover:bg-gray-50 border-gray-300 text-gray-700 px-4 py-2 rounded-lg shadow-sm hover:shadow-md transition-all duration-200"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Exportar CSV
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
