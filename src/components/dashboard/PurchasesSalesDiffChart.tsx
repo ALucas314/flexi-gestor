@@ -130,27 +130,27 @@ export function PurchasesSalesDiffChart({ movements }: PurchasesSalesDiffChartPr
   };
 
   const chartContent = chartData.length > 0 ? (
-    <ResponsiveContainer width="100%" height={isMobile ? 450 : 400}>
+    <ResponsiveContainer width="100%" height={isMobile ? 500 : 400}>
       <ComposedChart 
         data={chartData} 
         margin={isMobile 
-          ? { top: 90, right: 10, left: 0, bottom: 5 }
+          ? { top: 100, right: 20, left: 5, bottom: 10 }
           : { top: 70, right: 20, left: 0, bottom: 5 }
         }
       >
         <CartesianGrid strokeDasharray="3 3" />
         <XAxis 
           dataKey="month" 
-          tick={{ fontSize: isMobile ? 9 : 12 }}
+          tick={{ fontSize: isMobile ? 11 : 12, fill: '#374151', fontWeight: 600 }}
         />
         <YAxis 
           yAxisId="left" 
-          tick={{ fontSize: isMobile ? 8 : 12 }}
+          tick={{ fontSize: isMobile ? 10 : 12, fill: '#374151', fontWeight: 600 }}
         />
         <YAxis 
           yAxisId="right" 
           orientation="right" 
-          tick={{ fontSize: isMobile ? 8 : 12 }}
+          tick={{ fontSize: isMobile ? 10 : 12, fill: '#374151', fontWeight: 600 }}
         />
         <Tooltip 
           formatter={(value: number, name: string) => {
@@ -178,8 +178,8 @@ export function PurchasesSalesDiffChart({ movements }: PurchasesSalesDiffChartPr
             }}
             style={{ 
               fill: '#059669', 
-              fontSize: isMobile ? '8px' : '10px', 
-              fontWeight: '600' 
+              fontSize: isMobile ? '10px' : '10px', 
+              fontWeight: '700' 
             }}
           />
         </Bar>
@@ -196,8 +196,8 @@ export function PurchasesSalesDiffChart({ movements }: PurchasesSalesDiffChartPr
             }}
             style={{ 
               fill: '#dc2626', 
-              fontSize: isMobile ? '8px' : '10px', 
-              fontWeight: '600' 
+              fontSize: isMobile ? '10px' : '10px', 
+              fontWeight: '700' 
             }}
           />
         </Bar>
@@ -225,10 +225,10 @@ export function PurchasesSalesDiffChart({ movements }: PurchasesSalesDiffChartPr
             }}
             style={{ 
               fill: '#2563eb', 
-              fontSize: isMobile ? '9px' : '12px', 
+              fontSize: isMobile ? '11px' : '12px', 
               fontWeight: '700', 
               backgroundColor: 'white', 
-              padding: isMobile ? '1px 2px' : '2px 4px', 
+              padding: isMobile ? '2px 3px' : '2px 4px', 
               borderRadius: '3px' 
             }}
           />
@@ -244,7 +244,7 @@ export function PurchasesSalesDiffChart({ movements }: PurchasesSalesDiffChartPr
 
   return (
     <Card className="col-span-1 lg:col-span-6 relative">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+      <CardHeader className={`flex flex-row items-center justify-between space-y-0 ${isMobile ? 'p-4 pb-3' : 'pb-2'}`}>
         <CardTitle className={`${isMobile ? 'text-xs' : 'text-sm sm:text-base'} font-medium flex items-center gap-2`}>
           <DollarSign className={`${isMobile ? 'h-3 w-3' : 'h-4 w-4'} text-indigo-600 flex-shrink-0`} />
           <span className={isMobile ? 'leading-tight' : ''}>
@@ -267,7 +267,7 @@ export function PurchasesSalesDiffChart({ movements }: PurchasesSalesDiffChartPr
           </div>
         </div>
       </CardHeader>
-      <CardContent className={isMobile ? "px-2 py-3" : "px-2 sm:px-6"}>
+      <CardContent className={isMobile ? "px-4 pr-6 py-4" : "px-2 sm:px-6"}>
         {chartContent}
       </CardContent>
       
@@ -276,11 +276,27 @@ export function PurchasesSalesDiffChart({ movements }: PurchasesSalesDiffChartPr
         icon={<DollarSign className="h-5 w-5" />}
       >
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={chartData} margin={{ top: 80, right: 30, left: 0, bottom: 5 }}>
+          <ComposedChart 
+            data={chartData} 
+            margin={isMobile 
+              ? { top: 100, right: 20, left: 5, bottom: 10 }
+              : { top: 80, right: 30, left: 0, bottom: 5 }
+            }
+          >
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="month" />
-            <YAxis yAxisId="left" />
-            <YAxis yAxisId="right" orientation="right" />
+            <XAxis 
+              dataKey="month" 
+              tick={{ fontSize: isMobile ? 11 : 12, fill: '#374151', fontWeight: 600 }}
+            />
+            <YAxis 
+              yAxisId="left" 
+              tick={{ fontSize: isMobile ? 10 : 12, fill: '#374151', fontWeight: 600 }}
+            />
+            <YAxis 
+              yAxisId="right" 
+              orientation="right" 
+              tick={{ fontSize: isMobile ? 10 : 12, fill: '#374151', fontWeight: 600 }}
+            />
             <Tooltip 
               formatter={(value: number, name: string) => {
                 if (name === 'comprasValor' || name === 'vendasValor' || name === 'diferencaValor') {
@@ -289,21 +305,44 @@ export function PurchasesSalesDiffChart({ movements }: PurchasesSalesDiffChartPr
                 return [`${value} unidades`, name === 'compras' ? 'Compras (un)' : name === 'vendas' ? 'Vendas (un)' : 'Diferença (un)'];
               }}
             />
-            <Legend />
+            <Legend 
+              wrapperStyle={{ fontSize: isMobile ? '12px' : '12px', paddingTop: '10px' }}
+              iconSize={isMobile ? 12 : 12}
+            />
             <Bar yAxisId="left" dataKey="comprasValor" name="Compras (R$)" fill="#10b981" radius={[4, 4, 0, 0]}>
               <LabelList 
                 dataKey="comprasValor" 
                 position="top"
-                formatter={(value: number) => formatarMoeda(value)}
-                style={{ fill: '#059669', fontSize: '10px', fontWeight: '600' }}
+                offset={isMobile ? 3 : 5}
+                formatter={(value: number) => {
+                  if (isMobile && value >= 1000) {
+                    return `R$ ${(value / 1000).toFixed(1)}k`;
+                  }
+                  return formatarMoeda(value);
+                }}
+                style={{ 
+                  fill: '#059669', 
+                  fontSize: isMobile ? '10px' : '10px', 
+                  fontWeight: '700' 
+                }}
               />
             </Bar>
             <Bar yAxisId="left" dataKey="vendasValor" name="Vendas (R$)" fill="#ef4444" radius={[4, 4, 0, 0]}>
               <LabelList 
                 dataKey="vendasValor" 
                 position="top"
-                formatter={(value: number) => formatarMoeda(value)}
-                style={{ fill: '#dc2626', fontSize: '10px', fontWeight: '600' }}
+                offset={isMobile ? 3 : 5}
+                formatter={(value: number) => {
+                  if (isMobile && value >= 1000) {
+                    return `R$ ${(value / 1000).toFixed(1)}k`;
+                  }
+                  return formatarMoeda(value);
+                }}
+                style={{ 
+                  fill: '#dc2626', 
+                  fontSize: isMobile ? '10px' : '10px', 
+                  fontWeight: '700' 
+                }}
               />
             </Bar>
             <Line 
@@ -312,15 +351,30 @@ export function PurchasesSalesDiffChart({ movements }: PurchasesSalesDiffChartPr
               dataKey="diferencaValor" 
               name="Diferença (R$)" 
               stroke="#3b82f6" 
-              strokeWidth={3}
-              dot={{ fill: '#3b82f6', r: 4 }}
+              strokeWidth={isMobile ? 2 : 3}
+              dot={{ fill: '#3b82f6', r: isMobile ? 3 : 4 }}
             >
               <LabelList 
                 dataKey="diferencaValor" 
                 position="top"
-                offset={10}
-                formatter={(value: number) => formatarMoeda(value)}
-                style={{ fill: '#2563eb', fontSize: '12px', fontWeight: '700', backgroundColor: 'white', padding: '2px 4px', borderRadius: '3px' }}
+                offset={isMobile ? 12 : 10}
+                formatter={(value: number) => {
+                  if (isMobile && Math.abs(value) >= 1000) {
+                    return `${value >= 0 ? '+' : ''}R$ ${Math.abs(value / 1000).toFixed(1)}k`;
+                  }
+                  if (isMobile) {
+                    return `${value >= 0 ? '+' : ''}R$ ${Math.abs(value).toFixed(0)}`;
+                  }
+                  return formatarMoeda(value);
+                }}
+                style={{ 
+                  fill: '#2563eb', 
+                  fontSize: isMobile ? '11px' : '12px', 
+                  fontWeight: '700', 
+                  backgroundColor: 'white', 
+                  padding: isMobile ? '2px 3px' : '2px 4px', 
+                  borderRadius: '3px' 
+                }}
               />
             </Line>
           </ComposedChart>

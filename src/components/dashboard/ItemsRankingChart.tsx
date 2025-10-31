@@ -95,12 +95,12 @@ export function ItemsRankingChart({ movements }: ItemsRankingChartProps) {
   ].sort((a, b) => b.valor - a.valor).slice(0, isMobile ? 8 : 10);
 
   const valueChartContent = valueChartData.length > 0 ? (
-    <ResponsiveContainer width="100%" height={isMobile ? 500 : 400}>
+    <ResponsiveContainer width="100%" height={isMobile ? 550 : 400}>
       <BarChart 
         data={valueChartData} 
         layout="vertical"
         margin={isMobile 
-          ? { top: 5, right: 85, left: 60, bottom: 5 }
+          ? { top: 10, right: 60, left: 50, bottom: 10 }
           : { top: 5, right: 80, left: 150, bottom: 5 }
         }
       >
@@ -109,8 +109,8 @@ export function ItemsRankingChart({ movements }: ItemsRankingChartProps) {
         <YAxis 
           dataKey="name" 
           type="category" 
-          width={isMobile ? 65 : 150}
-          tick={{ fontSize: isMobile ? 8 : 11 }}
+          width={isMobile ? 50 : 150}
+          tick={{ fontSize: isMobile ? 11 : 11, fill: '#374151', fontWeight: 700 }}
           height={isMobile ? undefined : undefined}
         />
         <Tooltip 
@@ -150,7 +150,7 @@ export function ItemsRankingChart({ movements }: ItemsRankingChartProps) {
           <LabelList 
             dataKey="valor" 
             position={isMobile ? "top" : "right"}
-            offset={isMobile ? 5 : 5}
+            offset={isMobile ? 8 : 5}
             formatter={(value: number) => {
               if (isMobile) {
                 // Formato compacto para mobile: R$ 2k ao invés de R$ 2000.00
@@ -163,8 +163,8 @@ export function ItemsRankingChart({ movements }: ItemsRankingChartProps) {
             }}
             style={{ 
               fill: '#374151', 
-              fontSize: isMobile ? '8px' : '11px', 
-              fontWeight: '600' 
+              fontSize: isMobile ? '10px' : '11px', 
+              fontWeight: '700' 
             }}
           />
         </Bar>
@@ -179,7 +179,7 @@ export function ItemsRankingChart({ movements }: ItemsRankingChartProps) {
 
   return (
     <Card className="col-span-1 lg:col-span-6 relative">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+      <CardHeader className={`flex flex-row items-center justify-between space-y-0 ${isMobile ? 'p-4 pb-3' : 'pb-2'}`}>
         <CardTitle className={`${isMobile ? 'text-xs' : 'text-sm sm:text-base'} font-medium flex items-center gap-2`}>
           <TrendingUp className={`${isMobile ? 'h-3 w-3' : 'h-4 w-4'} text-indigo-600 flex-shrink-0`} />
           <span className={isMobile ? 'leading-tight' : ''}>
@@ -188,7 +188,7 @@ export function ItemsRankingChart({ movements }: ItemsRankingChartProps) {
         </CardTitle>
         <Package className={`${isMobile ? 'h-3 w-3' : 'h-4 w-4'} text-muted-foreground flex-shrink-0`} />
       </CardHeader>
-      <CardContent className={isMobile ? "px-2 py-3" : "px-2 sm:px-6"}>
+      <CardContent className={isMobile ? "px-4 pr-6 py-4" : "px-2 sm:px-6"}>
         {valueChartContent}
       </CardContent>
       
@@ -200,15 +200,25 @@ export function ItemsRankingChart({ movements }: ItemsRankingChartProps) {
           <BarChart 
             data={valueChartData.slice(0, 20)} 
             layout="vertical"
-            margin={{ top: 5, right: 100, left: 200, bottom: 5 }}
+            margin={isMobile 
+              ? { top: 10, right: 60, left: 50, bottom: 10 }
+              : { top: 5, right: 100, left: 200, bottom: 5 }
+            }
           >
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis type="number" />
+            <XAxis 
+              type="number" 
+              tick={{ fontSize: isMobile ? 11 : 11 }}
+            />
             <YAxis 
               dataKey="name" 
               type="category" 
-              width={200}
-              tick={{ fontSize: 11 }}
+              width={isMobile ? 50 : 200}
+              tick={{ 
+                fontSize: isMobile ? 11 : 11, 
+                fill: '#374151', 
+                fontWeight: isMobile ? 700 : 600 
+              }}
             />
             <Tooltip 
               content={({ active, payload }) => {
@@ -232,7 +242,10 @@ export function ItemsRankingChart({ movements }: ItemsRankingChartProps) {
                 return null;
               }}
             />
-            <Legend />
+            <Legend 
+              wrapperStyle={{ fontSize: isMobile ? '10px' : '12px', paddingTop: '10px' }}
+              iconSize={isMobile ? 10 : 12}
+            />
             <Bar 
               dataKey="valor" 
               name="Valor Total (R$)" 
@@ -243,9 +256,22 @@ export function ItemsRankingChart({ movements }: ItemsRankingChartProps) {
               ))}
               <LabelList 
                 dataKey="valor" 
-                position="right"
-                formatter={(value: number) => formatarMoeda(value)}
-                style={{ fill: '#374151', fontSize: '11px', fontWeight: '600' }}
+                position={isMobile ? "top" : "right"}
+                offset={isMobile ? 8 : 5}
+                formatter={(value: number) => {
+                  if (isMobile) {
+                    if (value >= 1000) {
+                      return `R$ ${(value / 1000).toFixed(1)}k`;
+                    }
+                    return `R$ ${value.toFixed(0)}`;
+                  }
+                  return formatarMoeda(value);
+                }}
+                style={{ 
+                  fill: '#374151', 
+                  fontSize: isMobile ? '10px' : '11px', 
+                  fontWeight: isMobile ? '700' : '600' 
+                }}
               />
             </Bar>
           </BarChart>
