@@ -485,15 +485,23 @@ const Index = () => {
             </div>
             {/* Ranking de Itens - Maior Valor */}
             <div className={isMobile || isTablet ? 'col-span-1' : isPinned ? 'col-span-1 lg:col-span-6' : 'col-span-1 lg:col-span-6'}>
-              <ItemsRankingChart movements={movements.map(m => ({
-                id: m.id,
-                type: m.type,
-                quantity: m.quantity,
-                unitPrice: m.unitPrice,
-                date: m.date,
-                productName: m.productName,
-                total: m.total
-              }))} />
+              <ItemsRankingChart 
+                movements={movements.map(m => ({
+                  id: m.id,
+                  type: m.type,
+                  quantity: m.quantity,
+                  unitPrice: m.unitPrice,
+                  date: m.date,
+                  productName: m.productName,
+                  total: m.total
+                }))}
+                products={products.map(p => ({
+                  id: p.id,
+                  name: p.name,
+                  price: p.price,
+                  stock: p.stock
+                }))}
+              />
             </div>
           </div>
         </>

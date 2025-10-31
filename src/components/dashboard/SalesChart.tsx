@@ -66,7 +66,7 @@ export function SalesChart({ movements }: SalesChartProps) {
         />
         <Bar 
           dataKey="vendas" 
-          fill="#3b82f6" 
+          fill="#10b981" 
           radius={[4, 4, 0, 0]}
           name="Quantidade Vendida"
           barSize={180}
@@ -76,7 +76,7 @@ export function SalesChart({ movements }: SalesChartProps) {
             position="top"
             formatter={(value: number) => `${value} un`}
             style={{ 
-              fill: '#2563eb', 
+              fill: '#059669', 
               fontSize: '10px', 
               fontWeight: '700' 
             }}
@@ -119,7 +119,7 @@ export function SalesChart({ movements }: SalesChartProps) {
             />
             <Bar 
               dataKey="vendas" 
-              fill="#3b82f6" 
+              fill="#10b981" 
               radius={[4, 4, 0, 0]}
               name="Quantidade Vendida"
               barSize={180}
@@ -129,7 +129,7 @@ export function SalesChart({ movements }: SalesChartProps) {
                 position="top"
                 formatter={(value: number) => `${value} un`}
                 style={{ 
-                  fill: '#2563eb', 
+                  fill: '#059669', 
                   fontSize: '10px', 
                   fontWeight: '700' 
                 }}

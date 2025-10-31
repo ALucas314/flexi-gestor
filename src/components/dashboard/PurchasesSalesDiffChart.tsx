@@ -165,9 +165,27 @@ export function PurchasesSalesDiffChart({ movements }: PurchasesSalesDiffChartPr
           wrapperStyle={{ fontSize: isMobile ? '10px' : '12px', paddingTop: '10px' }}
           iconSize={isMobile ? 10 : 12}
         />
-        <Bar yAxisId="left" dataKey="comprasValor" name="Compras (R$)" fill="#10b981" radius={[4, 4, 0, 0]}>
+        <Bar yAxisId="left" dataKey="comprasValor" name="Compras (R$)" fill="#ef4444" radius={[4, 4, 0, 0]}>
           <LabelList 
             dataKey="comprasValor" 
+            position="top"
+            offset={isMobile ? 3 : 5}
+            formatter={(value: number) => {
+              if (isMobile && value >= 1000) {
+                return `R$ ${(value / 1000).toFixed(1)}k`;
+              }
+              return formatarMoeda(value);
+            }}
+            style={{ 
+              fill: '#dc2626', 
+              fontSize: isMobile ? '10px' : '10px', 
+              fontWeight: '700' 
+            }}
+          />
+        </Bar>
+        <Bar yAxisId="left" dataKey="vendasValor" name="Vendas (R$)" fill="#10b981" radius={[4, 4, 0, 0]}>
+          <LabelList 
+            dataKey="vendasValor" 
             position="top"
             offset={isMobile ? 3 : 5}
             formatter={(value: number) => {
@@ -183,32 +201,14 @@ export function PurchasesSalesDiffChart({ movements }: PurchasesSalesDiffChartPr
             }}
           />
         </Bar>
-        <Bar yAxisId="left" dataKey="vendasValor" name="Vendas (R$)" fill="#3b82f6" radius={[4, 4, 0, 0]}>
-          <LabelList 
-            dataKey="vendasValor" 
-            position="top"
-            offset={isMobile ? 3 : 5}
-            formatter={(value: number) => {
-              if (isMobile && value >= 1000) {
-                return `R$ ${(value / 1000).toFixed(1)}k`;
-              }
-              return formatarMoeda(value);
-            }}
-            style={{ 
-              fill: '#2563eb', 
-              fontSize: isMobile ? '10px' : '10px', 
-              fontWeight: '700' 
-            }}
-          />
-        </Bar>
         <Line 
           yAxisId="right"
           type="monotone" 
           dataKey="diferencaValor" 
           name="Diferença (R$)" 
-          stroke="#ef4444" 
+          stroke="#3b82f6" 
           strokeWidth={isMobile ? 2 : 3}
-          dot={{ fill: '#ef4444', r: isMobile ? 3 : 4 }}
+          dot={{ fill: '#3b82f6', r: isMobile ? 3 : 4 }}
         >
           <LabelList 
             dataKey="diferencaValor" 
@@ -224,7 +224,7 @@ export function PurchasesSalesDiffChart({ movements }: PurchasesSalesDiffChartPr
               return formatarMoeda(value);
             }}
             style={{ 
-              fill: '#dc2626', 
+              fill: '#2563eb', 
               fontSize: isMobile ? '11px' : '12px', 
               fontWeight: '700', 
               backgroundColor: 'white', 
@@ -309,9 +309,27 @@ export function PurchasesSalesDiffChart({ movements }: PurchasesSalesDiffChartPr
               wrapperStyle={{ fontSize: isMobile ? '12px' : '12px', paddingTop: '10px' }}
               iconSize={isMobile ? 12 : 12}
             />
-            <Bar yAxisId="left" dataKey="comprasValor" name="Compras (R$)" fill="#10b981" radius={[4, 4, 0, 0]}>
+            <Bar yAxisId="left" dataKey="comprasValor" name="Compras (R$)" fill="#ef4444" radius={[4, 4, 0, 0]}>
               <LabelList 
                 dataKey="comprasValor" 
+                position="top"
+                offset={isMobile ? 3 : 5}
+                formatter={(value: number) => {
+                  if (isMobile && value >= 1000) {
+                    return `R$ ${(value / 1000).toFixed(1)}k`;
+                  }
+                  return formatarMoeda(value);
+                }}
+                style={{ 
+                  fill: '#dc2626', 
+                  fontSize: isMobile ? '10px' : '10px', 
+                  fontWeight: '700' 
+                }}
+              />
+            </Bar>
+            <Bar yAxisId="left" dataKey="vendasValor" name="Vendas (R$)" fill="#10b981" radius={[4, 4, 0, 0]}>
+              <LabelList 
+                dataKey="vendasValor" 
                 position="top"
                 offset={isMobile ? 3 : 5}
                 formatter={(value: number) => {
@@ -327,32 +345,14 @@ export function PurchasesSalesDiffChart({ movements }: PurchasesSalesDiffChartPr
                 }}
               />
             </Bar>
-            <Bar yAxisId="left" dataKey="vendasValor" name="Vendas (R$)" fill="#3b82f6" radius={[4, 4, 0, 0]}>
-              <LabelList 
-                dataKey="vendasValor" 
-                position="top"
-                offset={isMobile ? 3 : 5}
-                formatter={(value: number) => {
-                  if (isMobile && value >= 1000) {
-                    return `R$ ${(value / 1000).toFixed(1)}k`;
-                  }
-                  return formatarMoeda(value);
-                }}
-                style={{ 
-                  fill: '#2563eb', 
-                  fontSize: isMobile ? '10px' : '10px', 
-                  fontWeight: '700' 
-                }}
-              />
-            </Bar>
             <Line 
               yAxisId="right"
               type="monotone" 
               dataKey="diferencaValor" 
               name="Diferença (R$)" 
-              stroke="#ef4444" 
+              stroke="#3b82f6" 
               strokeWidth={isMobile ? 2 : 3}
-              dot={{ fill: '#ef4444', r: isMobile ? 3 : 4 }}
+              dot={{ fill: '#3b82f6', r: isMobile ? 3 : 4 }}
             >
               <LabelList 
                 dataKey="diferencaValor" 
@@ -368,7 +368,7 @@ export function PurchasesSalesDiffChart({ movements }: PurchasesSalesDiffChartPr
                   return formatarMoeda(value);
                 }}
                 style={{ 
-                  fill: '#dc2626', 
+                  fill: '#2563eb', 
                   fontSize: isMobile ? '11px' : '12px', 
                   fontWeight: '700', 
                   backgroundColor: 'white', 

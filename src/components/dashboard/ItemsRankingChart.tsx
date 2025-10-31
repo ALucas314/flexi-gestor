@@ -15,60 +15,67 @@ interface ItemsRankingChartProps {
     productName: string;
     total: number;
   }>;
+  products: Array<{
+    id: string;
+    name: string;
+    price: number;
+    stock: number;
+  }>;
 }
 
-export function ItemsRankingChart({ movements }: ItemsRankingChartProps) {
+export function ItemsRankingChart({ movements, products }: ItemsRankingChartProps) {
   const { formatarMoeda } = useConfig();
   const { isMobile } = useResponsive();
 
-  // Agrupar por produto (somando compras e vendas)
-  const itemsByProduct = movements.reduce((acc, movement) => {
-    const productName = movement.productName || 'Produto sem nome';
-    const quantity = Number(movement.quantity) || 0;
-    const unitPrice = Number(movement.unitPrice) || 0;
-    const total = Number(movement.total) || unitPrice * quantity;
-
-    if (quantity <= 0 || total <= 0) return acc;
-    
-    if (acc[productName]) {
-      acc[productName].quantity += quantity;
-      acc[productName].total += total;
-      acc[productName].totalUnitPrice += unitPrice * quantity; // Soma ponderada para calcular média
-      acc[productName].count += 1;
-    } else {
-      acc[productName] = {
-        productName,
-        quantity,
-        total,
-        totalUnitPrice: unitPrice * quantity,
-        count: 1
-      };
-    }
-    
-    return acc;
-  }, {} as Record<string, { productName: string; quantity: number; total: number; totalUnitPrice: number; count: number }>);
-
-  // Converter para array, calcular preço médio e ordenar por maior preço E maior quantidade
-  const valueChartData = Object.values(itemsByProduct)
-    .map(item => {
-      const precoMedio = item.quantity > 0 ? item.totalUnitPrice / item.quantity : 0;
+  // Converter produtos para array e ordenar por maior PREÇO unitário E maior QUANTIDADE em estoque
+  const produtosComDados = products && Array.isArray(products) && products.length > 0 ? products : [];
+  
+  const valueChartData = produtosComDados
+    .map(product => {
+      const productName = product.name || 'Produto sem nome';
+      const estoque = Number(product.stock) || 0;
+      
+      // Agrupar movimentos do produto para calcular quantidade vendida
+      const productMovements = (movements || []).filter(m => {
+        const mProductName = m.productName || '';
+        return mProductName === productName || mProductName.toLowerCase() === productName.toLowerCase();
+      });
+      
+      // Buscar preço baseado nas entradas (última movimentação de entrada com unitPrice)
+      const entradasMovements = productMovements.filter(m => {
+        const typeStr = String(m.type || '').toLowerCase().trim();
+        return typeStr === 'entrada' && m.unitPrice && m.unitPrice > 0;
+      }).sort((a, b) => {
+        const dateA = a.date instanceof Date ? a.date : new Date(a.date);
+        const dateB = b.date instanceof Date ? b.date : new Date(b.date);
+        return dateB.getTime() - dateA.getTime();
+      });
+      
+      // Usar unitPrice da última entrada, se disponível, caso contrário usar preço do produto
+      const preco = entradasMovements.length > 0 && entradasMovements[0].unitPrice > 0
+        ? Number(entradasMovements[0].unitPrice)
+        : Number(product.price) || 0;
+      
+      const vendasMovements = productMovements.filter(m => m.type === 'saida');
+      const quantidadeVendida = vendasMovements.reduce((sum, m) => sum + (Number(m.quantity) || 0), 0);
+      
       return {
-        name: item.productName.length > 12 ? item.productName.substring(0, 12) + '...' : item.productName,
-        fullName: item.productName,
-        quantidade: item.quantity,
-        valor: item.total,
-        precoMedio: precoMedio,
-        count: item.count,
-        // Score combinado: preço médio * quantidade (considera ambos os fatores)
-        score: precoMedio * item.quantity
+        name: productName.length > 12 ? productName.substring(0, 12) + '...' : productName,
+        fullName: productName,
+        quantidade: quantidadeVendida,
+        valor: estoque, // Quantidade em estoque (mostrar quantidade, não valor)
+        preco: preco,
+        estoque: estoque,
+        valorEstoque: preco * estoque // Valor total no estoque
       };
     })
+    .filter(item => item.estoque > 0) // Filtrar apenas produtos com estoque > 0
     .sort((a, b) => {
-      // Ordenar primeiro por preço médio (maior preço), depois por quantidade (maior quantidade)
-      if (b.precoMedio !== a.precoMedio) {
-        return b.precoMedio - a.precoMedio;
+      // Ordenar primeiro por maior quantidade em estoque, depois por maior preço unitário
+      if (b.estoque !== a.estoque) {
+        return b.estoque - a.estoque; // Maior estoque primeiro
       }
-      return b.quantidade - a.quantidade;
+      return b.preco - a.preco; // Se estoques iguais, maior preço primeiro
     })
     .slice(0, isMobile ? 8 : 10) // Top 10
     .map(item => ({ 
@@ -106,13 +113,13 @@ export function ItemsRankingChart({ movements }: ItemsRankingChartProps) {
                 <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg">
                   <p className="font-semibold text-gray-900 mb-2">{data.fullName}</p>
                   <p className="text-sm text-gray-600">
-                    <span className="font-medium">Preço Médio:</span> {formatarMoeda(data.precoMedio || 0)} / un
+                    <span className="font-medium">Preço:</span> {formatarMoeda(data.preco || 0)} / un
                   </p>
                   <p className="text-sm text-gray-600">
-                    <span className="font-medium">Quantidade:</span> {data.quantidade.toLocaleString('pt-BR')} unidades
+                    <span className="font-medium">Estoque:</span> {data.estoque?.toLocaleString('pt-BR') || 0} unidades
                   </p>
                   <p className="text-sm text-gray-600">
-                    <span className="font-medium">Valor Total:</span> {formatarMoeda(data.valor)}
+                    <span className="font-medium">Quantidade Vendida:</span> {data.quantidade.toLocaleString('pt-BR')} unidades
                   </p>
                 </div>
               );
@@ -126,7 +133,7 @@ export function ItemsRankingChart({ movements }: ItemsRankingChartProps) {
         />
         <Bar 
           dataKey="valor" 
-          name="Valor Total (R$)" 
+          name="Quantidade em Estoque (un)" 
           radius={[4, 4, 0, 0]}
           fill="#3b82f6"
         >
@@ -135,10 +142,7 @@ export function ItemsRankingChart({ movements }: ItemsRankingChartProps) {
             position="top"
             offset={isMobile ? 3 : 5}
             formatter={(value: number) => {
-              if (isMobile && value >= 1000) {
-                return `R$ ${(value / 1000).toFixed(1)}k`;
-              }
-              return formatarMoeda(value);
+              return `${value} un`;
             }}
             style={{ 
               fill: '#374151', 
@@ -152,7 +156,7 @@ export function ItemsRankingChart({ movements }: ItemsRankingChartProps) {
   ) : (
     <div className="flex flex-col items-center justify-center h-[400px] text-muted-foreground">
       <Package className="h-12 w-12 mb-4 opacity-50" />
-      <p>Nenhuma movimentação registrada ainda</p>
+      <p>Nenhum produto com preço e estoque encontrado</p>
     </div>
   );
 
