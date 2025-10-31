@@ -132,11 +132,13 @@ const Fornecedores = () => {
 
   // Carrega fornecedores do Supabase
   const loadSuppliers = async () => {
+    if (!workspaceAtivo?.id) return;
     try {
       setIsLoading(true);
       const { data, error } = await supabase
         .from('fornecedores')
         .select('*')
+        .eq('usuario_id', workspaceAtivo.id)
         .order('id', { ascending: false });
       if (error) throw error;
       const mapped: Supplier[] = (data || []).map((s: any) => ({
@@ -180,6 +182,7 @@ const Fornecedores = () => {
             nome: data.name,
             cpf: data.cpf || null,
             telefone: data.phone || null,
+            usuario_id: workspaceAtivo.id,
           } as any);
         if (error) throw error;
         toast({ title: '✅ Fornecedor cadastrado' });

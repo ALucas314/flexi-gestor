@@ -31,6 +31,7 @@ const Configuracoes = () => {
   };
 
   // Função para limpar todos os dados do workspace
+  // NOTA: A tabela 'perfis' NÃO será deletada - ela contém informações essenciais do usuário
   const handleLimparWorkspace = async () => {
     if (!workspaceAtivo) {
       toast({
@@ -44,6 +45,8 @@ const Configuracoes = () => {
     setIsDeletando(true);
     
     try {
+      // IMPORTANTE: A tabela 'perfis' NÃO é deletada aqui
+      // Ela contém informações essenciais do usuário e deve ser preservada
       // Deletar todas as movimentações
       const { error: movError } = await supabase
         .from('movimentacoes')
@@ -68,12 +71,71 @@ const Configuracoes = () => {
 
       if (produtosError) throw produtosError;
 
+      // Deletar todos os fornecedores
+      const { error: fornecedoresError } = await supabase
+        .from('fornecedores')
+        .delete()
+        .eq('usuario_id', workspaceAtivo.id);
+
+      if (fornecedoresError) {
+        console.error('Erro ao deletar fornecedores:', fornecedoresError);
+        // Se a coluna usuario_id não existir, tentar deletar todos os fornecedores do usuário atual
+        if (fornecedoresError.message?.includes('does not exist')) {
+          console.warn('Coluna usuario_id não existe na tabela fornecedores. Tentando deletar sem filtro...');
+          // Tenta deletar sem filtro de usuario_id (apenas se o RLS permitir)
+          const { error: fornecedoresError2 } = await supabase
+            .from('fornecedores')
+            .delete();
+          if (fornecedoresError2) {
+            throw fornecedoresError2;
+          }
+        } else {
+          throw fornecedoresError;
+        }
+      }
+
+      // Deletar todos os clientes
+      const { error: clientesError } = await supabase
+        .from('clientes')
+        .delete()
+        .eq('usuario_id', workspaceAtivo.id);
+
+      if (clientesError) throw clientesError;
+
+      // Deletar todas as categorias
+      const { error: categoriasError } = await supabase
+        .from('categorias')
+        .delete()
+        .eq('usuario_id', workspaceAtivo.id);
+
+      if (categoriasError) {
+        console.error('Erro ao deletar categorias:', categoriasError);
+        // Não lançar erro se a tabela não existir ainda
+        if (!categoriasError.message?.includes('does not exist')) {
+          throw categoriasError;
+        }
+      }
+
+      // Deletar todas as unidades de medida
+      const { error: unidadesError } = await supabase
+        .from('unidades_medida')
+        .delete()
+        .eq('usuario_id', workspaceAtivo.id);
+
+      if (unidadesError) {
+        console.error('Erro ao deletar unidades de medida:', unidadesError);
+        // Não lançar erro se a tabela não existir ainda
+        if (!unidadesError.message?.includes('does not exist')) {
+          throw unidadesError;
+        }
+      }
+
       // Limpar localStorage do workspace
       localStorage.removeItem(`flexi-gestor-workspace-${workspaceAtivo.id}`);
 
       toast({
         title: "✅ Workspace limpo",
-        description: "Todos os dados do workspace foram deletados com sucesso!",
+        description: "Todos os dados do workspace foram deletados com sucesso! (Perfil preservado)",
       });
     } catch (error: any) {
       toast({
@@ -217,26 +279,30 @@ const Configuracoes = () => {
                           <AlertDialogTitle className="text-left">⚠️ Atenção!</AlertDialogTitle>
                         </div>
                       </div>
-                      <AlertDialogDescription className="pt-3 text-left space-y-3">
-                        <p className="font-semibold text-red-700">
-                          Esta ação não pode ser desfeita!
-                        </p>
-                        <p>
-                          Você está prestes a deletar permanentemente:
-                        </p>
-                        <ul className="list-disc list-inside space-y-1 text-slate-700 ml-4">
-                          <li>✅ Todos os produtos</li>
-                          <li>✅ Todas as movimentações (entradas e saídas)</li>
-                          <li>✅ Todos os lotes</li>
-                          <li>✅ Todos os dados do workspace "{workspaceAtivo?.nome || 'Atual'}"</li>
-                        </ul>
-                        <div className="p-3 bg-red-50 border border-red-200 rounded-lg mt-3">
-                          <p className="text-sm text-red-800 font-medium">
-                            ⚠️ Os dados serão permanentemente removidos e não poderão ser recuperados!
-                          </p>
-                        </div>
+                      <AlertDialogDescription className="pt-3 text-left">
+                        Esta ação não pode ser desfeita!
                       </AlertDialogDescription>
                     </AlertDialogHeader>
+                    <div className="pt-3 text-left space-y-3">
+                      <p className="text-slate-700">
+                        Você está prestes a deletar permanentemente:
+                      </p>
+                      <ul className="list-disc list-inside space-y-1 text-slate-700 ml-4">
+                        <li>✅ Todos os produtos</li>
+                        <li>✅ Todas as movimentações (entradas e saídas)</li>
+                        <li>✅ Todos os lotes</li>
+                        <li>✅ Todos os fornecedores</li>
+                        <li>✅ Todos os clientes</li>
+                        <li>✅ Todas as categorias personalizadas</li>
+                        <li>✅ Todas as unidades de medida personalizadas</li>
+                        <li>✅ Todos os dados do workspace "{workspaceAtivo?.nome || 'Atual'}"</li>
+                      </ul>
+                      <div className="p-3 bg-red-50 border border-red-200 rounded-lg mt-3">
+                        <p className="text-sm text-red-800 font-medium">
+                          ⚠️ Os dados serão permanentemente removidos e não poderão ser recuperados!
+                        </p>
+                      </div>
+                    </div>
                     <AlertDialogFooter className="flex-col sm:flex-row gap-2">
                       <AlertDialogCancel>Cancelar</AlertDialogCancel>
                       <AlertDialogAction
@@ -265,15 +331,19 @@ const Configuracoes = () => {
                 <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
                   <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
                   <div className="space-y-1">
-                    <p className="text-sm font-semibold text-amber-900">
-                      O que será deletado:
-                    </p>
-                    <ul className="text-sm text-amber-800 space-y-1 ml-4 list-disc">
-                      <li>Todos os produtos e suas categorias</li>
-                      <li>Todo histórico de movimentações</li>
-                      <li>Todos os lotes e informações de estoque</li>
-                      <li>Todas as configurações do workspace</li>
-                    </ul>
+                      <p className="text-sm font-semibold text-amber-900">
+                        O que será deletado:
+                      </p>
+                      <ul className="text-sm text-amber-800 space-y-1 ml-4 list-disc">
+                        <li>Todos os produtos</li>
+                        <li>Todo histórico de movimentações</li>
+                        <li>Todos os lotes e informações de estoque</li>
+                        <li>Todos os fornecedores</li>
+                        <li>Todos os clientes</li>
+                        <li>Todas as categorias personalizadas</li>
+                        <li>Todas as unidades de medida personalizadas</li>
+                        <li>Todas as configurações do workspace</li>
+                      </ul>
                   </div>
                 </div>
 
