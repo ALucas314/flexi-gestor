@@ -29,7 +29,7 @@ export const LayoutWithSidebar = ({ children }: LayoutWithSidebarProps) => {
     <div className="min-h-screen bg-background w-full overflow-x-hidden max-w-full">
       {/* Sidebar Fixa (aparece quando pinada e não for mobile) */}
       {showFixedSidebar && (
-        <aside className={`fixed left-0 top-0 h-screen z-40 ${sidebarWidth} overflow-y-auto overflow-x-hidden`}>
+        <aside className={`fixed left-0 top-0 h-screen z-40 ${sidebarWidth} overflow-y-auto overflow-x-hidden bg-gradient-to-br from-indigo-50 via-indigo-100 to-indigo-100 shadow-xl`}>
           <Sidebar variant="fixed" />
         </aside>
       )}

@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { TrendingUp, Package } from 'lucide-react';
 import { FullscreenChart } from '../ui/fullscreen-chart';
 import { useConfig } from '@/contexts/ConfigContext';
+import { useResponsive } from '@/hooks/use-responsive';
 
 interface ItemsRankingChartProps {
   movements: Array<{
@@ -18,6 +19,7 @@ interface ItemsRankingChartProps {
 
 export function ItemsRankingChart({ movements }: ItemsRankingChartProps) {
   const { formatarMoeda } = useConfig();
+  const { isMobile } = useResponsive();
 
   // Agrupar por produto e tipo (compras e vendas separadamente)
   const itemsByProduct = movements.reduce((acc, movement) => {
@@ -74,26 +76,42 @@ export function ItemsRankingChart({ movements }: ItemsRankingChartProps) {
     .sort((a, b) => b.valor - a.valor) // Ordenar do maior para o menor
     .slice(0, 10); // Top 10
 
-  // Gráfico de Valor
+  // Gráfico de Valor - ajustar nomes para mobile
   const valueChartData = [
-    ...purchasesData.map(item => ({ ...item, name: `[Compra] ${item.name}`, tipo: 'Compra' })),
-    ...salesData.map(item => ({ ...item, name: `[Venda] ${item.name}`, tipo: 'Venda' }))
-  ].sort((a, b) => b.valor - a.valor).slice(0, 10);
+    ...purchasesData.map(item => ({ 
+      ...item, 
+      name: isMobile 
+        ? `C: ${item.name.length > 15 ? item.name.substring(0, 15) + '...' : item.name}` 
+        : `[Compra] ${item.name}`, 
+      tipo: 'Compra' 
+    })),
+    ...salesData.map(item => ({ 
+      ...item, 
+      name: isMobile 
+        ? `V: ${item.name.length > 15 ? item.name.substring(0, 15) + '...' : item.name}` 
+        : `[Venda] ${item.name}`, 
+      tipo: 'Venda' 
+    }))
+  ].sort((a, b) => b.valor - a.valor).slice(0, isMobile ? 8 : 10);
 
   const valueChartContent = valueChartData.length > 0 ? (
-    <ResponsiveContainer width="100%" height={400}>
+    <ResponsiveContainer width="100%" height={isMobile ? 500 : 400}>
       <BarChart 
         data={valueChartData} 
         layout="vertical"
-        margin={{ top: 5, right: 80, left: 150, bottom: 5 }}
+        margin={isMobile 
+          ? { top: 5, right: 85, left: 60, bottom: 5 }
+          : { top: 5, right: 80, left: 150, bottom: 5 }
+        }
       >
         <CartesianGrid strokeDasharray="3 3" />
-        <XAxis type="number" />
+        <XAxis type="number" tick={{ fontSize: isMobile ? 9 : 11 }} />
         <YAxis 
           dataKey="name" 
           type="category" 
-          width={150}
-          tick={{ fontSize: 11 }}
+          width={isMobile ? 65 : 150}
+          tick={{ fontSize: isMobile ? 8 : 11 }}
+          height={isMobile ? undefined : undefined}
         />
         <Tooltip 
           content={({ active, payload }) => {
@@ -118,8 +136,8 @@ export function ItemsRankingChart({ movements }: ItemsRankingChartProps) {
           }}
         />
         <Legend 
-          wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }}
-          iconSize={12}
+          wrapperStyle={{ fontSize: isMobile ? '10px' : '12px', paddingTop: '10px' }}
+          iconSize={isMobile ? 10 : 12}
         />
         <Bar 
           dataKey="valor" 
@@ -131,9 +149,23 @@ export function ItemsRankingChart({ movements }: ItemsRankingChartProps) {
           ))}
           <LabelList 
             dataKey="valor" 
-            position="right"
-            formatter={(value: number) => formatarMoeda(value)}
-            style={{ fill: '#374151', fontSize: '11px', fontWeight: '600' }}
+            position={isMobile ? "top" : "right"}
+            offset={isMobile ? 5 : 5}
+            formatter={(value: number) => {
+              if (isMobile) {
+                // Formato compacto para mobile: R$ 2k ao invés de R$ 2000.00
+                if (value >= 1000) {
+                  return `R$ ${(value / 1000).toFixed(1)}k`;
+                }
+                return `R$ ${value.toFixed(0)}`;
+              }
+              return formatarMoeda(value);
+            }}
+            style={{ 
+              fill: '#374151', 
+              fontSize: isMobile ? '8px' : '11px', 
+              fontWeight: '600' 
+            }}
           />
         </Bar>
       </BarChart>
@@ -148,13 +180,15 @@ export function ItemsRankingChart({ movements }: ItemsRankingChartProps) {
   return (
     <Card className="col-span-1 lg:col-span-6 relative">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm sm:text-base font-medium flex items-center gap-2">
-          <TrendingUp className="h-4 w-4 text-indigo-600" />
-          Ranking de Itens - Maior Valor (do maior para o menor)
+        <CardTitle className={`${isMobile ? 'text-xs' : 'text-sm sm:text-base'} font-medium flex items-center gap-2`}>
+          <TrendingUp className={`${isMobile ? 'h-3 w-3' : 'h-4 w-4'} text-indigo-600 flex-shrink-0`} />
+          <span className={isMobile ? 'leading-tight' : ''}>
+            {isMobile ? 'Ranking de Itens' : 'Ranking de Itens - Maior Valor (do maior para o menor)'}
+          </span>
         </CardTitle>
-        <Package className="h-4 w-4 text-muted-foreground" />
+        <Package className={`${isMobile ? 'h-3 w-3' : 'h-4 w-4'} text-muted-foreground flex-shrink-0`} />
       </CardHeader>
-      <CardContent className="px-2 sm:px-6">
+      <CardContent className={isMobile ? "px-2 py-3" : "px-2 sm:px-6"}>
         {valueChartContent}
       </CardContent>
       

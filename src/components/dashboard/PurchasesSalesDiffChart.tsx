@@ -1,8 +1,13 @@
 import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Bar, LabelList } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Calculator, X } from 'lucide-react';
 import { FullscreenChart } from '../ui/fullscreen-chart';
 import { useConfig } from '@/contexts/ConfigContext';
+import { useResponsive } from '@/hooks/use-responsive';
+import { useState } from 'react';
+import { Button } from '../ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 
 interface PurchasesSalesDiffChartProps {
   movements: Array<{
@@ -17,6 +22,8 @@ interface PurchasesSalesDiffChartProps {
 
 export function PurchasesSalesDiffChart({ movements }: PurchasesSalesDiffChartProps) {
   const { formatarMoeda } = useConfig();
+  const { isMobile } = useResponsive();
+  const [showDetails, setShowDetails] = useState(false);
 
   // Agrupar movimentações por mês
   const monthlyData = movements.reduce((acc, movement) => {
@@ -56,27 +63,52 @@ export function PurchasesSalesDiffChart({ movements }: PurchasesSalesDiffChartPr
     vendasValor: number;
   }>);
 
-  // Converter para array e ordenar por mês
-  const chartData = Object.values(monthlyData)
+  // Converter para array e ordenar por mês (todos os meses para detalhes)
+  const allMonthsData = Object.values(monthlyData)
     .sort((a, b) => {
       const dateA = new Date(a.month.split('/')[1] + '/' + a.month.split('/')[0]);
       const dateB = new Date(b.month.split('/')[1] + '/' + b.month.split('/')[0]);
       return dateA.getTime() - dateB.getTime();
     })
-    .slice(-6) // Últimos 6 meses
     .map(data => ({
       ...data,
       diferencaQuantidade: data.compras - data.vendas,
       diferencaValor: data.comprasValor - data.vendasValor
     }));
 
+  // Últimos 6 meses para o gráfico
+  const chartData = allMonthsData.slice(-6);
+
+  // Calcular totais gerais
+  const totalGeral = allMonthsData.reduce((acc, month) => ({
+    compras: acc.compras + month.comprasValor,
+    vendas: acc.vendas + month.vendasValor,
+    diferenca: acc.diferenca + month.diferencaValor
+  }), { compras: 0, vendas: 0, diferenca: 0 });
+
   const chartContent = chartData.length > 0 ? (
-    <ResponsiveContainer width="100%" height={400}>
-      <ComposedChart data={chartData} margin={{ top: 70, right: 20, left: 0, bottom: 5 }}>
+    <ResponsiveContainer width="100%" height={isMobile ? 450 : 400}>
+      <ComposedChart 
+        data={chartData} 
+        margin={isMobile 
+          ? { top: 90, right: 10, left: 0, bottom: 5 }
+          : { top: 70, right: 20, left: 0, bottom: 5 }
+        }
+      >
         <CartesianGrid strokeDasharray="3 3" />
-        <XAxis dataKey="month" />
-        <YAxis yAxisId="left" />
-        <YAxis yAxisId="right" orientation="right" />
+        <XAxis 
+          dataKey="month" 
+          tick={{ fontSize: isMobile ? 9 : 12 }}
+        />
+        <YAxis 
+          yAxisId="left" 
+          tick={{ fontSize: isMobile ? 8 : 12 }}
+        />
+        <YAxis 
+          yAxisId="right" 
+          orientation="right" 
+          tick={{ fontSize: isMobile ? 8 : 12 }}
+        />
         <Tooltip 
           formatter={(value: number, name: string) => {
             if (name === 'comprasValor' || name === 'vendasValor' || name === 'diferencaValor') {
@@ -87,22 +119,43 @@ export function PurchasesSalesDiffChart({ movements }: PurchasesSalesDiffChartPr
           labelFormatter={(label) => `Mês: ${label}`}
         />
         <Legend 
-          wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }}
+          wrapperStyle={{ fontSize: isMobile ? '10px' : '12px', paddingTop: '10px' }}
+          iconSize={isMobile ? 10 : 12}
         />
         <Bar yAxisId="left" dataKey="comprasValor" name="Compras (R$)" fill="#10b981" radius={[4, 4, 0, 0]}>
           <LabelList 
             dataKey="comprasValor" 
             position="top"
-            formatter={(value: number) => formatarMoeda(value)}
-            style={{ fill: '#059669', fontSize: '10px', fontWeight: '600' }}
+            offset={isMobile ? 3 : 5}
+            formatter={(value: number) => {
+              if (isMobile && value >= 1000) {
+                return `R$ ${(value / 1000).toFixed(1)}k`;
+              }
+              return formatarMoeda(value);
+            }}
+            style={{ 
+              fill: '#059669', 
+              fontSize: isMobile ? '8px' : '10px', 
+              fontWeight: '600' 
+            }}
           />
         </Bar>
         <Bar yAxisId="left" dataKey="vendasValor" name="Vendas (R$)" fill="#ef4444" radius={[4, 4, 0, 0]}>
           <LabelList 
             dataKey="vendasValor" 
             position="top"
-            formatter={(value: number) => formatarMoeda(value)}
-            style={{ fill: '#dc2626', fontSize: '10px', fontWeight: '600' }}
+            offset={isMobile ? 3 : 5}
+            formatter={(value: number) => {
+              if (isMobile && value >= 1000) {
+                return `R$ ${(value / 1000).toFixed(1)}k`;
+              }
+              return formatarMoeda(value);
+            }}
+            style={{ 
+              fill: '#dc2626', 
+              fontSize: isMobile ? '8px' : '10px', 
+              fontWeight: '600' 
+            }}
           />
         </Bar>
         <Line 
@@ -111,15 +164,30 @@ export function PurchasesSalesDiffChart({ movements }: PurchasesSalesDiffChartPr
           dataKey="diferencaValor" 
           name="Diferença (R$)" 
           stroke="#3b82f6" 
-          strokeWidth={3}
-          dot={{ fill: '#3b82f6', r: 4 }}
+          strokeWidth={isMobile ? 2 : 3}
+          dot={{ fill: '#3b82f6', r: isMobile ? 3 : 4 }}
         >
           <LabelList 
             dataKey="diferencaValor" 
             position="top"
-            offset={10}
-            formatter={(value: number) => formatarMoeda(value)}
-            style={{ fill: '#2563eb', fontSize: '12px', fontWeight: '700', backgroundColor: 'white', padding: '2px 4px', borderRadius: '3px' }}
+            offset={isMobile ? 12 : 10}
+            formatter={(value: number) => {
+              if (isMobile && Math.abs(value) >= 1000) {
+                return `${value >= 0 ? '+' : ''}R$ ${Math.abs(value / 1000).toFixed(1)}k`;
+              }
+              if (isMobile) {
+                return `${value >= 0 ? '+' : ''}R$ ${Math.abs(value).toFixed(0)}`;
+              }
+              return formatarMoeda(value);
+            }}
+            style={{ 
+              fill: '#2563eb', 
+              fontSize: isMobile ? '9px' : '12px', 
+              fontWeight: '700', 
+              backgroundColor: 'white', 
+              padding: isMobile ? '1px 2px' : '2px 4px', 
+              borderRadius: '3px' 
+            }}
           />
         </Line>
       </ComposedChart>
@@ -134,16 +202,29 @@ export function PurchasesSalesDiffChart({ movements }: PurchasesSalesDiffChartPr
   return (
     <Card className="col-span-1 lg:col-span-6 relative">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm sm:text-base font-medium flex items-center gap-2">
-          <DollarSign className="h-4 w-4 text-indigo-600" />
-          Compras vs Vendas por Mês (Diferença)
+        <CardTitle className={`${isMobile ? 'text-xs' : 'text-sm sm:text-base'} font-medium flex items-center gap-2`}>
+          <DollarSign className={`${isMobile ? 'h-3 w-3' : 'h-4 w-4'} text-indigo-600 flex-shrink-0`} />
+          <span className={isMobile ? 'leading-tight' : ''}>
+            {isMobile ? 'Compras vs Vendas' : 'Compras vs Vendas por Mês (Diferença)'}
+          </span>
         </CardTitle>
         <div className="flex items-center gap-2">
-          <TrendingUp className="h-4 w-4 text-green-600" />
-          <TrendingDown className="h-4 w-4 text-red-600" />
+          <Button
+            variant="outline"
+            size={isMobile ? "sm" : "default"}
+            onClick={() => setShowDetails(true)}
+            className={`${isMobile ? 'h-7 px-2 text-xs' : 'h-9 px-3'} flex items-center gap-1.5`}
+          >
+            <Calculator className={`${isMobile ? 'h-3 w-3' : 'h-4 w-4'}`} />
+            {!isMobile && <span>Detalhes</span>}
+          </Button>
+          <div className="flex items-center gap-2">
+            <TrendingUp className={`${isMobile ? 'h-3 w-3' : 'h-4 w-4'} text-green-600 flex-shrink-0`} />
+            <TrendingDown className={`${isMobile ? 'h-3 w-3' : 'h-4 w-4'} text-red-600 flex-shrink-0`} />
+          </div>
         </div>
       </CardHeader>
-      <CardContent className="px-2 sm:px-6">
+      <CardContent className={isMobile ? "px-2 py-3" : "px-2 sm:px-6"}>
         {chartContent}
       </CardContent>
       
@@ -202,6 +283,112 @@ export function PurchasesSalesDiffChart({ movements }: PurchasesSalesDiffChartPr
           </ComposedChart>
         </ResponsiveContainer>
       </FullscreenChart>
+
+      {/* Dialog com Detalhes Mensais e Total */}
+      <Dialog open={showDetails} onOpenChange={setShowDetails}>
+        <DialogContent className={`${isMobile ? 'max-w-[95vw]' : 'max-w-3xl'} max-h-[90vh] flex flex-col p-0 overflow-hidden !md:overflow-hidden`}>
+          <div className="overflow-y-auto flex-1 px-6 pt-6 pb-6 min-h-0">
+            <DialogHeader className="pb-4 border-b">
+              <DialogTitle className="flex items-center gap-2">
+                <Calculator className="h-5 w-5 text-indigo-600" />
+                Detalhes de Compras vs Vendas
+              </DialogTitle>
+            </DialogHeader>
+
+            <div className="mt-6 space-y-4">
+              {/* Tabela de Detalhes Mensais */}
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className={`${isMobile ? 'text-xs' : 'text-sm'} font-semibold`}>Mês</TableHead>
+                      <TableHead className={`${isMobile ? 'text-xs' : 'text-sm'} font-semibold text-right`}>Compras (R$)</TableHead>
+                      <TableHead className={`${isMobile ? 'text-xs' : 'text-sm'} font-semibold text-right`}>Vendas (R$)</TableHead>
+                      <TableHead className={`${isMobile ? 'text-xs' : 'text-sm'} font-semibold text-right`}>Diferença (R$)</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {allMonthsData.length > 0 ? (
+                      <>
+                        {allMonthsData.map((month, index) => (
+                          <TableRow key={index}>
+                            <TableCell className={`${isMobile ? 'text-xs' : 'text-sm'} font-medium`}>
+                              {month.month}
+                            </TableCell>
+                            <TableCell className={`${isMobile ? 'text-xs' : 'text-sm'} text-right text-green-600`}>
+                              {formatarMoeda(month.comprasValor)}
+                            </TableCell>
+                            <TableCell className={`${isMobile ? 'text-xs' : 'text-sm'} text-right text-red-600`}>
+                              {formatarMoeda(month.vendasValor)}
+                            </TableCell>
+                            <TableCell className={`${isMobile ? 'text-xs' : 'text-sm'} text-right font-semibold ${
+                              month.diferencaValor >= 0 ? 'text-blue-600' : 'text-orange-600'
+                            }`}>
+                              {month.diferencaValor >= 0 ? '+' : ''}{formatarMoeda(month.diferencaValor)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        {/* Linha de Total */}
+                        <TableRow className="bg-gray-50 font-bold">
+                          <TableCell className={`${isMobile ? 'text-xs' : 'text-sm'} font-bold`}>
+                            TOTAL GERAL
+                          </TableCell>
+                          <TableCell className={`${isMobile ? 'text-xs' : 'text-sm'} text-right font-bold text-green-700`}>
+                            {formatarMoeda(totalGeral.compras)}
+                          </TableCell>
+                          <TableCell className={`${isMobile ? 'text-xs' : 'text-sm'} text-right font-bold text-red-700`}>
+                            {formatarMoeda(totalGeral.vendas)}
+                          </TableCell>
+                          <TableCell className={`${isMobile ? 'text-xs' : 'text-sm'} text-right font-bold ${
+                            totalGeral.diferenca >= 0 ? 'text-blue-700' : 'text-orange-700'
+                          }`}>
+                            {totalGeral.diferenca >= 0 ? '+' : ''}{formatarMoeda(totalGeral.diferenca)}
+                          </TableCell>
+                        </TableRow>
+                      </>
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                          Nenhuma movimentação registrada ainda
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Resumo */}
+              <div className={`${isMobile ? 'p-3' : 'p-4'} bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border border-indigo-200`}>
+                <h4 className={`${isMobile ? 'text-sm' : 'text-base'} font-semibold mb-2 text-gray-900`}>
+                  📊 Resumo Geral
+                </h4>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <p className={`${isMobile ? 'text-xs' : 'text-sm'} text-gray-600 mb-1`}>Total Compras</p>
+                    <p className={`${isMobile ? 'text-sm' : 'text-base'} font-bold text-green-600`}>
+                      {formatarMoeda(totalGeral.compras)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className={`${isMobile ? 'text-xs' : 'text-sm'} text-gray-600 mb-1`}>Total Vendas</p>
+                    <p className={`${isMobile ? 'text-sm' : 'text-base'} font-bold text-red-600`}>
+                      {formatarMoeda(totalGeral.vendas)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className={`${isMobile ? 'text-xs' : 'text-sm'} text-gray-600 mb-1`}>Diferença Total</p>
+                    <p className={`${isMobile ? 'text-sm' : 'text-base'} font-bold ${
+                      totalGeral.diferenca >= 0 ? 'text-blue-600' : 'text-orange-600'
+                    }`}>
+                      {totalGeral.diferenca >= 0 ? '+' : ''}{formatarMoeda(totalGeral.diferenca)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
