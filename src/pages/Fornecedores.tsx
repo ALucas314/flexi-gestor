@@ -201,35 +201,105 @@ const Fornecedores = () => {
     }
   };
 
-  // Recarregar quando workspace mudar (mas não limpar se workspace for null temporariamente)
+  // 🔄 Escutar mudanças de workspace para recarregar dados
   useEffect(() => {
-    if (workspaceAtivo?.id) {
-      loadSuppliers();
-    } else {
-      // Se não houver workspace, não mostrar loading indefinidamente
-      setIsLoading(false);
-    }
-    // Não limpar lista quando workspace mudar para null - manter dados em memória
-  }, [workspaceAtivo?.id]);
-
-  // Escutar mudanças de autenticação para recarregar após reconexão
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      // Recarregar apenas quando houver sessão ativa e workspace definido
-      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session && workspaceAtivo?.id) {
-        // Pequeno delay para garantir que o workspace está disponível
-        setTimeout(() => {
-          if (workspaceAtivo?.id) {
-            loadSuppliers();
-          }
-        }, 500);
+    const handleWorkspaceChanged = async () => {
+      console.log('🔄 Workspace mudou (Fornecedores), recarregando dados...');
+      if (workspaceAtivo?.id) {
+        await loadSuppliers();
       }
-    });
+    };
+
+    window.addEventListener('workspace-changed', handleWorkspaceChanged);
 
     return () => {
-      subscription.unsubscribe();
+      window.removeEventListener('workspace-changed', handleWorkspaceChanged);
     };
   }, [workspaceAtivo?.id]);
+
+  // 🔄 Carregar dados do Supabase quando o usuário estiver autenticado OU mudar workspace
+  useEffect(() => {
+    if (user && workspaceAtivo?.id) {
+      // Carregar dados inicialmente
+      loadSuppliers();
+
+      let fornecedoresSubscription: any = null;
+      let lastSuccessfulConnection = Date.now();
+
+      // Função para reconfigurar subscriptions quando desconectam
+      const reconfigureSubscriptions = () => {
+        if (fornecedoresSubscription) {
+          supabase.removeChannel(fornecedoresSubscription);
+        }
+
+        try {
+          fornecedoresSubscription = supabase
+            .channel(`fornecedores-changes-${workspaceAtivo.id}-${Date.now()}`)
+            .on('postgres_changes', 
+              { 
+                event: '*', 
+                schema: 'public', 
+                table: 'fornecedores',
+                filter: `usuario_id=eq.${workspaceAtivo.id}`
+              }, 
+              async (payload) => {
+                await loadSuppliers();
+              }
+            )
+            .subscribe((status) => {
+              if (status === 'SUBSCRIBED') {
+                lastSuccessfulConnection = Date.now();
+              }
+            });
+        } catch (error) {
+          console.error('Erro ao configurar subscription de fornecedores:', error);
+        }
+      };
+
+      // Configurar subscriptions inicial
+      reconfigureSubscriptions();
+
+      // 🔄 Health check que detecta desconexão e reconecta
+      // Verifica a cada 30 segundos se a última conexão foi há mais de 2 minutos
+      const healthCheckInterval = setInterval(async () => {
+        const timeSinceLastConnection = Date.now() - lastSuccessfulConnection;
+        // Se não houve conexão bem-sucedida nos últimos 2 minutos, fazer reload
+        if (timeSinceLastConnection > 120000) {
+          try {
+            // Tentar reconectar silenciosamente, sem recarregar a página
+            reconfigureSubscriptions();
+            await loadSuppliers();
+            lastSuccessfulConnection = Date.now();
+          } catch (e) {
+            // Silencioso: mantém a UI estável
+          }
+        }
+      }, 30000); // Verifica a cada 30 segundos
+
+      // 🔄 Refresh periódico silencioso dos dados (a cada 60 segundos)
+      const refreshInterval = setInterval(async () => {
+        if (workspaceAtivo?.id) {
+          await loadSuppliers();
+        }
+      }, 60000); // 60 segundos
+
+      // 🧹 Cleanup ao sair
+      return () => {
+        if (healthCheckInterval) {
+          clearInterval(healthCheckInterval);
+        }
+        if (refreshInterval) {
+          clearInterval(refreshInterval);
+        }
+        if (fornecedoresSubscription) {
+          supabase.removeChannel(fornecedoresSubscription);
+        }
+      };
+    } else if (!user || !workspaceAtivo?.id) {
+      // Não limpar lista quando workspace/user for null - manter dados em memória
+      setIsLoading(false);
+    }
+  }, [user?.id, workspaceAtivo?.id]); // Recarregar quando mudar workspace ou usuário
 
   const onOpenAdd = () => {
     setEditing(null);
