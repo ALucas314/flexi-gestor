@@ -100,6 +100,15 @@ const Fornecedores = () => {
     defaultValues: { name: '', documentType: 'cpf', cpf: '', phone: '' }
   });
 
+  // Controlar carregamento inicial com timeout (igual às outras páginas)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 500);
+    
+    return () => clearTimeout(timer);
+  }, []);
+
   // Filtrar fornecedores baseado no termo de busca (nome e código)
   const filteredSuppliers = useMemo(() => {
     // Se não há termo de busca, retorna todos os fornecedores
