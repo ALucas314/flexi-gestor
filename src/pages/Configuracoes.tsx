@@ -139,13 +139,20 @@ const Configuracoes = () => {
         }
       }
 
-      // Limpar localStorage do workspace e dados em cache
+      // Limpar localStorage do workspace e dados em cache PRIMEIRO (para atualização imediata na UI)
       localStorage.removeItem(`flexi-gestor-workspace-${workspaceAtivo.id}`);
       localStorage.removeItem(`flexi-products-${workspaceAtivo.id}`);
       localStorage.removeItem(`flexi-movements-${workspaceAtivo.id}`);
 
+      // Aguardar um pequeno delay para permitir que o Supabase processe todas as deleções
+      // e as subscriptions do real-time processem os eventos de DELETE
+      await new Promise(resolve => setTimeout(resolve, 500));
+
       // Atualizar dados em tempo real após limpar
       await refreshData();
+
+      // Aguardar mais um pouco para garantir que o refresh foi processado
+      await new Promise(resolve => setTimeout(resolve, 300));
 
       // Disparar evento customizado para forçar atualização em toda a aplicação
       window.dispatchEvent(new CustomEvent('force-reload-data'));

@@ -315,6 +315,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       let lastSuccessfulConnection = Date.now();
       const MAX_RECONNECT_ATTEMPTS = 10;
       const RECONNECT_DELAY = 2000; // 2 segundos
+      
+      // Debounce map para evitar muitas atualizações simultâneas
+      const debounceTimers: Map<string, NodeJS.Timeout> = new Map();
+      const DEBOUNCE_DELAY = 300; // 300ms de debounce
 
       // Função para criar subscription para uma tabela específica
       const createSubscription = (tableName: string, onUpdate: () => Promise<void>) => {
@@ -328,6 +332,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         }
         
         try {
+          console.log(`🔌 Criando subscription para ${tableName}...`);
           const channel = supabase
             .channel(channelName)
             .on(
@@ -339,22 +344,60 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
                 filter: `usuario_id=eq.${workspaceAtivo.id}`
               },
               async (payload) => {
-                console.log(`🔄 Realtime: ${tableName} atualizado`, payload.eventType);
-                await onUpdate();
-                lastSuccessfulConnection = Date.now();
-                reconnectAttempts.delete(tableName); // Resetar contador de tentativas em caso de sucesso
+                console.log(`🔄 Realtime: ${tableName} atualizado`, payload.eventType, payload);
+                
+                // Para eventos DELETE, atualizar imediatamente sem debounce
+                // para garantir que os dados sejam atualizados rapidamente
+                if (payload.eventType === 'DELETE') {
+                  try {
+                    console.log(`⚡ DELETE detectado em ${tableName}, atualizando imediatamente...`);
+                    await onUpdate();
+                    lastSuccessfulConnection = Date.now();
+                    reconnectAttempts.delete(tableName);
+                    return;
+                  } catch (error) {
+                    console.error(`Erro ao atualizar ${tableName} via realtime (DELETE):`, error);
+                  }
+                }
+                
+                // Para outros eventos (INSERT, UPDATE), usar debounce
+                // Limpar timer anterior se existir
+                if (debounceTimers.has(tableName)) {
+                  clearTimeout(debounceTimers.get(tableName)!);
+                }
+                
+                // Criar novo timer com debounce para evitar muitas atualizações simultâneas
+                const timer = setTimeout(async () => {
+                  try {
+                    await onUpdate();
+                    lastSuccessfulConnection = Date.now();
+                    reconnectAttempts.delete(tableName); // Resetar contador de tentativas em caso de sucesso
+                  } catch (error) {
+                    console.error(`Erro ao atualizar ${tableName} via realtime:`, error);
+                  } finally {
+                    debounceTimers.delete(tableName);
+                  }
+                }, DEBOUNCE_DELAY);
+                
+                debounceTimers.set(tableName, timer);
               }
             )
             .subscribe((status) => {
+              console.log(`📡 Realtime: ${tableName} - Status: ${status}`);
+              
               if (status === 'SUBSCRIBED') {
-                console.log(`✅ Realtime: ${tableName} conectado`);
+                console.log(`✅ Realtime: ${tableName} conectado com sucesso`);
                 lastSuccessfulConnection = Date.now();
                 reconnectAttempts.delete(tableName); // Resetar contador
               } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
                 console.warn(`⚠️ Realtime: ${tableName} desconectado (${status}), tentando reconectar...`);
                 // Remover subscription antiga
                 if (subscriptions.has(tableName)) {
-                  supabase.removeChannel(subscriptions.get(tableName));
+                  try {
+                    supabase.removeChannel(subscriptions.get(tableName));
+                  } catch (e) {
+                    console.error(`Erro ao remover channel ${tableName}:`, e);
+                  }
                   subscriptions.delete(tableName);
                 }
                 // Incrementar contador de tentativas
@@ -365,9 +408,15 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
                 setTimeout(() => {
                   const newAttempts = reconnectAttempts.get(tableName) || 0;
                   if (newAttempts < MAX_RECONNECT_ATTEMPTS) {
+                    console.log(`🔄 Tentando reconectar ${tableName} (tentativa ${newAttempts + 1}/${MAX_RECONNECT_ATTEMPTS})...`);
                     createSubscription(tableName, onUpdate);
+                  } else {
+                    console.error(`❌ Máximo de tentativas atingido para ${tableName}`);
                   }
                 }, RECONNECT_DELAY);
+              } else {
+                // Logar outros status para debug
+                console.log(`📊 Realtime: ${tableName} - Status desconhecido: ${status}`);
               }
             });
 
@@ -384,6 +433,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
       // Função para remover todas as subscriptions
       const removeAllSubscriptions = () => {
+        // Limpar todos os timers de debounce primeiro
+        debounceTimers.forEach((timer, tableName) => {
+          clearTimeout(timer);
+        });
+        debounceTimers.clear();
+        
         subscriptions.forEach((channel, tableName) => {
           try {
             supabase.removeChannel(channel);
@@ -459,6 +514,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       };
 
       // Configurar todas as subscriptions inicialmente
+      console.log('🚀 Iniciando subscriptions real-time...');
       reconfigureAllSubscriptions();
 
       // 🔄 Health check que detecta desconexão e reconecta automaticamente
@@ -486,14 +542,18 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         }
       }, 30000); // Verifica a cada 30 segundos
 
-      // 🔄 Refresh periódico silencioso dos dados (a cada 45 segundos)
+      // 🔄 Refresh periódico silencioso dos dados (a cada 30 segundos como fallback)
+      // Isso garante que mesmo se o real-time falhar, os dados serão atualizados
       const refreshInterval = setInterval(async () => {
         try {
+          console.log('🔄 Refresh periódico (fallback se real-time falhar)...');
           await refreshData();
+          lastSuccessfulConnection = Date.now();
         } catch (e) {
           // Silencioso: mantém a UI estável
+          console.error('Erro no refresh periódico:', e);
         }
-      }, 45000); // 45 segundos (mais frequente)
+      }, 30000); // 30 segundos (fallback mais frequente)
 
       // 👁️ Listener para visibilidade da página - reconectar quando página voltar a ficar visível
       const handleVisibilityChange = () => {
@@ -536,6 +596,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
       // 🧹 Cleanup ao sair
       return () => {
+        // Limpar todos os timers de debounce
+        debounceTimers.forEach((timer) => {
+          clearTimeout(timer);
+        });
+        debounceTimers.clear();
+        
         if (healthCheckInterval) {
           clearInterval(healthCheckInterval);
         }
