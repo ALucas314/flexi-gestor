@@ -157,6 +157,7 @@ const Clientes = () => {
   const loadClients = useCallback(async () => {
     if (!user?.id || !workspaceAtivo?.id) {
       console.log('⚠️ [Clientes] Não carregando: user.id =', user?.id, 'workspaceAtivo.id =', workspaceAtivo?.id);
+      // Não limpar dados se não há user/workspace - pode ser desconexão temporária
       return;
     }
     
@@ -172,8 +173,10 @@ const Clientes = () => {
 
       if (error) {
         console.error('❌ [Clientes] Erro ao buscar clientes:', error);
-        toast.error('Erro ao carregar clientes', { description: error.message });
-        throw error;
+        // Não mostrar toast de erro para evitar spam - apenas logar
+        // toast.error('Erro ao carregar clientes', { description: error.message });
+        // NÃO lançar erro - apenas retornar e manter dados existentes
+        return;
       }
 
       console.log('✅ [Clientes] Clientes encontrados:', data?.length || 0, 'registros');
@@ -188,14 +191,43 @@ const Clientes = () => {
         created_at: c.criado_em ?? c.created_at,
       }));
 
-      setClients(mapped);
+      // IMPORTANTE: Só atualizar se houver dados OU se realmente estiver vazio (não limpar acidentalmente)
+      // Se mapeou dados, atualizar normalmente
+      // Se não há dados mas já existem clientes carregados, pode ser apenas uma query vazia temporária
+      // - NÃO limpar os dados existentes nesse caso
+      if (mapped.length > 0 || clients.length === 0) {
+        setClients(mapped);
+        // Salvar no localStorage como cache de fallback
+        try {
+          localStorage.setItem(`flexi-clients-${workspaceAtivo.id}`, JSON.stringify(mapped));
+        } catch (e) {
+          // Ignorar erros de localStorage
+        }
+      } else {
+        // Se retornou vazio mas já havia dados, pode ser erro de conexão/RLS
+        // Manter dados existentes e apenas logar
+        console.warn('⚠️ [Clientes] Query retornou vazio mas já existem dados carregados - mantendo dados existentes');
+      }
     } catch (error: any) {
       console.error('❌ [Clientes] Erro ao carregar clientes:', error);
       // NÃO limpar dados em caso de erro - pode ser apenas desconexão temporária
       // Os dados já carregados devem permanecer visíveis
+      // Tentar carregar do cache do localStorage como fallback
+      if (clients.length === 0) {
+        try {
+          const cached = localStorage.getItem(`flexi-clients-${workspaceAtivo?.id}`);
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            setClients(parsed);
+            console.log('✅ [Clientes] Carregado do cache:', parsed.length, 'registros');
+          }
+        } catch (e) {
+          // Ignorar erros de parse
+        }
+      }
       // setClients([]); // REMOVIDO - mantém dados mesmo com erro de conexão
     }
-  }, [user?.id, workspaceAtivo?.id]);
+  }, [user?.id, workspaceAtivo?.id, clients.length]);
 
   // 🔄 Escutar mudanças de workspace para recarregar dados
   useEffect(() => {
@@ -235,7 +267,19 @@ const Clientes = () => {
   // 🔄 Carregar dados do Supabase quando o usuário estiver autenticado OU mudar workspace
   useEffect(() => {
     if (user && workspaceAtivo?.id) {
-      // Carregar dados
+      // Carregar dados do localStorage PRIMEIRO (instantâneo)
+      try {
+        const cached = localStorage.getItem(`flexi-clients-${workspaceAtivo.id}`);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          setClients(parsed);
+          console.log('✅ [Clientes] Carregado do cache:', parsed.length, 'registros');
+        }
+      } catch (e) {
+        // Ignorar erros de parse
+      }
+
+      // Carregar dados do Supabase
       const loadData = async () => {
         try {
           setIsLoading(true);

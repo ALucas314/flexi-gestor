@@ -157,6 +157,7 @@ const Fornecedores = () => {
   const loadSuppliers = useCallback(async () => {
     if (!user?.id || !workspaceAtivo?.id) {
       console.log('⚠️ [Fornecedores] Não carregando: user.id =', user?.id, 'workspaceAtivo.id =', workspaceAtivo?.id);
+      // Não limpar dados se não há user/workspace - pode ser desconexão temporária
       return;
     }
     
@@ -172,8 +173,10 @@ const Fornecedores = () => {
 
       if (error) {
         console.error('❌ [Fornecedores] Erro ao buscar fornecedores:', error);
-        toast.error('Erro ao carregar fornecedores', { description: error.message });
-        throw error;
+        // Não mostrar toast de erro para evitar spam - apenas logar
+        // toast.error('Erro ao carregar fornecedores', { description: error.message });
+        // NÃO lançar erro - apenas retornar e manter dados existentes
+        return;
       }
 
       console.log('✅ [Fornecedores] Fornecedores encontrados:', data?.length || 0, 'registros');
@@ -188,14 +191,43 @@ const Fornecedores = () => {
         created_at: s.criado_em ?? s.created_at,
       }));
 
-      setSuppliers(mapped);
+      // IMPORTANTE: Só atualizar se houver dados OU se realmente estiver vazio (não limpar acidentalmente)
+      // Se mapeou dados, atualizar normalmente
+      // Se não há dados mas já existem fornecedores carregados, pode ser apenas uma query vazia temporária
+      // - NÃO limpar os dados existentes nesse caso
+      if (mapped.length > 0 || suppliers.length === 0) {
+        setSuppliers(mapped);
+        // Salvar no localStorage como cache de fallback
+        try {
+          localStorage.setItem(`flexi-suppliers-${workspaceAtivo.id}`, JSON.stringify(mapped));
+        } catch (e) {
+          // Ignorar erros de localStorage
+        }
+      } else {
+        // Se retornou vazio mas já havia dados, pode ser erro de conexão/RLS
+        // Manter dados existentes e apenas logar
+        console.warn('⚠️ [Fornecedores] Query retornou vazio mas já existem dados carregados - mantendo dados existentes');
+      }
     } catch (error: any) {
       console.error('❌ [Fornecedores] Erro ao carregar fornecedores:', error);
       // NÃO limpar dados em caso de erro - pode ser apenas desconexão temporária
       // Os dados já carregados devem permanecer visíveis
+      // Tentar carregar do cache do localStorage como fallback
+      if (suppliers.length === 0) {
+        try {
+          const cached = localStorage.getItem(`flexi-suppliers-${workspaceAtivo?.id}`);
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            setSuppliers(parsed);
+            console.log('✅ [Fornecedores] Carregado do cache:', parsed.length, 'registros');
+          }
+        } catch (e) {
+          // Ignorar erros de parse
+        }
+      }
       // setSuppliers([]); // REMOVIDO - mantém dados mesmo com erro de conexão
     }
-  }, [user?.id, workspaceAtivo?.id]);
+  }, [user?.id, workspaceAtivo?.id, suppliers.length]);
 
   // 🔄 Escutar mudanças de workspace para recarregar dados
   useEffect(() => {
@@ -235,7 +267,19 @@ const Fornecedores = () => {
   // 🔄 Carregar dados do Supabase quando o usuário estiver autenticado OU mudar workspace
   useEffect(() => {
     if (user && workspaceAtivo?.id) {
-      // Carregar dados
+      // Carregar dados do localStorage PRIMEIRO (instantâneo)
+      try {
+        const cached = localStorage.getItem(`flexi-suppliers-${workspaceAtivo.id}`);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          setSuppliers(parsed);
+          console.log('✅ [Fornecedores] Carregado do cache:', parsed.length, 'registros');
+        }
+      } catch (e) {
+        // Ignorar erros de parse
+      }
+
+      // Carregar dados do Supabase
       const loadData = async () => {
         try {
           setIsLoading(true);

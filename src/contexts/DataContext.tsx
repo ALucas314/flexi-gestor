@@ -309,88 +309,230 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       };
       loadData();
 
-      let produtosSubscription: any = null;
-      let movimentacoesSubscription: any = null;
+      // 📡 Gerenciador de Subscriptions Realtime com Reconexão Automática
+      let subscriptions: Map<string, any> = new Map();
+      let reconnectAttempts: Map<string, number> = new Map(); // Tentativas por tabela
       let lastSuccessfulConnection = Date.now();
-      let isFirstConnection = true;
+      const MAX_RECONNECT_ATTEMPTS = 10;
+      const RECONNECT_DELAY = 2000; // 2 segundos
 
-      // Função para reconfigurar subscriptions quando desconectam
-      const reconfigureSubscriptions = () => {
-        if (produtosSubscription) {
-          supabase.removeChannel(produtosSubscription);
+      // Função para criar subscription para uma tabela específica
+      const createSubscription = (tableName: string, onUpdate: () => Promise<void>) => {
+        const channelName = `${tableName}-realtime-${workspaceAtivo.id}-${Date.now()}`;
+        const attempts = reconnectAttempts.get(tableName) || 0;
+        
+        // Se excedeu o máximo de tentativas, não tentar mais
+        if (attempts >= MAX_RECONNECT_ATTEMPTS) {
+          console.error(`❌ Realtime: ${tableName} - Máximo de tentativas de reconexão atingido`);
+          return null;
         }
-        if (movimentacoesSubscription) {
-          supabase.removeChannel(movimentacoesSubscription);
-        }
-
+        
         try {
-          produtosSubscription = supabase
-            .channel(`produtos-changes-${workspaceAtivo.id}-${Date.now()}`)
-            .on('postgres_changes', 
-              { 
-                event: '*', 
-                schema: 'public', 
-                table: 'produtos',
+          const channel = supabase
+            .channel(channelName)
+            .on(
+              'postgres_changes',
+              {
+                event: '*',
+                schema: 'public',
+                table: tableName,
                 filter: `usuario_id=eq.${workspaceAtivo.id}`
-              }, 
+              },
               async (payload) => {
-                await refreshProducts();
+                console.log(`🔄 Realtime: ${tableName} atualizado`, payload.eventType);
+                await onUpdate();
+                lastSuccessfulConnection = Date.now();
+                reconnectAttempts.delete(tableName); // Resetar contador de tentativas em caso de sucesso
               }
             )
             .subscribe((status) => {
               if (status === 'SUBSCRIBED') {
+                console.log(`✅ Realtime: ${tableName} conectado`);
                 lastSuccessfulConnection = Date.now();
+                reconnectAttempts.delete(tableName); // Resetar contador
+              } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+                console.warn(`⚠️ Realtime: ${tableName} desconectado (${status}), tentando reconectar...`);
+                // Remover subscription antiga
+                if (subscriptions.has(tableName)) {
+                  supabase.removeChannel(subscriptions.get(tableName));
+                  subscriptions.delete(tableName);
+                }
+                // Incrementar contador de tentativas
+                const currentAttempts = reconnectAttempts.get(tableName) || 0;
+                reconnectAttempts.set(tableName, currentAttempts + 1);
+                
+                // Tentar reconectar após delay
+                setTimeout(() => {
+                  const newAttempts = reconnectAttempts.get(tableName) || 0;
+                  if (newAttempts < MAX_RECONNECT_ATTEMPTS) {
+                    createSubscription(tableName, onUpdate);
+                  }
+                }, RECONNECT_DELAY);
               }
             });
 
-          movimentacoesSubscription = supabase
-            .channel(`movimentacoes-changes-${workspaceAtivo.id}-${Date.now()}`)
-            .on('postgres_changes', 
-              { 
-                event: '*', 
-                schema: 'public', 
-                table: 'movimentacoes',
-                filter: `usuario_id=eq.${workspaceAtivo.id}`
-              }, 
-              async (payload) => {
-                await refreshMovements();
-                await refreshProducts();
-              }
-            )
-            .subscribe((status) => {
-              if (status === 'SUBSCRIBED') {
-                lastSuccessfulConnection = Date.now();
-              }
-            });
+          subscriptions.set(tableName, channel);
+          return channel;
         } catch (error) {
-          // Silencioso
+          console.error(`Erro ao criar subscription para ${tableName}:`, error);
+          // Incrementar tentativas mesmo em caso de erro
+          const currentAttempts = reconnectAttempts.get(tableName) || 0;
+          reconnectAttempts.set(tableName, currentAttempts + 1);
+          return null;
         }
       };
 
-      // Configurar subscriptions inicial
-      reconfigureSubscriptions();
+      // Função para remover todas as subscriptions
+      const removeAllSubscriptions = () => {
+        subscriptions.forEach((channel, tableName) => {
+          try {
+            supabase.removeChannel(channel);
+            console.log(`🔌 Removendo subscription: ${tableName}`);
+          } catch (error) {
+            // Ignorar erros ao remover
+          }
+        });
+        subscriptions.clear();
+      };
 
-      // 🔄 Health check que detecta desconexão e reconecta
-      // Verifica a cada 60 segundos se houve conexão recente (menos agressivo para evitar loops)
+      // Função para reconfigurar todas as subscriptions
+      const reconfigureAllSubscriptions = () => {
+        // Remover subscriptions antigas primeiro
+        removeAllSubscriptions();
+        // Resetar contadores de tentativas para permitir nova tentativa
+        reconnectAttempts.clear();
+
+        // Criar subscriptions para todas as tabelas configuradas no Realtime
+        // 1. produtos
+        createSubscription('produtos', async () => {
+          await refreshProducts();
+        });
+
+        // 2. movimentacoes
+        createSubscription('movimentacoes', async () => {
+          await refreshMovements();
+          await refreshProducts(); // Atualizar produtos também (pode afetar estoque)
+        });
+
+        // 3. lotes
+        createSubscription('lotes', async () => {
+          await refreshProducts(); // Lotes afetam produtos
+        });
+
+        // 4. categorias
+        createSubscription('categorias', async () => {
+          await refreshCategories();
+        });
+
+        // 5. unidades_medida
+        createSubscription('unidades_medida', async () => {
+          await refreshCustomUnits();
+        });
+
+        // 6. fornecedores
+        createSubscription('fornecedores', async () => {
+          // Fornecedores não afetam diretamente o DataContext
+          // As páginas de Fornecedores têm suas próprias subscriptions
+          // Não fazer refresh aqui para evitar interferência
+        });
+
+        // 7. clientes
+        createSubscription('clientes', async () => {
+          // Clientes não afetam diretamente o DataContext
+          // As páginas de Clientes têm suas próprias subscriptions
+          // Não fazer refresh aqui para evitar interferência
+        });
+
+        // 8. compartilhamentos
+        createSubscription('compartilhamentos', async () => {
+          // Atualizar dados quando compartilhamentos mudarem
+          await refreshData();
+        });
+
+        // 9. perfis (opcional - geralmente não precisa atualizar dados)
+        createSubscription('perfis', async () => {
+          // Perfis geralmente não afetam dados de produtos/movimentações
+          // Mas pode ser útil para atualizar UI se necessário
+        });
+
+        console.log(`✅ Realtime: ${subscriptions.size} subscriptions criadas`);
+      };
+
+      // Configurar todas as subscriptions inicialmente
+      reconfigureAllSubscriptions();
+
+      // 🔄 Health check que detecta desconexão e reconecta automaticamente
+      // Verifica a cada 30 segundos se houve conexão recente
       const healthCheckInterval = setInterval(async () => {
         const timeSinceLastConnection = Date.now() - lastSuccessfulConnection;
-        // Se não houve conexão bem-sucedida nos últimos 2 minutos, reconectar silenciosamente
-        if (timeSinceLastConnection > 120000) {
+        
+        // Se não houve conexão bem-sucedida nos últimos 60 segundos, reconectar
+        if (timeSinceLastConnection > 60000) {
+          console.warn('⚠️ Realtime: Sem conexão há mais de 60s, reconectando...');
           try {
-            // Tentar reconectar silenciosamente, sem recarregar a página
-            reconfigureSubscriptions();
-            // NÃO recarregar dados aqui para não causar loop
+            // Se não houve conexão recente, reconectar todas as subscriptions
+            // O status das subscriptions é gerenciado pelos callbacks de subscribe()
+            reconfigureAllSubscriptions();
+            // Recarregar dados silenciosamente para manter sincronizado
+            await refreshData();
             lastSuccessfulConnection = Date.now();
           } catch (e) {
-            // Silencioso: mantém a UI estável
+            console.error('Erro no health check do Realtime:', e);
+            // Tentar reconectar mesmo em caso de erro
+            // Resetar contadores para permitir nova tentativa
+            reconnectAttempts.clear();
+            reconfigureAllSubscriptions();
           }
         }
-      }, 60000); // Verifica a cada 60 segundos (menos agressivo)
+      }, 30000); // Verifica a cada 30 segundos
 
-      // 🔄 Refresh periódico silencioso dos dados (a cada 60 segundos)
+      // 🔄 Refresh periódico silencioso dos dados (a cada 45 segundos)
       const refreshInterval = setInterval(async () => {
-        await refreshData();
-      }, 60000); // 60 segundos
+        try {
+          await refreshData();
+        } catch (e) {
+          // Silencioso: mantém a UI estável
+        }
+      }, 45000); // 45 segundos (mais frequente)
+
+      // 👁️ Listener para visibilidade da página - reconectar quando página voltar a ficar visível
+      const handleVisibilityChange = () => {
+        if (!document.hidden) {
+          // Página voltou a ficar visível - reconectar imediatamente
+          console.log('👁️ Página visível novamente, reconectando Realtime...');
+          setTimeout(() => {
+            reconfigureAllSubscriptions();
+            refreshData().catch(() => {
+              // Silencioso
+            });
+          }, 500);
+        }
+      };
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+
+      // 🔄 Listener para quando a janela ganha foco - reconectar quando voltar
+      const handleFocus = () => {
+        console.log('🔄 Janela ganhou foco, reconectando Realtime...');
+        setTimeout(() => {
+          reconfigureAllSubscriptions();
+          refreshData().catch(() => {
+            // Silencioso
+          });
+        }, 500);
+      };
+      window.addEventListener('focus', handleFocus);
+
+      // 🔄 Listener para eventos online/offline - reconectar quando voltar online
+      const handleOnline = () => {
+        console.log('🌐 Conexão restaurada, reconectando Realtime...');
+        setTimeout(() => {
+          reconfigureAllSubscriptions();
+          refreshData().catch(() => {
+            // Silencioso
+          });
+        }, 1000);
+      };
+      window.addEventListener('online', handleOnline);
 
       // 🧹 Cleanup ao sair
       return () => {
@@ -400,12 +542,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         if (refreshInterval) {
           clearInterval(refreshInterval);
         }
-        if (produtosSubscription) {
-          supabase.removeChannel(produtosSubscription);
-        }
-        if (movimentacoesSubscription) {
-          supabase.removeChannel(movimentacoesSubscription);
-        }
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        window.removeEventListener('focus', handleFocus);
+        window.removeEventListener('online', handleOnline);
+        // Remover todas as subscriptions
+        removeAllSubscriptions();
       };
     } else if (!isAuthenticated || !user) {
       // Limpar dados quando não autenticado
