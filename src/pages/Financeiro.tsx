@@ -452,7 +452,7 @@ Compra registrada com sucesso!
                 📊 Lucro por Produto
               </CardTitle>
               <CardDescription className="text-slate-600">
-                Margem de contribuição calculada como: (Lucro ÷ Total Venda) × 100
+                Margem de contribuição exibida em valor (R$) = Lucro
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -484,9 +484,10 @@ Compra registrada com sucesso!
                       </TableRow>
                     ) : (
                       profitByProductSorted.map((item) => {
-                        // Calcular margem de contribuição: Lucro / Total Venda * 100
-                        const margemContribuicao = item.totalVenda > 0 
-                          ? (item.lucro / item.totalVenda) * 100 
+                        // Margem de contribuição = Total de Venda / Lucro
+                        // Exibida em valor monetário como R$ X.XX
+                        const margemContribuicao = item.lucro > 0 
+                          ? item.totalVenda / item.lucro 
                           : 0;
                         
                         return (
@@ -514,7 +515,7 @@ Compra registrada com sucesso!
                             </TableCell>
                             <TableCell>
                               <span className={`font-bold text-sm ${margemContribuicao >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                {margemContribuicao.toFixed(1)}%
+                                {margemContribuicao >= 0 ? '+' : ''}R$ {margemContribuicao.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </span>
                             </TableCell>
                             <TableCell className="hidden lg:table-cell">
