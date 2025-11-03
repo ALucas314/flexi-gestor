@@ -436,10 +436,8 @@ const Produtos = () => {
   // Função para adicionar nova categoria
   const handleAddCategory = async () => {
     if (!newCategoryName.trim()) {
-      toast({
-        title: "❌ Campo Vazio",
+      toast.error("❌ Campo Vazio", {
         description: "Por favor, digite um nome para a categoria.",
-        variant: "destructive",
       });
       return;
     }
@@ -456,16 +454,12 @@ const Produtos = () => {
       // Selecionar a nova categoria no campo
       form.setValue("category", categoryValue);
       
-      toast({
-        title: "✅ Categoria Adicionada!",
+      toast.success("✅ Categoria Adicionada!", {
         description: `A categoria "${categoryValue}" foi adicionada com sucesso ao banco de dados.`,
-        variant: "default",
       });
     } catch (error: any) {
-      toast({
-        title: "❌ Erro ao Adicionar Categoria",
+      toast.error("❌ Erro ao Adicionar Categoria", {
         description: error.message || "Não foi possível adicionar a categoria. Tente novamente.",
-        variant: "destructive",
       });
     }
   };  // Função para deletar categoria
@@ -480,16 +474,12 @@ const Produtos = () => {
         form.setValue("category", "Geral");
       }
       
-      toast({
-        title: "✅ Categoria Excluída!",
+      toast.success("✅ Categoria Excluída!", {
         description: `A categoria "${categoryToDelete}" foi removida do banco de dados.`,
-        variant: "default",
       });
     } catch (error: any) {
-      toast({
-        title: "❌ Erro ao Excluir Categoria",
+      toast.error("❌ Erro ao Excluir Categoria", {
         description: error.message || "Não foi possível excluir a categoria. Tente novamente.",
-        variant: "destructive",
         duration: 6000,
       });
     }
@@ -566,10 +556,8 @@ const Produtos = () => {
       setIsAddDialogOpen(false);
       form.reset();
 
-      toast({
-        title: "✅ Produto Adicionado!",
+      toast.success("✅ Produto Adicionado!", {
         description: `${data.name} foi adicionado com sucesso ao catálogo.`,
-        variant: "default",
       });
     } catch (error: any) {
       console.error('❌ Erro completo:', error);
@@ -598,10 +586,8 @@ const Produtos = () => {
       
       console.error('❌ MENSAGEM FINAL QUE SERÁ EXIBIDA:', errorMessage);
       
-      toast({
-        title: "❌ Erro ao Adicionar Produto",
+      toast.error("❌ Erro ao Adicionar Produto", {
         description: errorMessage,
-        variant: "destructive",
         duration: 7000,
       });
     }
@@ -618,10 +604,8 @@ const Produtos = () => {
       setEditingProduct(null);
       form.reset();
 
-      toast({
-        title: "✅ Produto Atualizado!",
+      toast.success("✅ Produto Atualizado!", {
         description: `${data.name} foi atualizado com sucesso.`,
-        variant: "default",
       });
     } catch (error: any) {
       console.error('❌ Erro completo ao atualizar:', error);
@@ -642,10 +626,8 @@ const Produtos = () => {
         errorMessage = 'O SKU deste produto já foi adicionado. Escolha outro código.';
       }
       
-      toast({
-        title: "❌ Erro ao Atualizar Produto",
+      toast.error("❌ Erro ao Atualizar Produto", {
         description: errorMessage,
-        variant: "destructive",
         duration: 7000,
       });
     }
@@ -659,20 +641,16 @@ const Produtos = () => {
       
       await deleteProductContext(productToDelete.id);
 
-      toast({
-        title: "🗑️ Produto Removido!",
+      toast.success("🗑️ Produto Removido!", {
         description: `${productToDelete.name} foi removido do catálogo.`,
-        variant: "default",
       });
 
       // Fechar dialog após sucesso
       setIsDeleteDialogOpen(false);
       setProductToDelete(null);
     } catch (error: any) {
-      toast({
-        title: "❌ Erro ao Remover Produto",
+      toast.error("❌ Erro ao Remover Produto", {
         description: error.message || "Não foi possível remover o produto. Tente novamente.",
-        variant: "destructive",
       });
     } finally {
       setIsDeleting(false);
