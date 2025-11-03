@@ -17,7 +17,7 @@ import {
   Trash2,
   Edit
 } from 'lucide-react';
-import { getBatchesByProduct, createBatch, deleteBatch, checkBatchNumberExists, generateNextAvailableBatchNumber } from '@/lib/batches';
+import { getBatchesByProduct, createBatch, deleteBatch, checkBatchNumberExists, generateNextAvailableBatchNumber, findBatchByNumberAndProduct, updateBatchQuantity } from '@/lib/batches';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useToast } from '@/hooks/use-toast';
@@ -156,15 +156,24 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
         return;
       }
 
-      // Verificar se o número do lote já existe
-      const existsInDatabase = await checkBatchNumberExists(formData.batchNumber, productId, user.id);
+      // Verificar se o número do lote já existe PARA ESTE PRODUTO
+      // NOTA: Números de lote podem ser iguais em produtos diferentes
+      const existsForThisProduct = await findBatchByNumberAndProduct(formData.batchNumber, productId, user.id);
       
-      if (existsInDatabase) {
+      if (existsForThisProduct) {
+        // Lote já existe para este produto - vamos apenas atualizar a quantidade
+        const newQuantity = existsForThisProduct.quantity + quantity;
+        await updateBatchQuantity(existsForThisProduct.id, newQuantity, user.id);
+        
         toast({
-          title: '❌ Número de Lote Duplicado!',
-          description: `O lote "${formData.batchNumber}" já existe para este produto. Escolha outro número.`,
-          variant: 'destructive'
+          title: '✅ Quantidade Adicionada!',
+          description: `Quantidade adicionada ao lote existente "${formData.batchNumber}". Nova quantidade: ${newQuantity}`,
+          variant: 'default'
         });
+        
+        await loadBatches();
+        setIsDialogOpen(false);
+        onBatchesChange?.();
         return;
       }
 

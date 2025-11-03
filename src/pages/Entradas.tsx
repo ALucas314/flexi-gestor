@@ -696,50 +696,8 @@ const Entradas = () => {
             }
           }
           
-          // Se não encontrou em lugar nenhum, verificar se o número do lote já existe globalmente
-          // (pode estar em outro produto - numeração é global)
-          const batchExistsGlobally = await checkBatchNumberExists(batch.batchNumber, data.productId, user.id);
-          
-          if (batchExistsGlobally) {
-            // O número do lote já existe, mas não para este produto - tentar encontrar e atualizar
-            // Verificar uma última vez se existe para este produto (pode ter sido criado em paralelo)
-            const finalCheck = await findBatchByNumberAndProduct(
-              batch.batchNumber,
-              data.productId,
-              user.id
-            );
-            
-            if (finalCheck) {
-              // Encontrou! Atualizar quantidade
-              try {
-                await updateBatchQuantity(
-                  finalCheck.id,
-                  finalCheck.quantity + batch.quantity,
-                  user.id
-                );
-                continue;
-              } catch (error) {
-                console.error('Erro ao atualizar lote após verificação final:', error);
-                toast({
-                  title: "❌ Erro ao Atualizar Lote",
-                  description: `Não foi possível atualizar o lote "${batch.batchNumber}". Tente novamente.`,
-                  variant: "destructive",
-                });
-                return;
-              }
-            } else {
-              // O número do lote existe globalmente, mas para outro produto
-              // Não podemos criar um novo lote com o mesmo número
-              toast({
-                title: "⚠️ Número de Lote Já Existe",
-                description: `O lote "${batch.batchNumber}" já existe para outro produto. Use um número diferente ou adicione quantidade ao lote existente.`,
-                variant: "destructive",
-              });
-              return;
-            }
-          }
-          
-          // Lote não existe em lugar nenhum - criar novo lote
+          // Lote não existe para este produto - criar novo lote
+          // NOTA: Números de lote podem ser iguais em produtos diferentes
           try {
             const created = await createBatch(
               data.productId,
