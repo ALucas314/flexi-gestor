@@ -695,10 +695,12 @@ Compra registrada com sucesso!
                           </TableCell>
                           
                           <TableCell className="hidden sm:table-cell">
-                            <Badge variant={
-                              movement.type === "entrada" ? "default" : 
-                              movement.type === "saida" ? "destructive" : "secondary"
-                            } className="capitalize">
+                            <Badge className={`
+                              capitalize
+                              ${movement.type === "entrada" ? "bg-green-100 text-green-800 border-green-300" : 
+                                movement.type === "saida" ? "bg-orange-100 text-orange-800 border-orange-300" : 
+                                "bg-slate-100 text-slate-800 border-slate-300"}
+                            `}>
                               {movement.type === "entrada" ? "📥 Entrada" : 
                                movement.type === "saida" ? "📤 Saída" : "⚙️ Ajuste"}
                             </Badge>
