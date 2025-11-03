@@ -1695,9 +1695,55 @@ const Saidas = () => {
                                       </div>
                                       {(() => {
                                         const product = products.find(p => p.id === selectedProductId);
-                                        const totalStock = product?.stock || 0;
                                         const totalToExit = getTotalSelectedQuantity();
-                                        const remaining = totalStock - totalToExit;
+                                        
+                                        // Verificar se o produto usa gerenciamento por lote
+                                        const managedByBatch = (product as any)?.managedByBatch === true;
+                                        
+                                        // Quando trabalha com lotes, calcular estoque restante baseado nos lotes selecionados
+                                        // ao invés do estoque total do produto
+                                        let totalStock = 0;
+                                        let remaining = 0;
+                                        
+                                        // Verificar se está trabalhando com lotes E se há lotes realmente selecionados
+                                        // Se o produto usa lotes E há lotes disponíveis E há lotes selecionados com batchId válido
+                                        const hasSelectedBatches = managedByBatch && 
+                                                                   availableBatches.length > 0 && 
+                                                                   selectedBatches.length > 0 && 
+                                                                   selectedBatches.some(b => b.batchId && b.quantity > 0);
+                                        
+                                        if (hasSelectedBatches) {
+                                          // Calcular estoque total dos lotes selecionados
+                                          // IMPORTANTE: Somar apenas os lotes que estão realmente selecionados (com batchId válido)
+                                          selectedBatches.forEach(batch => {
+                                            if (batch.batchId && batch.quantity > 0) {
+                                              const batchInfo = availableBatches.find(b => b.id === batch.batchId);
+                                              if (batchInfo && batchInfo.quantity > 0) {
+                                                // Soma a quantidade disponível no lote ANTES da retirada
+                                                totalStock += batchInfo.quantity;
+                                              }
+                                            }
+                                          });
+                                          
+                                          // Estoque restante = estoque total dos lotes selecionados - quantidade total a retirar
+                                          // Exemplo: Lote tem 10 unidades, vamos retirar 10 → 10 - 10 = 0 unidades restantes
+                                          remaining = Math.max(0, totalStock - totalToExit);
+                                          
+                                          // Debug temporário para verificar cálculo
+                                          console.log('🔍 DEBUG LOTE RESTANTE:', {
+                                            managedByBatch,
+                                            totalStock,
+                                            totalToExit,
+                                            remaining,
+                                            selectedBatches: selectedBatches.map(b => ({ batchId: b.batchId, quantity: b.quantity, batchNumber: b.batchNumber })),
+                                            hasSelectedBatches,
+                                            productStock: product?.stock
+                                          });
+                                        } else {
+                                          // Se não há lotes selecionados OU produto não usa lotes, usar estoque total do produto
+                                          totalStock = product?.stock || 0;
+                                          remaining = totalStock - totalToExit;
+                                        }
                                         // Buscar entradas diretamente para calcular o preço
                                         // Comparação mais robusta: normalizar IDs (pode ser UUID, string ou número)
                                         const normalizeId = (id: any): string => {
@@ -1823,9 +1869,9 @@ const Saidas = () => {
                                             )}
                                             <div className="flex items-center justify-between pt-2 border-t border-red-200">
                                               <span className="text-sm font-medium text-gray-900">
-                                                📦 Estoque Restante:
+                                                {hasSelectedBatches ? '📦 Lote Restante:' : '📦 Estoque Restante:'}
                                               </span>
-                                              <span className={`text-lg font-bold ${remaining < 0 ? 'text-red-600' : remaining < (totalStock * 0.2) ? 'text-yellow-600' : 'text-green-600'}`}>
+                                              <span className={`text-lg font-bold ${remaining < 0 ? 'text-red-600' : remaining < (totalStock * 0.2) && totalStock > 0 ? 'text-yellow-600' : 'text-green-600'}`}>
                                                 {Math.max(0, remaining)} unidades
                                               </span>
                                             </div>

@@ -78,6 +78,7 @@ interface StockEntry {
 type StockEntryFormData = Omit<StockEntry, 'id' | 'productName' | 'productSku' | 'totalCost' | 'receiptNumber'> & {
   manufactureDate?: Date;
   expiryDate?: Date;
+  paymentMethod?: string; // Forma de pagamento (avista, pix, debito, credito, etc)
 };
 
 const Entradas = () => {
@@ -186,6 +187,7 @@ const Entradas = () => {
       markup: 0, // Markup padrão em percentual
       manufactureDate: undefined,
       expiryDate: undefined,
+      paymentMethod: "avista", // Forma de pagamento padrão
     },
   });
 
@@ -853,6 +855,7 @@ const Entradas = () => {
           .sort((a, b) => a.getTime() - b.getTime())[0];
 
         const markup = (data as any).markup || 0;
+        const paymentMethod = (data as any).paymentMethod || 'avista';
         
         await addMovement({
           type: 'entrada',
@@ -864,6 +867,7 @@ const Entradas = () => {
             + (minManu ? ` | FAB:${minManu.toISOString().split('T')[0]}` : '')
             + (minExpiry ? ` | EXP:${minExpiry.toISOString().split('T')[0]}` : ''),
           date: data.entryDate,
+          paymentMethod: paymentMethod,
         });
 
         // Calcular e atualizar preço de venda do produto se markup foi informado
@@ -926,6 +930,7 @@ const Entradas = () => {
       const manu = (data as any).manufactureDate as Date | undefined;
       const exp = (data as any).expiryDate as Date | undefined;
       const markup = (data as any).markup || 0;
+      const paymentMethod = (data as any).paymentMethod || 'avista';
       
       await addMovement({
         type: 'entrada',
@@ -935,6 +940,7 @@ const Entradas = () => {
         unitPrice: data.unitCost,
         description: `Entrada de ${data.quantity} unidades - ${data.supplier}` + (manu ? ` | FAB:${manu.toISOString().split('T')[0]}` : '') + (exp ? ` | EXP:${exp.toISOString().split('T')[0]}` : ''),
         date: data.entryDate,
+        paymentMethod: paymentMethod,
       });
 
       // Calcular e atualizar preço de venda do produto se markup foi informado
@@ -1593,6 +1599,37 @@ const Entradas = () => {
                                         </p>
                                       </div>
                                     )}
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={form.control}
+                                name="paymentMethod"
+                                render={({ field }) => (
+                                  <FormItem className="space-y-2">
+                                    <FormLabel className="text-sm font-semibold text-neutral-700">
+                                      💳 Forma de Pagamento
+                                    </FormLabel>
+                                    <FormControl>
+                                      <Select
+                                        value={field.value || "avista"}
+                                        onValueChange={field.onChange}
+                                      >
+                                        <SelectTrigger className="h-11 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-base sm:text-sm">
+                                          <SelectValue placeholder="Selecione a forma de pagamento" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="avista">💵 À vista</SelectItem>
+                                          <SelectItem value="pix">📱 PIX</SelectItem>
+                                          <SelectItem value="debito">💳 Débito</SelectItem>
+                                          <SelectItem value="credito">💳 Crédito</SelectItem>
+                                          <SelectItem value="boleto">📄 Boleto</SelectItem>
+                                          <SelectItem value="cheque">📝 Cheque</SelectItem>
+                                          <SelectItem value="transferencia">🏦 Transferência</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </FormControl>
+                                    <FormMessage />
                                   </FormItem>
                                 )}
                               />
