@@ -71,9 +71,14 @@ interface StockEntry {
   status: "pendente" | "aprovado" | "cancelado";
   receiptNumber?: string; // Número único da nota fiscal
   markup?: number; // Percentual de markup para calcular preço de venda
+  manufactureDate?: Date; // Data de fabricação
+  expiryDate?: Date; // Data de validade
 }
 
-type StockEntryFormData = Omit<StockEntry, 'id' | 'productName' | 'productSku' | 'totalCost' | 'receiptNumber'>;
+type StockEntryFormData = Omit<StockEntry, 'id' | 'productName' | 'productSku' | 'totalCost' | 'receiptNumber'> & {
+  manufactureDate?: Date;
+  expiryDate?: Date;
+};
 
 const Entradas = () => {
   // Estados
@@ -179,6 +184,8 @@ const Entradas = () => {
       notes: "",
       status: "pendente",
       markup: 0, // Markup padrão em percentual
+      manufactureDate: undefined,
+      expiryDate: undefined,
     },
   });
 
@@ -583,85 +590,235 @@ const Entradas = () => {
           const numberMatch = batch.batchNumber.match(/\d+/);
           const normalizedNumber = numberMatch ? numberMatch[0] : batch.batchNumber;
           
-          // Verificar duplicata na lista atual
-          if (batchNumbers.has(normalizedNumber)) {
-            toast({
-              title: "❌ Lotes Duplicados!",
-              description: `O número de lote "${batch.batchNumber}" está duplicado na lista. Cada lote deve ter um número único.`,
-              variant: "destructive",
-              duration: 5000,
-            });
-            return; // Parar o processo
-          }
-          
+          // Permitir lotes duplicados - a lógica de submissão irá somar as quantidades automaticamente
+          // Não bloquear aqui, apenas registrar para processamento posterior
           batchNumbers.set(normalizedNumber, i);
         }
         
-        // Criar ou atualizar todos os lotes no backend
+        // Consolidar lotes duplicados na lista selecionada (somar quantidades)
+        const consolidatedBatches = new Map<string, {
+          batchNumber: string;
+          quantity: number;
+          unitCost?: number;
+          manufactureDate?: Date;
+          expiryDate?: Date;
+        }>();
+        
         for (const batch of selectedBatches) {
-          // Verificar se o lote já existe na lista atual
+          if (!batch.batchNumber || batch.batchNumber.trim() === '') continue;
+          
+          const batchMatch = batch.batchNumber.match(/\d+/);
+          const normalizedNumber = batchMatch ? batchMatch[0] : batch.batchNumber;
+          
+          if (consolidatedBatches.has(normalizedNumber)) {
+            // Lote duplicado na lista - somar quantidade
+            const existing = consolidatedBatches.get(normalizedNumber)!;
+            existing.quantity += batch.quantity || 0;
+          } else {
+            // Primeira ocorrência deste número de lote
+            consolidatedBatches.set(normalizedNumber, {
+              batchNumber: batch.batchNumber,
+              quantity: batch.quantity || 0,
+              unitCost: batch.unitCost,
+              manufactureDate: batch.manufactureDate,
+              expiryDate: batch.expiryDate,
+            });
+          }
+        }
+        
+        // Criar ou atualizar todos os lotes consolidados no backend
+        for (const batch of consolidatedBatches.values()) {
+          if (!user?.id || !batch.batchNumber) continue;
+          
+          // Primeiro: Verificar se o lote existe no banco de dados (verificação principal)
+          // Esta é a verificação mais importante - verifica se o lote existe para este produto
+          let existingBatchInDb = null;
+          try {
+            existingBatchInDb = await findBatchByNumberAndProduct(
+              batch.batchNumber,
+              data.productId,
+              user.id
+            );
+          } catch (error) {
+            console.error('Erro ao buscar lote no banco:', error);
+          }
+          
+          // Se o lote existe no banco, SEMPRE atualizar a quantidade (adicionar ao existente)
+          if (existingBatchInDb) {
+            try {
+              await updateBatchQuantity(
+                existingBatchInDb.id,
+                existingBatchInDb.quantity + batch.quantity,
+                user.id
+              );
+              // Sucesso ao atualizar lote existente
+              continue; // Continuar para o próximo lote
+            } catch (error) {
+              console.error('Erro ao atualizar lote:', error);
+              toast({
+                title: "❌ Erro ao Atualizar Lote",
+                description: `Não foi possível atualizar o lote "${batch.batchNumber}". Tente novamente.`,
+                variant: "destructive",
+              });
+              return;
+            }
+          }
+          
+          // Se não encontrou no banco, verificar na lista local (availableBatches) como fallback
           const existingBatch = availableBatches.find(b => {
+            // Normalizar números de lote para comparação (extrair apenas o número)
             const bMatch = b.batchNumber?.match(/\d+/);
             const bValue = bMatch ? bMatch[0] : b.batchNumber;
             const batchMatch = batch.batchNumber?.match(/\d+/);
             const batchValue = batchMatch ? batchMatch[0] : batch.batchNumber;
-            return bValue === batchValue;
+            return bValue === batchValue && b.productId === data.productId;
           });
           
           if (existingBatch) {
-            // Atualizar lote existente - adicionar quantidade
-            if (user?.id) {
+            // Lote encontrado na lista local - atualizar quantidade no banco
+            try {
               await updateBatchQuantity(
                 existingBatch.id, 
                 existingBatch.quantity + batch.quantity,
                 user.id
               );
+              continue; // Continuar para o próximo lote
+            } catch (error) {
+              console.error('Erro ao atualizar lote local:', error);
+              toast({
+                title: "❌ Erro ao Atualizar Lote",
+                description: `Não foi possível atualizar o lote "${batch.batchNumber}". Tente novamente.`,
+                variant: "destructive",
+              });
+              return;
             }
-          } else {
-            // Verificar se o lote existe no banco de dados para este produto
-            if (user?.id && batch.batchNumber) {
-              const existingBatchInDb = await findBatchByNumberAndProduct(
+          }
+          
+          // Se não encontrou em lugar nenhum, verificar se o número do lote já existe globalmente
+          // (pode estar em outro produto - numeração é global)
+          const batchExistsGlobally = await checkBatchNumberExists(batch.batchNumber, data.productId, user.id);
+          
+          if (batchExistsGlobally) {
+            // O número do lote já existe, mas não para este produto - tentar encontrar e atualizar
+            // Verificar uma última vez se existe para este produto (pode ter sido criado em paralelo)
+            const finalCheck = await findBatchByNumberAndProduct(
+              batch.batchNumber,
+              data.productId,
+              user.id
+            );
+            
+            if (finalCheck) {
+              // Encontrou! Atualizar quantidade
+              try {
+                await updateBatchQuantity(
+                  finalCheck.id,
+                  finalCheck.quantity + batch.quantity,
+                  user.id
+                );
+                continue;
+              } catch (error) {
+                console.error('Erro ao atualizar lote após verificação final:', error);
+                toast({
+                  title: "❌ Erro ao Atualizar Lote",
+                  description: `Não foi possível atualizar o lote "${batch.batchNumber}". Tente novamente.`,
+                  variant: "destructive",
+                });
+                return;
+              }
+            } else {
+              // O número do lote existe globalmente, mas para outro produto
+              // Não podemos criar um novo lote com o mesmo número
+              toast({
+                title: "⚠️ Número de Lote Já Existe",
+                description: `O lote "${batch.batchNumber}" já existe para outro produto. Use um número diferente ou adicione quantidade ao lote existente.`,
+                variant: "destructive",
+              });
+              return;
+            }
+          }
+          
+          // Lote não existe em lugar nenhum - criar novo lote
+          try {
+            const created = await createBatch(
+              data.productId,
+              batch.batchNumber,
+              batch.quantity,
+              0, // unitCost
+              user.id,
+              batch.manufactureDate,
+              batch.expiryDate
+            );
+            
+            if (!created) {
+              // Se falhou ao criar, verificar novamente se existe (pode ter sido criado em paralelo)
+              const doubleCheck = await findBatchByNumberAndProduct(
                 batch.batchNumber,
                 data.productId,
                 user.id
               );
               
-              if (existingBatchInDb) {
-                // Lote encontrado no banco - atualizar quantidade ao invés de criar
-                if (user?.id) {
-                  await updateBatchQuantity(
-                    existingBatchInDb.id,
-                    existingBatchInDb.quantity + batch.quantity,
-                    user.id
-                  );
-                }
-                // Continuar para o próximo lote
-                continue;
-              }
-            }
-            
-            // Criar novo lote (não existe no banco)
-            if (user?.id) {
-              const created = await createBatch(
-                data.productId,
-                batch.batchNumber,
-                batch.quantity,
-                0, // unitCost
-                user.id,
-                batch.manufactureDate,
-                batch.expiryDate
-              );
-              
-              // Se falhou ao criar (ex: duplicata), mostrar erro
-              if (!created) {
+              if (doubleCheck) {
+                // Lote foi criado em outro momento - atualizar quantidade
+                await updateBatchQuantity(
+                  doubleCheck.id,
+                  doubleCheck.quantity + batch.quantity,
+                  user.id
+                );
+              } else {
                 toast({
                   title: "❌ Erro ao Criar Lote",
-                  description: `Não foi possível criar o lote "${batch.batchNumber}". Verifique se o número já existe.`,
+                  description: `Não foi possível criar o lote "${batch.batchNumber}". Tente novamente.`,
                   variant: "destructive",
                 });
                 return;
               }
             }
+          } catch (error: any) {
+            console.error('Erro ao criar lote:', error);
+            // Se erro indica que lote já existe, tentar atualizar
+            const errorMessage = error?.message || '';
+            if (errorMessage.includes('já existe') || errorMessage.includes('duplicat')) {
+              // Tentar encontrar o lote e atualizar
+              const existing = await findBatchByNumberAndProduct(
+                batch.batchNumber,
+                data.productId,
+                user.id
+              );
+              if (existing) {
+                // Lote encontrado - atualizar quantidade
+                try {
+                  await updateBatchQuantity(
+                    existing.id,
+                    existing.quantity + batch.quantity,
+                    user.id
+                  );
+                  continue;
+                } catch (updateError) {
+                  console.error('Erro ao atualizar lote após criação falha:', updateError);
+                  toast({
+                    title: "❌ Erro ao Atualizar Lote",
+                    description: `Não foi possível atualizar o lote "${batch.batchNumber}". Tente novamente.`,
+                    variant: "destructive",
+                  });
+                  return;
+                }
+              } else {
+                // Lote existe globalmente mas não para este produto
+                toast({
+                  title: "⚠️ Número de Lote Já Existe",
+                  description: `O lote "${batch.batchNumber}" já existe para outro produto. Use um número diferente.`,
+                  variant: "destructive",
+                });
+                return;
+              }
+            }
+            
+            toast({
+              title: "❌ Erro ao Criar Lote",
+              description: `Não foi possível criar o lote "${batch.batchNumber}". ${errorMessage || 'Tente novamente.'}`,
+              variant: "destructive",
+            });
+            return;
           }
         }
 
@@ -1602,29 +1759,81 @@ const Entradas = () => {
                                           const batchNumberMatch = newBatchNumber.match(/\d+/);
                                           const batchNumberValue = batchNumberMatch ? batchNumberMatch[0] : newBatchNumber;
                                           
-                                          // Verificar duplicata nos lotes selecionados (exceto o atual)
-                                          const isDuplicatedInSelected = selectedBatches.some((b, i) => {
+                                          // Verificar se existe um lote com o mesmo número na lista selecionada (exceto o atual)
+                                          const duplicatedBatchIndex = selectedBatches.findIndex((b, i) => {
                                             if (i === index || !b.batchNumber) return false;
                                             const bMatch = b.batchNumber.match(/\d+/);
                                             const bValue = bMatch ? bMatch[0] : b.batchNumber;
                                             return bValue === batchNumberValue && batchNumberValue !== '';
                                           });
                                           
-                                          // Se houver duplicata na lista atual, mostrar erro imediatamente
-                                          if (isDuplicatedInSelected) {
-                                            setBatchNumberErrors(prev => ({
-                                              ...prev,
-                                              [index]: `⚠️ O número "${newBatchNumber}" já está em uso. Escolha outro número.`
-                                            }));
+                                          // Se houver lote duplicado na lista, mesclar automaticamente (somar quantidade e remover duplicado)
+                                          if (duplicatedBatchIndex !== -1) {
+                                            const duplicatedBatch = selectedBatches[duplicatedBatchIndex];
+                                            const currentQuantity = batch.quantity || 0;
+                                            const duplicatedQuantity = duplicatedBatch.quantity || 0;
+                                            const totalQuantity = currentQuantity + duplicatedQuantity;
+                                            
+                                            // Somar quantidade ao lote existente
+                                            setSelectedBatches(prev => {
+                                              const updated = [...prev];
+                                              // Adicionar quantidade ao lote duplicado
+                                              updated[duplicatedBatchIndex] = {
+                                                ...updated[duplicatedBatchIndex],
+                                                quantity: totalQuantity,
+                                              };
+                                              // Remover o lote atual (duplicado)
+                                              return updated.filter((_, i) => i !== index);
+                                            });
+                                            
+                                            // Limpar mensagens e erros do lote que foi removido
+                                            setBatchNumberErrors(prev => {
+                                              const newErrors = {...prev};
+                                              delete newErrors[index];
+                                              // Reindexar erros após remoção
+                                              const reindexed: typeof newErrors = {};
+                                              Object.keys(newErrors).forEach(key => {
+                                                const keyNum = parseInt(key);
+                                                if (keyNum > index) {
+                                                  reindexed[keyNum - 1] = newErrors[keyNum];
+                                                } else if (keyNum < index) {
+                                                  reindexed[keyNum] = newErrors[keyNum];
+                                                }
+                                              });
+                                              return reindexed;
+                                            });
+                                            
+                                            setBatchStatusMessages(prev => {
+                                              const newMessages = {...prev};
+                                              delete newMessages[index];
+                                              // Reindexar mensagens após remoção
+                                              const reindexed: typeof newMessages = {};
+                                              Object.keys(newMessages).forEach(key => {
+                                                const keyNum = parseInt(key);
+                                                if (keyNum > index) {
+                                                  reindexed[keyNum - 1] = newMessages[keyNum];
+                                                } else if (keyNum < index) {
+                                                  reindexed[keyNum] = newMessages[keyNum];
+                                                }
+                                              });
+                                              return reindexed;
+                                            });
+                                            
                                             toast({
-                                              title: "⚠️ Lote Duplicado!",
-                                              description: `O número "${newBatchNumber}" já está em uso nesta lista de lotes. Escolha outro número.`,
-                                              variant: "destructive",
+                                              title: "✅ Lote mesclado",
+                                              description: `A quantidade foi somada ao lote "${newBatchNumber}" existente. Total: ${totalQuantity} unidades.`,
                                               duration: 3000,
                                             });
-                                            updateBatchData(index, 'batchNumber', newBatchNumber); // Ainda atualiza para mostrar o erro visual
-                                            return;
+                                            
+                                            return; // Não continuar processamento para este lote (foi mesclado)
                                           }
+                                          
+                                          // Se não há duplicata, limpar mensagens anteriores
+                                          setBatchStatusMessages(prev => {
+                                            const newMessages = {...prev};
+                                            delete newMessages[index];
+                                            return newMessages;
+                                          });
                                           
                                           updateBatchData(index, 'batchNumber', newBatchNumber);
 
@@ -1659,7 +1868,7 @@ const Entradas = () => {
                                                   ...prev,
                                                   [index]: {
                                                     found: true,
-                                                    message: `✅ Lote encontrado (Quantidade atual: ${existingBatch.quantity})`
+                                                    message: `✅ Lote encontrado. Inserir no lote encontrado (Quantidade atual: ${existingBatch.quantity})`
                                                   }
                                                 }));
                                                 
@@ -1668,12 +1877,12 @@ const Entradas = () => {
                                                   updateBatchData(index, 'expiryDate', existingBatch.expiryDate);
                                                 }
                                               } else {
-                                                // Lote não existe - mostrar mensagem de criação
+                                                // Lote não existe - mostrar mensagem informativa
                                                 setBatchStatusMessages(prev => ({
                                                   ...prev,
                                                   [index]: {
                                                     found: false,
-                                                    message: `📦 Criar lote (ainda não existe)`
+                                                    message: `⚠️ Lote não encontrado. Novo lote será criado.`
                                                   }
                                                 }));
                                               }
