@@ -38,6 +38,7 @@ export default {
 			'4xl': '1920px',
 			// Breakpoints específicos para dispositivos
 			'mobile': {'max': '767px'},
+			'mobile-large': {'max': '895px'},
 			'tablet': {'min': '768px', 'max': '1023px'},
 			'desktop': {'min': '1024px'},
 			// Breakpoints para orientação

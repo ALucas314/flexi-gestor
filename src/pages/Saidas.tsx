@@ -1174,7 +1174,7 @@ const Saidas = () => {
             </Button>
           </DialogTrigger>
                 <DialogContent
-                  className="max-w-md sm:max-w-lg md:max-w-2xl max-h-[90vh] flex flex-col p-0"
+                  className="max-w-md sm:max-w-lg md:max-w-2xl max-h-[90vh] flex flex-col p-0 overflow-hidden"
                   onInteractOutside={(e) => {
                     const cart = document.getElementById('cart-panel');
                     // Radix repassa o evento original em e.detail.originalEvent
@@ -1197,8 +1197,8 @@ const Saidas = () => {
                     </DialogDescription>
                   </DialogHeader>
                   <Form {...form}>
-                    <form onSubmit={form.handleSubmit(handleAddExit)} className="flex flex-col flex-1 min-h-0">
-                      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+                    <form onSubmit={form.handleSubmit(handleAddExit)} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4 min-h-0">
                         {/* Primeira linha - Produto e Cliente */}
                         <div className="space-y-4">
                           <FormField
@@ -2098,15 +2098,16 @@ const Saidas = () => {
                             </FormItem>
                           )}
                         />
-                      </div>
                       
                       {/* Carrinho dentro do Dialog */}
                       <div className="px-6 pt-2 pb-4">
                         <RenderCart compact={true} />
                       </div>
-
-                        {/* Footer do Modal */}
-                        <DialogFooter className="px-6 py-4 border-t border-neutral-200 bg-neutral-50/50 flex flex-col sm:flex-row gap-2">
+                      </div>
+                      
+                      {/* Footer do Modal - Sempre mostra os 3 botões: Cancelar, Adicionar e Registrar */}
+                      <div className="flex flex-col sm:flex-row justify-center items-stretch sm:items-center gap-2 px-3 sm:px-4 lg:px-6 py-3 border-t border-neutral-200 bg-white flex-shrink-0 min-h-[60px] overflow-visible w-full">
+                          {/* Botão Cancelar - Sempre visível */}
                           <Button 
                             type="button" 
                             variant="outline" 
@@ -2126,14 +2127,16 @@ const Saidas = () => {
                                 installments: 1,
                               });
                             }}
-                            className="w-full sm:w-auto border-2 border-neutral-300 text-neutral-700 hover:bg-neutral-50 h-9 text-sm"
+                            className="!flex !w-full md:!w-auto border-2 border-neutral-300 text-neutral-700 hover:bg-neutral-50 h-9 text-xs md:text-sm !flex-shrink-0 whitespace-nowrap min-w-[90px] !items-center !justify-center"
                           >
                             ❌ Cancelar
                           </Button>
+                          
+                          {/* Botão Adicionar - Sempre visível */}
                           <Button
                             type="button"
                             onClick={addCurrentSelectionToCart}
-                            className="w-auto px-4 h-9 text-sm rounded-md bg-green-600 hover:bg-green-700 text-white"
+                            className="!flex !w-full md:!w-auto px-3 md:px-4 h-9 text-xs md:text-sm rounded-md bg-green-600 hover:bg-green-700 text-white !flex-shrink-0 whitespace-nowrap min-w-[100px] !items-center !justify-center"
                             disabled={(() => {
                               const selectedProduct = products.find(p => p.id === selectedProductId);
                               if (!selectedProduct) return true;
@@ -2145,8 +2148,10 @@ const Saidas = () => {
                               return (form.getValues('quantity') || 0) <= 0;
                             })()}
                           >
-                            ➕ Adicionar ao Carrinho
+                            ➕ Adicionar
                           </Button>
+                          
+                          {/* Botão Registrar - Sempre visível */}
                           <Button 
                             type="button"
                             onClick={() => {
@@ -2156,7 +2161,7 @@ const Saidas = () => {
                                 form.handleSubmit(handleAddExit)();
                               }
                             }}
-                            className="w-full sm:w-auto bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white shadow-lg hover:shadow-xl transition-all duration-200 h-9 text-sm"
+                            className="!flex !w-full md:!w-auto px-3 md:px-4 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white shadow-lg hover:shadow-xl transition-all duration-200 h-9 text-xs md:text-sm !flex-shrink-0 whitespace-nowrap min-w-[100px] !items-center !justify-center"
                             disabled={(() => {
                               if (cartItems.length > 0) return false;
                               const selectedProduct = products.find(p => p.id === selectedProductId);
@@ -2169,9 +2174,9 @@ const Saidas = () => {
                               return (form.getValues('quantity') || 0) <= 0;
                             })()}
                           >
-                            📤 Registrar Saída
+                            📤 Registrar
                           </Button>
-                        </DialogFooter>
+                        </div>
                     </form>
                   </Form>
                 </DialogContent>
