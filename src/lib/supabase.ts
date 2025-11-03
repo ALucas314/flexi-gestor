@@ -76,8 +76,8 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     params: {
       eventsPerSecond: 10
     },
-    heartbeatIntervalMs: 30000,  // Heartbeat a cada 30s para manter conexão viva
-    reconnectAfterMs: (tries: number) => Math.min(tries * 1000, 10000) // Reconexão rápida
+    heartbeatIntervalMs: 15000,  // Heartbeat a cada 15s para manter conexão viva (mais agressivo)
+    reconnectAfterMs: (tries: number) => Math.min(tries * 500, 5000) // Reconexão mais rápida (máx 5s)
   },
   // Configuração global para evitar erros de rede
   global: {

@@ -18,12 +18,14 @@ import { useResponsive } from "@/hooks/use-responsive";
 import { supabase } from "@/lib/supabase";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { useConfig } from "@/contexts/ConfigContext";
+import { useData } from "@/contexts/DataContext";
 
 const Configuracoes = () => {
   const { toast } = useToast();
   const { isMobile } = useResponsive();
   const { workspaceAtivo } = useWorkspace();
   const { moeda, setMoeda } = useConfig();
+  const { refreshData } = useData();
   
   // Estados
   const [isDeletando, setIsDeletando] = useState(false);
@@ -137,8 +139,16 @@ const Configuracoes = () => {
         }
       }
 
-      // Limpar localStorage do workspace
+      // Limpar localStorage do workspace e dados em cache
       localStorage.removeItem(`flexi-gestor-workspace-${workspaceAtivo.id}`);
+      localStorage.removeItem(`flexi-products-${workspaceAtivo.id}`);
+      localStorage.removeItem(`flexi-movements-${workspaceAtivo.id}`);
+
+      // Atualizar dados em tempo real após limpar
+      await refreshData();
+
+      // Disparar evento customizado para forçar atualização em toda a aplicação
+      window.dispatchEvent(new CustomEvent('force-reload-data'));
 
       toast({
         title: "✅ Workspace limpo",

@@ -30,9 +30,6 @@ import { DataProvider } from "./contexts/DataContext";
 import { SidebarProvider } from "./contexts/SidebarContext";
 import { ConfigProvider } from "./contexts/ConfigContext";
 
-// 🔌 Monitoramento global de conexão Supabase
-import { ConnectionMonitor } from "./components/ConnectionMonitor";
-
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -42,14 +39,12 @@ const App = () => (
       <AuthProvider>
         {/* 🏢 Workspace Provider - Gerencia qual workspace está ativo */}
         <WorkspaceProvider>
-          {/* 🗄️ Data Provider - Gerencia dados com Prisma API */}
+          {/* 🗄️ Data Provider - Gerencia dados com Supabase (já inclui monitoramento de conexão) */}
           <DataProvider>
             {/* ⚙️ Config Provider - Gerencia configurações de moeda e idioma */}
             <ConfigProvider>
               {/* 📌 Sidebar Provider - Gerencia estado da sidebar (pinada/overlay) */}
               <SidebarProvider>
-            {/* 🔌 Monitoramento global de conexão Supabase */}
-            <ConnectionMonitor />
             <Toaster />
             <Sonner />
             <BrowserRouter
