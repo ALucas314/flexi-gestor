@@ -47,12 +47,20 @@ function humanizeDaysDiff(diffDays: number): string {
   const days = rem % 7;
 
   const parts: string[] = [];
-  if (years) parts.push(`${years}a`);
-  if (months) parts.push(`${months}m`);
-  if (!years && !months && weeks) parts.push(`${weeks}s`); // só mostra semanas se < 1 mês
-  if (!years && days && (months === 0 || weeks === 0)) parts.push(`${days}d`);
+  if (years) {
+    parts.push(years === 1 ? `${years} ano` : `${years} anos`);
+  }
+  if (months) {
+    parts.push(months === 1 ? `${months} mês` : `${months} meses`);
+  }
+  if (!years && !months && weeks) {
+    parts.push(weeks === 1 ? `${weeks} semana` : `${weeks} semanas`); // só mostra semanas se < 1 mês
+  }
+  if (!years && days && (months === 0 || weeks === 0)) {
+    parts.push(days === 1 ? `${days} dia` : `${days} dias`);
+  }
 
-  if (parts.length === 0) return '0d';
+  if (parts.length === 0) return '0 dias';
   return parts.slice(0, 2).join(' '); // no máx. 2 unidades
 }
 
@@ -282,11 +290,13 @@ const Entradas = () => {
   // Filtrar fornecedores localmente baseado no termo de busca
   const filteredSuppliers = useMemo(() => {
     const search = (supplierSearchTerm || '').trim().toLowerCase();
+    
     // Não retornar resultados se não houver texto digitado
     if (!search) {
       return [];
     }
 
+    // Filtrar por código ou nome
     return allSuppliers.filter((supplier) => {
       const codigo = String(supplier.codigo || '').toLowerCase();
       const nome = String(supplier.nome || '').toLowerCase();
@@ -1364,19 +1374,19 @@ const Entradas = () => {
                             <div className="relative" ref={supplierInputRef}>
                               <Input 
                                 placeholder="Código ou nome do fornecedor" 
-                                value={field.value}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              field.onChange(value);
-                              setSupplierSearchTerm(value);
-                              // Só mostrar dropdown se houver texto digitado
-                              if (value.trim().length > 0) {
-                                setShowSupplierDropdown(true);
-                              } else {
-                                setShowSupplierDropdown(false);
-                              }
-                              setSupplierSuggestion(null);
-                            }}
+                                value={field.value || ''}
+                                onChange={(e) => {
+                                  const value = e.target.value;
+                                  field.onChange(value);
+                                  setSupplierSearchTerm(value);
+                                  // Só mostrar dropdown se houver texto digitado
+                                  if (value.trim().length > 0) {
+                                    setShowSupplierDropdown(true);
+                                  } else {
+                                    setShowSupplierDropdown(false);
+                                  }
+                                  setSupplierSuggestion(null);
+                                }}
                                 onFocus={() => {
                                   // Só mostrar dropdown se houver texto digitado
                                   if (field.value && field.value.trim().length > 0) {
@@ -1384,7 +1394,14 @@ const Entradas = () => {
                                     setSupplierSearchTerm(field.value);
                                   }
                                 }}
+                                onKeyDown={(e) => {
+                                  // Permitir navegação com teclado
+                                  if (e.key === 'Escape') {
+                                    setShowSupplierDropdown(false);
+                                  }
+                                }}
                                 className="h-11 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-base sm:text-sm"
+                                autoComplete="off"
                               />
                               {showSupplierDropdown && !isLoadingSuppliers && (
                                 <>
@@ -2468,8 +2485,9 @@ const Entradas = () => {
                   />
                   </div>
                   
-                  {/* Footer do Modal */}
-                  <DialogFooter className="px-6 py-4 border-t border-neutral-200 bg-neutral-50/50 flex flex-col sm:flex-row gap-2">
+                  {/* Footer do Modal - Sempre mostra os 2 botões: Cancelar e Registrar Compra */}
+                  <div className="flex flex-col sm:flex-row justify-center items-stretch sm:items-center gap-2 px-3 sm:px-4 lg:px-6 py-3 border-t border-neutral-200 bg-white flex-shrink-0 min-h-[60px] overflow-visible w-full">
+                    {/* Botão Cancelar - Sempre visível */}
                     <Button 
                       type="button" 
                       variant="outline" 
@@ -2477,17 +2495,19 @@ const Entradas = () => {
                         setIsAddDialogOpen(false);
                         setBatchNumberErrors({});
                       }}
-                      className="w-full sm:w-auto border-2 border-neutral-300 text-neutral-700 hover:bg-neutral-50 h-9 text-sm"
+                      className="!flex !w-full sm:!w-auto border-2 border-neutral-300 text-neutral-700 hover:bg-neutral-50 h-9 text-xs sm:text-sm !flex-shrink-0 whitespace-nowrap min-w-[90px] !items-center !justify-center"
                     >
                       ❌ Cancelar
                     </Button>
+                    
+                    {/* Botão Registrar Compra - Sempre visível */}
                     <Button 
                       type="submit"
-                      className="w-full sm:w-auto bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white shadow-lg hover:shadow-xl transition-all duration-200 h-9 text-sm"
+                      className="!flex !w-full sm:!w-auto px-3 sm:px-4 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white shadow-lg hover:shadow-xl transition-all duration-200 h-9 text-xs sm:text-sm !flex-shrink-0 whitespace-nowrap min-w-[140px] !items-center !justify-center"
                     >
                       ✨ Registrar Compra
                     </Button>
-                  </DialogFooter>
+                  </div>
                 </form>
               </Form>
             </DialogContent>
@@ -2864,7 +2884,7 @@ const Entradas = () => {
                         <div className="relative" ref={supplierInputRef}>
                           <Input 
                             placeholder="Código ou nome do fornecedor" 
-                            value={field.value}
+                            value={field.value || ''}
                             onChange={(e) => {
                               const value = e.target.value;
                               field.onChange(value);
@@ -2880,10 +2900,17 @@ const Entradas = () => {
                               // Só mostrar dropdown se houver texto digitado
                               if (field.value && field.value.trim().length > 0) {
                                 setShowSupplierDropdown(true);
-                                setSupplierSearchTerm(field.value || "");
+                                setSupplierSearchTerm(field.value);
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              // Permitir navegação com teclado
+                              if (e.key === 'Escape') {
+                                setShowSupplierDropdown(false);
                               }
                             }}
                             className="h-12 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-base sm:text-sm"
+                            autoComplete="off"
                           />
                           {showSupplierDropdown && !isLoadingSuppliers && (
                             <>
