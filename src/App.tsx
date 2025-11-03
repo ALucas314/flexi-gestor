@@ -30,9 +30,6 @@ import { DataProvider } from "./contexts/DataContext";
 import { SidebarProvider } from "./contexts/SidebarContext";
 import { ConfigProvider } from "./contexts/ConfigContext";
 
-// 🔄 Auto-reload quando HMR falha
-import { HMRReloader } from "./components/HMRReloader";
-
 // 🔌 Monitoramento global de conexão Supabase
 import { ConnectionMonitor } from "./components/ConnectionMonitor";
 
@@ -53,8 +50,6 @@ const App = () => (
               <SidebarProvider>
             {/* 🔌 Monitoramento global de conexão Supabase */}
             <ConnectionMonitor />
-            {/* 🔄 Auto-reload quando HMR desconecta */}
-            <HMRReloader />
             <Toaster />
             <Sonner />
             <BrowserRouter

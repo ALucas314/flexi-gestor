@@ -161,7 +161,7 @@ export const WorkspaceProvider = ({ children }: { children: ReactNode }) => {
   // Função para recarregar workspaces manualmente
   const recarregarWorkspaces = useCallback(async () => {
     await carregarWorkspaces();
-  }, []);
+  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Memoizar o value do provider para evitar re-renders desnecessários
   const value = React.useMemo(() => ({

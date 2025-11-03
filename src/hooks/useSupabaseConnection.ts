@@ -29,8 +29,8 @@ export function useSupabaseConnection(
 ) {
   const {
     onReconnect,
-    checkInterval = 10000, // 10 segundos
-    disconnectThreshold = 30000, // 30 segundos
+    checkInterval = 8000, // 8 segundos (mais agressivo)
+    disconnectThreshold = 20000, // 20 segundos (detectar mais rápido)
     enableLogs = true
   } = options;
 

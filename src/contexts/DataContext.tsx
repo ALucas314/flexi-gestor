@@ -234,10 +234,18 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       loadNotificationsFromLocalStorage();
     };
 
+    // 🆕 Escutar eventos de reconexão global para recarregar dados automaticamente
+    const handleForceReload = async () => {
+      console.log('🔄 Evento de reload forçado detectado, recarregando dados...');
+      await refreshData();
+    };
+
     window.addEventListener('workspace-changed', handleWorkspaceChanged);
+    window.addEventListener('force-reload-data', handleForceReload);
 
     return () => {
       window.removeEventListener('workspace-changed', handleWorkspaceChanged);
+      window.removeEventListener('force-reload-data', handleForceReload);
     };
   }, [refreshData, loadNotificationsFromLocalStorage]);
 
@@ -317,21 +325,21 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       reconfigureSubscriptions();
 
       // 🔄 Health check que detecta desconexão e reconecta
-      // Verifica a cada 30 segundos se a última conexão foi há mais de 2 minutos
+      // Verifica a cada 60 segundos se houve conexão recente (menos agressivo para evitar loops)
       const healthCheckInterval = setInterval(async () => {
         const timeSinceLastConnection = Date.now() - lastSuccessfulConnection;
-        // Se não houve conexão bem-sucedida nos últimos 2 minutos, fazer reload
+        // Se não houve conexão bem-sucedida nos últimos 2 minutos, reconectar silenciosamente
         if (timeSinceLastConnection > 120000) {
           try {
             // Tentar reconectar silenciosamente, sem recarregar a página
             reconfigureSubscriptions();
-            await refreshData();
+            // NÃO recarregar dados aqui para não causar loop
             lastSuccessfulConnection = Date.now();
           } catch (e) {
             // Silencioso: mantém a UI estável
           }
         }
-      }, 30000); // Verifica a cada 30 segundos
+      }, 60000); // Verifica a cada 60 segundos (menos agressivo)
 
       // 🔄 Refresh periódico silencioso dos dados (a cada 60 segundos)
       const refreshInterval = setInterval(async () => {

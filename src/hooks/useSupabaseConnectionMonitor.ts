@@ -78,30 +78,6 @@ async function checkSupabaseConnection(): Promise<boolean> {
   }
 }
 
-// Função para verificar status das subscriptions
-function checkSubscriptionsStatus(): boolean {
-  try {
-    // Verificar se há canais ativos
-    const channels = (supabase as any).channels || [];
-    
-    if (channels.length === 0) {
-      return false;
-    }
-
-    // Verificar status dos canais
-    for (const channel of channels) {
-      const state = channel.state;
-      if (state === 'closed' || state === 'errored' || state === 'timed_out') {
-        return false;
-      }
-    }
-
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 // Função principal de monitoramento
 export function startGlobalConnectionMonitor(enableLogs = true) {
   // Evitar múltiplas instâncias
@@ -116,8 +92,9 @@ export function startGlobalConnectionMonitor(enableLogs = true) {
   const performHealthCheck = async () => {
     try {
       const isDbConnected = await checkSupabaseConnection();
-      const areSubscriptionsOk = checkSubscriptionsStatus();
-      const isConnected = isDbConnected && areSubscriptionsOk;
+      // NÃO verificar subscriptions aqui - o DataContext cuida disso
+      // Subscriptions podem estar temporariamente desconectadas sem ser um problema real
+      const isConnected = isDbConnected;
 
       if (isConnected) {
         // Conexão OK
@@ -141,6 +118,11 @@ export function startGlobalConnectionMonitor(enableLogs = true) {
             detail: { reason: 'reconnected', timestamp: Date.now() }
           }));
 
+          // Também disparar o evento que o DataContext escuta diretamente
+          window.dispatchEvent(new CustomEvent('force-reload-data', {
+            detail: { timestamp: Date.now(), reason: 'reconnected' }
+          }));
+
           isReconnecting = false;
         }
 
@@ -160,9 +142,7 @@ export function startGlobalConnectionMonitor(enableLogs = true) {
           if (enableLogs) {
             console.warn('⚠️ [Supabase Global] Desconexão detectada:', {
               consecutiveFailures,
-              timeSinceLastConnection: `${Math.round(timeSinceLastConnection / 1000)}s`,
-              isDbConnected,
-              areSubscriptionsOk
+              timeSinceLastConnection: `${Math.round(timeSinceLastConnection / 1000)}s`
             });
           }
 
@@ -189,8 +169,8 @@ export function startGlobalConnectionMonitor(enableLogs = true) {
     }
   };
 
-  // Health check a cada 10 segundos
-  globalHealthCheckInterval = setInterval(performHealthCheck, 10000);
+  // Health check a cada 30 segundos (menos agressivo para evitar loops)
+  globalHealthCheckInterval = setInterval(performHealthCheck, 30000);
 
   // Health check inicial
   performHealthCheck();
@@ -237,6 +217,11 @@ async function attemptReconnection(enableLogs = true) {
 
         window.dispatchEvent(new CustomEvent(CONNECTION_EVENTS.REFRESH_NEEDED, {
           detail: { reason: 'reconnected', timestamp: Date.now() }
+        }));
+
+        // Também disparar o evento que o DataContext escuta diretamente
+        window.dispatchEvent(new CustomEvent('force-reload-data', {
+          detail: { timestamp: Date.now(), reason: 'reconnected' }
         }));
       } else {
         // Ainda desconectado

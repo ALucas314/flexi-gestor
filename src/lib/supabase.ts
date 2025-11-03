@@ -71,12 +71,13 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     // Tentar recuperar sessão automaticamente
     flowType: 'pkce',
   },
-  // Desabilitar Realtime por padrão para evitar problemas de CSP
-  // Se precisar usar Realtime, pode ser habilitado depois
+  // Configurações do Realtime otimizadas para reconexão automática
   realtime: {
     params: {
       eventsPerSecond: 10
-    }
+    },
+    heartbeatIntervalMs: 30000,  // Heartbeat a cada 30s para manter conexão viva
+    reconnectAfterMs: (tries: number) => Math.min(tries * 1000, 10000) // Reconexão rápida
   },
   // Configuração global para evitar erros de rede
   global: {

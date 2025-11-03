@@ -24,12 +24,12 @@ export enum ConnectionStatus {
 
 // Configurações de retry - otimizadas para reconexão permanente
 const RETRY_CONFIG = {
-  MAX_RETRIES: 5,                    // Máximo de tentativas antes de resetar
-  INITIAL_DELAY: 500,                // Delay inicial em ms (500ms - mais rápido)
+  MAX_RETRIES: 10,                   // Máximo de tentativas antes de resetar (aumentado)
+  INITIAL_DELAY: 300,                // Delay inicial em ms (300ms - ultra rápido)
   MAX_DELAY: 30000,                  // Delay máximo em ms (30s)
-  BACKOFF_MULTIPLIER: 2,             // Multiplicador de backoff exponencial
+  BACKOFF_MULTIPLIER: 1.5,           // Multiplicador de backoff exponencial (mais conservador)
   HEALTH_CHECK_INTERVAL: 8000,      // Intervalo de health check (8s - muito frequente)
-  CONNECTION_TIMEOUT: 5000,         // Timeout de conexão (5s - mais rápido)
+  CONNECTION_TIMEOUT: 3000,         // Timeout de conexão (3s - ultra rápido)
   SESSION_REFRESH_INTERVAL: 3600000 // Renovar sessão a cada 1 hora (3600000ms)
 };
 
