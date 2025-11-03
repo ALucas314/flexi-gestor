@@ -32,6 +32,7 @@ let globalConnectionStatus: ConnectionStatus = {
 
 let globalHealthCheckInterval: NodeJS.Timeout | null = null;
 let globalReconnectTimeout: NodeJS.Timeout | null = null;
+let globalIsReconnecting: boolean = false;
 
 // Função para verificar conexão com o Supabase
 async function checkSupabaseConnection(): Promise<boolean> {
@@ -45,12 +46,17 @@ async function checkSupabaseConnection(): Promise<boolean> {
       .maybeSingle();
 
     if (error) {
-      // Erros específicos que não indicam desconexão (permissão, tabela não existe, sem resultados)
-      if (error.code === '42501' || error.code === '42P01' || error.code === 'PGRST116') {
-        return true; // É um erro de permissão ou tabela, não de conexão
+      // Erros específicos que NÃO indicam desconexão:
+      // - Permissão negada (42501)
+      // - Tabela não existe (42P01)
+      // - Sem resultados (PGRST116)
+      // - JWT expirado ou inválido (PGRST301, PGRST302, PGRST303) - erro de AUTENTICAÇÃO, não conexão
+      if (error.code === '42501' || error.code === '42P01' || error.code === 'PGRST116' ||
+          error.code === 'PGRST301' || error.code === 'PGRST302' || error.code === 'PGRST303') {
+        return true; // É um erro de permissão, autenticação ou tabela, não de conexão
       }
-      // Outros erros podem indicar problema de conexão
-      // Verificar se é erro de rede
+      
+      // Verificar se é erro de rede (conexão real)
       const errorMessage = error.message || '';
       if (errorMessage.includes('fetch') || 
           errorMessage.includes('network') || 
@@ -58,8 +64,9 @@ async function checkSupabaseConnection(): Promise<boolean> {
           errorMessage.includes('timeout')) {
         return false; // É erro de conexão
       }
-      // Se não for erro conhecido de permissão ou tabela, assumir que pode ser conexão
-      // Mas não é conclusivo, então retornar true para não criar falso positivo
+      
+      // Se não for erro conhecido, assumir que pode ser conexão
+      // Mas por padrão retornar true para não criar falso positivo
       return true;
     }
 
@@ -82,12 +89,14 @@ async function checkSupabaseConnection(): Promise<boolean> {
 export function startGlobalConnectionMonitor(enableLogs = true) {
   // Evitar múltiplas instâncias
   if (globalHealthCheckInterval) {
+    if (enableLogs) {
+      console.log('🔌 [Supabase Global] Monitor já está rodando, ignorando nova inicialização');
+    }
     return;
   }
 
   let lastSuccessfulCheck = Date.now();
   let consecutiveFailures = 0;
-  let isReconnecting = false;
 
   const performHealthCheck = async () => {
     try {
@@ -123,7 +132,7 @@ export function startGlobalConnectionMonitor(enableLogs = true) {
             detail: { timestamp: Date.now(), reason: 'reconnected' }
           }));
 
-          isReconnecting = false;
+          globalIsReconnecting = false;
         }
 
         lastSuccessfulCheck = Date.now();
@@ -156,8 +165,8 @@ export function startGlobalConnectionMonitor(enableLogs = true) {
           }));
 
           // Iniciar tentativas de reconexão
-          if (!isReconnecting) {
-            isReconnecting = true;
+          if (!globalIsReconnecting) {
+            globalIsReconnecting = true;
             attemptReconnection(enableLogs);
           }
         }
@@ -182,9 +191,14 @@ export function startGlobalConnectionMonitor(enableLogs = true) {
 
 // Função para tentar reconexão
 async function attemptReconnection(enableLogs = true) {
-  if (globalReconnectTimeout) {
+  if (globalReconnectTimeout || globalIsReconnecting) {
+    if (enableLogs) {
+      console.log('🔌 [Supabase Global] Reconexão já em andamento, ignorando nova tentativa');
+    }
     return; // Já está tentando reconectar
   }
+  
+  globalIsReconnecting = true;
 
   let attemptCount = 0;
   const maxAttempts = 10; // Máximo de 10 tentativas
@@ -229,8 +243,9 @@ async function attemptReconnection(enableLogs = true) {
           // Tentar novamente após 5 segundos
           globalReconnectTimeout = setTimeout(tryReconnect, 5000);
         } else {
-          // Máximo de tentativas atingido
-          globalReconnectTimeout = null;
+        // Máximo de tentativas atingido
+        globalReconnectTimeout = null;
+        globalIsReconnecting = false; // Limpar flag para permitir nova tentativa no próximo health check
           if (enableLogs) {
             console.error('❌ [Supabase Global] Não foi possível reconectar após múltiplas tentativas');
           }
@@ -246,6 +261,7 @@ async function attemptReconnection(enableLogs = true) {
         globalReconnectTimeout = setTimeout(tryReconnect, 5000);
       } else {
         globalReconnectTimeout = null;
+        globalIsReconnecting = false; // Limpar flag para permitir nova tentativa no próximo health check
       }
     }
   };
@@ -315,6 +331,8 @@ export function useSupabaseConnectionMonitor(options: {
       window.removeEventListener(CONNECTION_EVENTS.DISCONNECTED, handleDisconnect as EventListener);
       window.removeEventListener(CONNECTION_EVENTS.RECONNECTED, handleReconnect as EventListener);
       window.removeEventListener(CONNECTION_EVENTS.REFRESH_NEEDED, handleRefreshNeeded as EventListener);
+      // NÃO parar o monitor global aqui - ele deve persistir globalmente
+      // O cleanup do intervalo é feito pelo próprio monitor global
     };
   }, [onDisconnect, onReconnect, onRefreshNeeded, enableLogs]);
 

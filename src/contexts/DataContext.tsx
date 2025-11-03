@@ -139,8 +139,24 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       }));
 
       setProducts(mappedProducts);
+      // Salvar no localStorage como cache de fallback
+      try {
+        localStorage.setItem(`flexi-products-${workspaceAtivo.id}`, JSON.stringify(mappedProducts));
+      } catch (e) {
+        // Ignorar erros de localStorage
+      }
     } catch (error) {
       console.error('Erro ao carregar produtos');
+      // Em caso de erro, tentar carregar do localStorage como fallback
+      try {
+        const cached = localStorage.getItem(`flexi-products-${workspaceAtivo?.id}`);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          setProducts(parsed);
+        }
+      } catch (e) {
+        // Ignorar erros de parse
+      }
     }
   }, [user?.id, workspaceAtivo?.id]);
 
@@ -185,8 +201,24 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       }));
 
       setMovements(mappedMovements);
+      // Salvar no localStorage como cache de fallback
+      try {
+        localStorage.setItem(`flexi-movements-${workspaceAtivo.id}`, JSON.stringify(mappedMovements));
+      } catch (e) {
+        // Ignorar erros de localStorage
+      }
     } catch (error) {
       console.error('Erro ao carregar movimentações');
+      // Em caso de erro, tentar carregar do localStorage como fallback
+      try {
+        const cached = localStorage.getItem(`flexi-movements-${workspaceAtivo?.id}`);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          setMovements(parsed);
+        }
+      } catch (e) {
+        // Ignorar erros de parse
+      }
     }
   }, [user?.id, workspaceAtivo?.id]);
 
@@ -252,6 +284,20 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   // 🔄 Carregar dados do Supabase quando o usuário estiver autenticado OU mudar workspace
   useEffect(() => {
     if (isAuthenticated && user && workspaceAtivo) {
+      // 🆕 Carregar dados do localStorage PRIMEIRO (instantâneo)
+      try {
+        const cachedProducts = localStorage.getItem(`flexi-products-${workspaceAtivo.id}`);
+        const cachedMovements = localStorage.getItem(`flexi-movements-${workspaceAtivo.id}`);
+        if (cachedProducts) {
+          setProducts(JSON.parse(cachedProducts));
+        }
+        if (cachedMovements) {
+          setMovements(JSON.parse(cachedMovements));
+        }
+      } catch (e) {
+        // Ignorar erros de parse
+      }
+
       // Carregar dados e notificações
       const loadData = async () => {
         await refreshData();
