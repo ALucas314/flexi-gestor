@@ -30,7 +30,7 @@ export const WorkspaceProvider = ({ children }: { children: ReactNode }) => {
   const [isLoading, setIsLoading] = useState(true);
 
   // Função para carregar workspaces
-  const carregarWorkspaces = async () => {
+  const carregarWorkspaces = useCallback(async () => {
     if (!user) {
       setIsLoading(false);
       return;
@@ -124,12 +124,12 @@ export const WorkspaceProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [user]);
 
   // Carregar workspaces na primeira vez
   useEffect(() => {
     carregarWorkspaces();
-  }, [user]);
+  }, [carregarWorkspaces]);
 
   // Atualizar workspaces a cada 30 segundos para verificar novos compartilhamentos
   useEffect(() => {
@@ -161,7 +161,7 @@ export const WorkspaceProvider = ({ children }: { children: ReactNode }) => {
   // Função para recarregar workspaces manualmente
   const recarregarWorkspaces = useCallback(async () => {
     await carregarWorkspaces();
-  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [carregarWorkspaces]);
 
   // Memoizar o value do provider para evitar re-renders desnecessários
   const value = React.useMemo(() => ({
