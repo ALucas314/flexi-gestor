@@ -1200,7 +1200,7 @@ const Saidas = () => {
                     <form onSubmit={form.handleSubmit(handleAddExit)} className="flex flex-col flex-1 min-h-0">
                       <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
                         {/* Primeira linha - Produto e Cliente */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-3">
+                        <div className="space-y-4">
                           <FormField
                             control={form.control}
                             name="productId"
@@ -1986,7 +1986,7 @@ const Saidas = () => {
                         )}
 
                         {/* Segunda linha - Data da Venda e Forma de Pagamento */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-3">
+                        <div className="space-y-4">
                           <FormField
                             control={form.control}
                             name="exitDate"
@@ -2044,7 +2044,7 @@ const Saidas = () => {
                         
                         {/* Terceira linha - Parcelas (se parcelado) */}
                         {form.watch("paymentMethod") === "parcelado" && (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-3">
+                          <div className="space-y-4">
                             <FormField
                               control={form.control}
                               name="installments"

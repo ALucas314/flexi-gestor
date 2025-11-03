@@ -79,6 +79,7 @@ type StockEntryFormData = Omit<StockEntry, 'id' | 'productName' | 'productSku' |
   manufactureDate?: Date;
   expiryDate?: Date;
   paymentMethod?: string; // Forma de pagamento (avista, pix, debito, credito, etc)
+  installments?: number; // Número de parcelas (quando parcelado)
 };
 
 const Entradas = () => {
@@ -188,6 +189,7 @@ const Entradas = () => {
       manufactureDate: undefined,
       expiryDate: undefined,
       paymentMethod: "avista", // Forma de pagamento padrão
+      installments: 1, // Número de parcelas padrão
     },
   });
 
@@ -809,6 +811,7 @@ const Entradas = () => {
 
         const markup = (data as any).markup || 0;
         const paymentMethod = (data as any).paymentMethod || 'avista';
+        const installments = (data as any).installments || 1;
         
         await addMovement({
           type: 'entrada',
@@ -820,7 +823,7 @@ const Entradas = () => {
             + (minManu ? ` | FAB:${minManu.toISOString().split('T')[0]}` : '')
             + (minExpiry ? ` | EXP:${minExpiry.toISOString().split('T')[0]}` : ''),
           date: data.entryDate,
-          paymentMethod: paymentMethod,
+          paymentMethod: paymentMethod === "parcelado" ? `parcelado-${installments}x` : paymentMethod,
         });
 
         // Calcular e atualizar preço de venda do produto se markup foi informado
@@ -884,6 +887,7 @@ const Entradas = () => {
       const exp = (data as any).expiryDate as Date | undefined;
       const markup = (data as any).markup || 0;
       const paymentMethod = (data as any).paymentMethod || 'avista';
+      const installments = (data as any).installments || 1;
       
       await addMovement({
         type: 'entrada',
@@ -893,7 +897,7 @@ const Entradas = () => {
         unitPrice: data.unitCost,
         description: `Entrada de ${data.quantity} unidades - ${data.supplier}` + (manu ? ` | FAB:${manu.toISOString().split('T')[0]}` : '') + (exp ? ` | EXP:${exp.toISOString().split('T')[0]}` : ''),
         date: data.entryDate,
-        paymentMethod: paymentMethod,
+        paymentMethod: paymentMethod === "parcelado" ? `parcelado-${installments}x` : paymentMethod,
       });
 
       // Calcular e atualizar preço de venda do produto se markup foi informado
@@ -1239,7 +1243,7 @@ const Entradas = () => {
                 <form onSubmit={form.handleSubmit(addEntry)} className="flex flex-col flex-1 min-h-0">
                   <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
                     {/* Primeira linha - Produto e Fornecedor */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-3">
+                  <div className="space-y-4">
                     <FormField
                       control={form.control}
                       name="productId"
@@ -1443,7 +1447,7 @@ const Entradas = () => {
                             <p className="text-sm text-gray-600">{selectedProduct?.name || 'Produto selecionado'}</p>
                           </CardHeader>
                           <CardContent className="space-y-4">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-4">
                               <FormField
                                 control={form.control}
                                 name="quantity"
@@ -1513,50 +1517,6 @@ const Entradas = () => {
                               />
                               <FormField
                                 control={form.control}
-                                name="markup"
-                                render={({ field }) => (
-                                  <FormItem className="space-y-2">
-                                    <FormLabel className="text-sm font-semibold text-neutral-700">
-                                      📈 Markup (%) - Percentual para calcular preço de venda
-                                    </FormLabel>
-                                    <FormControl>
-                                      <Input
-                                        type="number"
-                                        step="0.1"
-                                        min="0"
-                                        placeholder="Ex: 30 (para 30% de margem)"
-                                        {...field}
-                                        onChange={(e) => {
-                                          const value = e.target.value;
-                                          if (value === '' || value === null) {
-                                            field.onChange(0);
-                                            return;
-                                          }
-                                          const numValue = parseFloat(value);
-                                          if (!isNaN(numValue) && numValue >= 0) {
-                                            field.onChange(numValue);
-                                          }
-                                        }}
-                                        value={field.value === undefined || field.value === null || field.value === 0 ? '' : field.value}
-                                        className="h-11 sm:h-10 border-2 border-indigo-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-base sm:text-sm bg-indigo-50/50"
-                                      />
-                                    </FormControl>
-                                    <FormMessage />
-                                    {form.watch('unitCost') > 0 && form.watch('markup') > 0 && (
-                                      <div className="mt-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
-                                        <p className="text-sm font-semibold text-emerald-700">
-                                          💰 Preço de Venda Calculado: R$ {(form.watch('unitCost') * (1 + (form.watch('markup') || 0) / 100)).toFixed(2)}
-                                        </p>
-                                        <p className="text-xs text-emerald-600 mt-1">
-                                          Custo: R$ {form.watch('unitCost').toFixed(2)} + {form.watch('markup')}% = R$ {(form.watch('unitCost') * (1 + (form.watch('markup') || 0) / 100)).toFixed(2)}
-                                        </p>
-                                      </div>
-                                    )}
-                                  </FormItem>
-                                )}
-                              />
-                              <FormField
-                                control={form.control}
                                 name="paymentMethod"
                                 render={({ field }) => (
                                   <FormItem className="space-y-2">
@@ -1579,6 +1539,7 @@ const Entradas = () => {
                                           <SelectItem value="boleto">📄 Boleto</SelectItem>
                                           <SelectItem value="cheque">📝 Cheque</SelectItem>
                                           <SelectItem value="transferencia">🏦 Transferência</SelectItem>
+                                          <SelectItem value="parcelado">📊 Parcelado</SelectItem>
                                         </SelectContent>
                                       </Select>
                                     </FormControl>
@@ -1586,10 +1547,41 @@ const Entradas = () => {
                                   </FormItem>
                                 )}
                               />
+                              {form.watch("paymentMethod") === "parcelado" && (
+                                <FormField
+                                  control={form.control}
+                                  name="installments"
+                                  render={({ field }) => (
+                                    <FormItem className="space-y-2">
+                                      <FormLabel className="text-sm font-semibold text-neutral-700">
+                                        📊 Quantidade de Parcelas
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Select 
+                                          value={String(field.value || 1)} 
+                                          onValueChange={(v) => field.onChange(Number(v))}
+                                        >
+                                          <SelectTrigger className="h-11 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-base sm:text-sm">
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
+                                              <SelectItem key={n} value={String(n)}>
+                                                {n}x
+                                              </SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                      </FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                              )}
                             </div>
 
                             {/* Datas e Vencimento (para produtos sem lote) */}
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="space-y-4">
                               <FormField
                                 control={form.control}
                                 name="manufactureDate"
@@ -1663,6 +1655,53 @@ const Entradas = () => {
                                 })()}
                               </div>
                             </div>
+
+                            {/* Campo de Markup - abaixo das datas */}
+                            <FormField
+                              control={form.control}
+                              name="markup"
+                              render={({ field }) => (
+                                <FormItem className="space-y-2">
+                                  <FormLabel className="text-sm font-semibold text-neutral-700">
+                                    📈 Markup (%) - Percentual para calcular preço de venda
+                                  </FormLabel>
+                                  <FormControl>
+                                    <Input
+                                      type="number"
+                                      step="0.1"
+                                      min="0"
+                                      placeholder="Ex: 30 (para 30% de margem)"
+                                      {...field}
+                                      onChange={(e) => {
+                                        const value = e.target.value;
+                                        if (value === '' || value === null) {
+                                          field.onChange(0);
+                                          return;
+                                        }
+                                        const numValue = parseFloat(value);
+                                        if (!isNaN(numValue) && numValue >= 0) {
+                                          field.onChange(numValue);
+                                        }
+                                      }}
+                                      value={field.value === undefined || field.value === null || field.value === 0 ? '' : field.value}
+                                      className="h-11 sm:h-10 border-2 border-indigo-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-base sm:text-sm bg-indigo-50/50"
+                                    />
+                                  </FormControl>
+                                  <FormMessage />
+                                  {form.watch('unitCost') > 0 && form.watch('markup') > 0 && (
+                                    <div className="mt-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+                                      <p className="text-sm font-semibold text-emerald-700">
+                                        💰 Preço de Venda Calculado: R$ {(form.watch('unitCost') * (1 + (form.watch('markup') || 0) / 100)).toFixed(2)}
+                                      </p>
+                                      <p className="text-xs text-emerald-600 mt-1">
+                                        Custo: R$ {form.watch('unitCost').toFixed(2)} + {form.watch('markup')}% = R$ {(form.watch('unitCost') * (1 + (form.watch('markup') || 0) / 100)).toFixed(2)}
+                                      </p>
+                                    </div>
+                                  )}
+                                </FormItem>
+                              )}
+                            />
+
                             {form.watch('quantity') > 0 && form.watch('unitCost') > 0 && (
                               <div className="pt-3 border-t border-indigo-200 space-y-2">
                                 <div className="flex items-center justify-between">
@@ -2311,6 +2350,71 @@ const Entradas = () => {
                                 />
                               </CardContent>
                             </Card>
+                            
+                            {/* Campo de Forma de Pagamento para produtos com lote */}
+                            <FormField
+                              control={form.control}
+                              name="paymentMethod"
+                              render={({ field }) => (
+                                <FormItem className="space-y-2">
+                                  <FormLabel className="text-sm font-semibold text-neutral-700">
+                                    💳 Forma de Pagamento
+                                  </FormLabel>
+                                  <FormControl>
+                                    <Select
+                                      value={field.value || "avista"}
+                                      onValueChange={field.onChange}
+                                    >
+                                      <SelectTrigger className="h-11 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-base sm:text-sm">
+                                        <SelectValue placeholder="Selecione a forma de pagamento" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="avista">💵 À vista</SelectItem>
+                                        <SelectItem value="pix">📱 PIX</SelectItem>
+                                        <SelectItem value="debito">💳 Débito</SelectItem>
+                                        <SelectItem value="credito">💳 Crédito</SelectItem>
+                                        <SelectItem value="boleto">📄 Boleto</SelectItem>
+                                        <SelectItem value="cheque">📝 Cheque</SelectItem>
+                                        <SelectItem value="transferencia">🏦 Transferência</SelectItem>
+                                        <SelectItem value="parcelado">📊 Parcelado</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            {form.watch("paymentMethod") === "parcelado" && (
+                              <FormField
+                                control={form.control}
+                                name="installments"
+                                render={({ field }) => (
+                                  <FormItem className="space-y-2">
+                                    <FormLabel className="text-sm font-semibold text-neutral-700">
+                                      📊 Quantidade de Parcelas
+                                    </FormLabel>
+                                    <FormControl>
+                                      <Select 
+                                        value={String(field.value || 1)} 
+                                        onValueChange={(v) => field.onChange(Number(v))}
+                                      >
+                                        <SelectTrigger className="h-11 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-base sm:text-sm">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
+                                            <SelectItem key={n} value={String(n)}>
+                                              {n}x
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            )}
                           </div>
                         )}
                       </CardContent>
