@@ -3,7 +3,19 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Mail, Send, CheckCircle, AlertCircle, Package, Lock, Shield, Zap, Heart } from 'lucide-react';
+// Usando Lucide React
+import { 
+  ArrowLeft,
+  Mail,
+  Send,
+  CheckCircle,
+  AlertCircle,
+  Package,
+  Lock,
+  Shield,
+  Zap,
+  Heart
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';

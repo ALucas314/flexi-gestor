@@ -1,5 +1,14 @@
 import React, { useState, useEffect } from "react";
-import { Plus, Search, Edit, Trash2, Package, Calendar, X } from "lucide-react";
+// Usando Lucide React
+import { 
+  Plus,
+  Search,
+  Edit,
+  Trash2,
+  Package,
+  Calendar,
+  X
+} from "lucide-react";
 import { BatchManager } from "@/components/BatchManager";
 
 import { Button } from "@/components/ui/button";
@@ -16,7 +25,7 @@ import { ResponsiveTable, TableColumn, TableAction, ResponsiveBadge } from "@/co
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useData } from "@/contexts/DataContext";
 import { useResponsive } from "@/hooks/use-responsive";
 
@@ -102,7 +111,7 @@ const Produtos = () => {
   ];
   
   // Hooks
-  const { toast } = useToast();
+  // toast importado diretamente do sonner
   const { isMobile } = useResponsive();
   const { 
     products,
@@ -185,10 +194,8 @@ const Produtos = () => {
   // Função para adicionar unidade personalizada
   const handleAddCustomUnit = async () => {
     if (!newCustomUnit.trim()) {
-      toast({
-        title: "❌ Campo Vazio",
-        description: "Por favor, digite uma unidade de medida.",
-        variant: "destructive",
+      toast.error("Campo Vazio", {
+        description: "Por favor, digite uma unidade de medida."
       });
       return;
     }
@@ -198,10 +205,8 @@ const Produtos = () => {
     // Verificar se já existe nas unidades padrão
     const existsInDefault = defaultUnits.some(u => u.value === unitValue);
     if (existsInDefault) {
-      toast({
-        title: "❌ Unidade Já Existe",
-        description: `A unidade "${unitValue}" já está cadastrada como unidade padrão.`,
-        variant: "destructive",
+      toast.error("Unidade Já Existe", {
+        description: `A unidade "${unitValue}" já está cadastrada como unidade padrão.`
       });
       return;
     }
@@ -218,16 +223,12 @@ const Produtos = () => {
         form.setValue("unitOfMeasure", unitValue);
       }
       
-      toast({
-        title: "✅ Unidade Adicionada!",
-        description: `A unidade "${unitValue}" foi adicionada com sucesso ao banco de dados.`,
-        variant: "default",
+      toast.success("Unidade Adicionada!", {
+        description: `A unidade "${unitValue}" foi adicionada com sucesso ao banco de dados.`
       });
     } catch (error: any) {
-      toast({
-        title: "❌ Erro ao Adicionar Unidade",
-        description: error.message || "Não foi possível adicionar a unidade. Tente novamente.",
-        variant: "destructive",
+      toast.error("Erro ao Adicionar Unidade", {
+        description: error.message || "Não foi possível adicionar a unidade. Tente novamente."
       });
     }
   };
@@ -241,17 +242,13 @@ const Produtos = () => {
       setIsDeleteUnitDialogOpen(false);
       setUnitToDelete(null);
       
-      toast({
-        title: "✅ Unidade Excluída!",
-        description: `A unidade "${unitToDelete}" foi removida do banco de dados.`,
-        variant: "default",
+      toast.success("Unidade Excluída!", {
+        description: `A unidade "${unitToDelete}" foi removida do banco de dados.`
       });
     } catch (error: any) {
-      toast({
-        title: "❌ Erro ao Excluir Unidade",
+      toast.error("Erro ao Excluir Unidade", {
         description: error.message || "Não foi possível excluir a unidade. Tente novamente.",
-        variant: "destructive",
-        duration: 6000,
+        duration: 6000
       });
       setIsDeleteUnitDialogOpen(false);
       setUnitToDelete(null);

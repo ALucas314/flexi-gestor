@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -11,25 +11,26 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+// Usando Lucide React
 import { 
-  DollarSign, 
-  TrendingUp, 
-  TrendingDown, 
-  Wallet,
-  ArrowUpCircle,
-  ArrowDownCircle,
+  DollarSign,
+  TrendingUp,
+  TrendingDown,
+  CreditCard as Wallet,
+  CircleArrowUp as ArrowUpCircle,
+  CircleArrowDown as ArrowDownCircle,
   Package,
   Search,
   Filter,
   Calendar,
   RotateCcw,
   Download,
-  PiggyBank,
+  Coins as PiggyBank,
   Receipt,
   CheckCircle,
   Printer,
   Share2,
-  FileSpreadsheet
+  FileText as FileSpreadsheet
 } from "lucide-react";
 import { useData } from "@/contexts/DataContext";
 import { useResponsive } from "@/hooks/use-responsive";
@@ -450,6 +451,9 @@ Compra registrada com sucesso!
                 <Package className="w-5 h-5 text-slate-600" />
                 📊 Lucro por Produto
               </CardTitle>
+              <CardDescription className="text-slate-600">
+                Margem de contribuição calculada como: (Lucro ÷ Total Venda) × 100
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="rounded-md border border-slate-200 overflow-hidden">
@@ -461,13 +465,14 @@ Compra registrada com sucesso!
                       <TableHead className="font-semibold text-slate-700">💵 Total Compra</TableHead>
                       <TableHead className="font-semibold text-slate-700">💸 Total Venda</TableHead>
                       <TableHead className="font-semibold text-slate-700">💰 Lucro</TableHead>
+                      <TableHead className="font-semibold text-slate-700">📊 Margem</TableHead>
                       <TableHead className="font-semibold text-slate-700 hidden lg:table-cell">🔢 Qtd Vendida</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {profitByProductSorted.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-12">
+                        <TableCell colSpan={7} className="text-center py-12">
                           <div className="flex flex-col items-center gap-3">
                             <Package className="w-12 h-12 text-slate-300" />
                             <div className="text-slate-500">
@@ -478,34 +483,46 @@ Compra registrada com sucesso!
                         </TableCell>
                       </TableRow>
                     ) : (
-                      profitByProductSorted.map((item) => (
-                        <TableRow key={item.productId} className="hover:bg-slate-50 transition-colors">
-                          <TableCell>
-                            <div className="font-medium text-slate-900 text-sm">{item.productName}</div>
-                          </TableCell>
-                          <TableCell className="hidden md:table-cell">
-                            <span className="text-sm text-slate-600">{item.productSku || '—'}</span>
-                          </TableCell>
-                          <TableCell>
-                            <span className="font-semibold text-blue-600 text-sm">
-                              R$ {item.totalCompra.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            <span className="font-semibold text-orange-600 text-sm">
-                              R$ {item.totalVenda.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            <span className={`font-bold text-sm ${item.lucro >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                              {item.lucro >= 0 ? '+' : ''}R$ {item.lucro.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                            </span>
-                          </TableCell>
-                          <TableCell className="hidden lg:table-cell">
-                            <span className="font-semibold text-slate-900">{item.quantidadeVendida}</span>
-                          </TableCell>
-                        </TableRow>
-                      ))
+                      profitByProductSorted.map((item) => {
+                        // Calcular margem de contribuição: Lucro / Total Venda * 100
+                        const margemContribuicao = item.totalVenda > 0 
+                          ? (item.lucro / item.totalVenda) * 100 
+                          : 0;
+                        
+                        return (
+                          <TableRow key={item.productId} className="hover:bg-slate-50 transition-colors">
+                            <TableCell>
+                              <div className="font-medium text-slate-900 text-sm">{item.productName}</div>
+                            </TableCell>
+                            <TableCell className="hidden md:table-cell">
+                              <span className="text-sm text-slate-600">{item.productSku || '—'}</span>
+                            </TableCell>
+                            <TableCell>
+                              <span className="font-semibold text-blue-600 text-sm">
+                                R$ {item.totalCompra.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              <span className="font-semibold text-orange-600 text-sm">
+                                R$ {item.totalVenda.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              <span className={`font-bold text-sm ${item.lucro >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {item.lucro >= 0 ? '+' : ''}R$ {item.lucro.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              <span className={`font-bold text-sm ${margemContribuicao >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {margemContribuicao.toFixed(1)}%
+                              </span>
+                            </TableCell>
+                            <TableCell className="hidden lg:table-cell">
+                              <span className="font-semibold text-slate-900">{item.quantidadeVendida}</span>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
                     )}
                   </TableBody>
                 </Table>

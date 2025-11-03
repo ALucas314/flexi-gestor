@@ -1,9 +1,10 @@
+// Usando Lucide React
 import { 
-  Home, 
-  Package, 
-  TrendingUp, 
-  TrendingDown, 
-  FileText, 
+  Home,
+  Package,
+  TrendingUp,
+  TrendingDown,
+  FileText,
   DollarSign,
   Users,
   Truck,

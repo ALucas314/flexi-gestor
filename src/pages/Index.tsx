@@ -1,4 +1,24 @@
-import { Package, DollarSign, TrendingUp, AlertTriangle, BarChart3, Users, ShoppingCart, ArrowRight, Eye, EyeOff, TrendingDown, Bell, Clock, Activity, Info, CheckCircle, AlertCircle, XCircle } from "lucide-react";
+// Usando Lucide React
+import { 
+  Package,
+  DollarSign,
+  TrendingUp,
+  AlertTriangle,
+  BarChart3,
+  Users,
+  ShoppingCart,
+  ArrowRight,
+  Eye,
+  EyeOff,
+  TrendingDown,
+  Bell,
+  Clock,
+  Activity,
+  Info,
+  CheckCircle,
+  AlertCircle,
+  XCircle
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatsCard } from "@/components/dashboard/StatsCard";
 import { RecentMovements } from "@/components/dashboard/RecentMovements";

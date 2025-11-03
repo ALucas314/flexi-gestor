@@ -1,6 +1,20 @@
 // 🔧 Login Corrigido - Versão que funciona
 import React, { useState, useEffect } from "react";
-import { Eye, EyeOff, LogIn, UserPlus, Package, Lock, Mail, User, Sparkles, Shield, Zap, Heart } from "lucide-react";
+// Usando Lucide React
+import { 
+  Eye,
+  EyeOff,
+  LogIn,
+  UserPlus,
+  Package,
+  Lock,
+  Mail,
+  User,
+  Sparkles,
+  Shield,
+  Zap,
+  Heart
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import img2 from "@/assets/img 2.jpg";
 

@@ -7,12 +7,13 @@ import { Label } from '../components/ui/label';
 import { Alert, AlertDescription } from '../components/ui/alert';
 import { Badge } from '../components/ui/badge';
 import { Separator } from '../components/ui/separator';
+// Usando Lucide React
 import { 
-  User, 
-  Mail, 
-  Shield, 
-  Calendar, 
-  CheckCircle, 
+  User,
+  Mail,
+  Shield,
+  Calendar,
+  CheckCircle,
   AlertCircle,
   Save,
   Edit,

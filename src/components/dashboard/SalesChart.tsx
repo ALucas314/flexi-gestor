@@ -1,5 +1,6 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+// Usando Lucide React
 import { TrendingUp } from 'lucide-react';
 import { FullscreenChart } from '../ui/fullscreen-chart';
 import { useResponsive } from '@/hooks/use-responsive';

@@ -1,6 +1,14 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { TrendingUp, TrendingDown, RotateCcw, Clock, ArrowRight, Package } from "lucide-react";
+// Usando Lucide React
+import { 
+  TrendingUp,
+  TrendingDown,
+  RotateCcw,
+  Clock,
+  ArrowRight,
+  Package
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 interface Movement {

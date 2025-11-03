@@ -6,7 +6,24 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, TrendingUp, TrendingDown, Package, ArrowRight, Settings, Edit, Trash2, Save, X, DollarSign, BarChart3, UserCircle, Truck, Users } from "lucide-react";
+// Usando Lucide React
+import { 
+  Plus,
+  TrendingUp,
+  TrendingDown,
+  Package,
+  ArrowRight,
+  Settings,
+  Edit,
+  Trash2,
+  Save,
+  X,
+  DollarSign,
+  BarChart3,
+  UserCircle,
+  Truck,
+  Users
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useResponsive } from "@/hooks/use-responsive";
 

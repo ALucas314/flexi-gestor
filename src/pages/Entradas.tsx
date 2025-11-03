@@ -1,5 +1,19 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { Plus, TrendingUp, Package, Search, Edit, Trash2, Calendar, DollarSign, Filter, Download, Eye, X } from "lucide-react";
+// Usando Lucide React
+import { 
+  Plus,
+  TrendingUp,
+  Package,
+  Search,
+  Edit,
+  Trash2,
+  Calendar,
+  DollarSign,
+  Filter,
+  Download,
+  Eye,
+  X
+} from "lucide-react";
 import { BatchManager } from "@/components/BatchManager";
 
 import { Button } from "@/components/ui/button";

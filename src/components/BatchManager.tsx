@@ -7,10 +7,11 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
+// Usando Lucide React
 import { 
-  Plus, 
-  Calendar, 
-  Package, 
+  Plus,
+  Calendar,
+  Package,
   AlertTriangle,
   CheckCircle,
   Trash2,

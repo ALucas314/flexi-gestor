@@ -1,7 +1,8 @@
+// Usando Lucide React
 import { 
-  Menu, 
-  Bell, 
-  User, 
+  Menu,
+  Bell,
+  User,
   X,
   LogOut,
   Shield,

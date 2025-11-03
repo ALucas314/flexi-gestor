@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,9 +8,19 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Plus, Trash2, Edit, Phone, User2, Truck, Search, Download } from 'lucide-react';
+// Usando Lucide React
+import { 
+  Plus,
+  Trash2,
+  Edit,
+  Phone,
+  User as User2,
+  Truck,
+  Search,
+  Download
+} from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -81,7 +91,7 @@ interface Supplier {
 }
 
 const Fornecedores = () => {
-  const { toast } = useToast();
+  // toast importado diretamente do sonner
   const { workspaceAtivo } = useWorkspace();
   const { user } = useAuth();
 
@@ -143,43 +153,23 @@ const Fornecedores = () => {
     });
   }, [suppliers, searchTerm]);
 
-  // Carrega fornecedores do Supabase
-  const loadSuppliers = async () => {
-    // Não limpar a lista se não houver workspace - manter dados existentes
-    if (!workspaceAtivo?.id) {
-      // Apenas retornar sem limpar a lista, mantendo os dados existentes
-      return;
-    }
+  // 🔄 Função para recarregar fornecedores (useCallback para evitar re-criar referência)
+  const loadSuppliers = useCallback(async () => {
+    if (!user?.id || !workspaceAtivo?.id) return;
     
     try {
-      setIsLoading(true);
+      // Filtrar fornecedores APENAS do workspace ativo
       const { data, error } = await supabase
         .from('fornecedores')
         .select('*')
-        .eq('usuario_id', workspaceAtivo.id) // Sempre usar workspaceAtivo.id
+        .eq('usuario_id', workspaceAtivo.id) // Filtro explícito por workspace
         .order('codigo', { ascending: true });
-      
+
       if (error) {
-        // Tratar erros específicos
-        if (error.code === '42501') {
-          console.warn('Erro de permissão RLS ao carregar fornecedores. Verifique as políticas.');
-          // Não limpar lista em caso de erro de permissão, manter dados existentes
-          setIsLoading(false);
-          return;
-        }
-        if (error.code === '42P01') {
-          toast({
-            title: 'Tabela não encontrada',
-            description: 'A tabela de fornecedores não existe. Execute o script SQL de criação.',
-            variant: 'destructive'
-          });
-          setIsLoading(false);
-          return;
-        }
         throw error;
       }
-      
-      // Mapear dados recebidos
+
+      // Mapear dados do Supabase para o formato esperado
       const mapped: Supplier[] = (data || []).map((s: any) => ({
         id: s.id,
         codigo: s.codigo,
@@ -188,35 +178,18 @@ const Fornecedores = () => {
         phone: s.telefone ?? s.phone,
         created_at: s.criado_em ?? s.created_at,
       }));
-      
-      // Sempre atualizar com os dados recebidos do banco
-      // Se não houver dados, ainda assim atualizar para mostrar lista vazia (não manter dados antigos)
+
       setSuppliers(mapped);
-      console.log(`[FORNECEDORES] Carregados ${mapped.length} fornecedores do workspace ${workspaceAtivo.id}`);
-    } catch (error: any) {
-      console.error('Erro ao carregar fornecedores:', error);
-      // Não limpar a lista em caso de erro - manter dados existentes
-      // Apenas mostrar toast se for um erro crítico
-      if (error.code !== '42501') {
-        toast({
-          title: 'Erro ao carregar fornecedores',
-          description: error.message || `Erro ${error.code || 'desconhecido'}: Verifique se a tabela existe e as políticas RLS estão configuradas corretamente.`,
-          variant: 'destructive'
-        });
-      }
-      // Não limpar suppliers[] em caso de erro
-    } finally {
-      setIsLoading(false);
+    } catch (error) {
+      console.error('Erro ao carregar fornecedores');
     }
-  };
+  }, [user?.id, workspaceAtivo?.id]);
 
   // 🔄 Escutar mudanças de workspace para recarregar dados
   useEffect(() => {
     const handleWorkspaceChanged = async () => {
-      console.log('🔄 Workspace mudou (Fornecedores), recarregando dados...');
-      if (workspaceAtivo?.id) {
-        await loadSuppliers();
-      }
+      console.log('🔄 Workspace mudou, recarregando dados...');
+      await loadSuppliers();
     };
 
     window.addEventListener('workspace-changed', handleWorkspaceChanged);
@@ -224,13 +197,18 @@ const Fornecedores = () => {
     return () => {
       window.removeEventListener('workspace-changed', handleWorkspaceChanged);
     };
-  }, [workspaceAtivo?.id]);
+  }, [loadSuppliers]);
 
   // 🔄 Carregar dados do Supabase quando o usuário estiver autenticado OU mudar workspace
   useEffect(() => {
     if (user && workspaceAtivo?.id) {
-      // Carregar dados inicialmente
-      loadSuppliers();
+      // Carregar dados
+      const loadData = async () => {
+        setIsLoading(true);
+        await loadSuppliers();
+        setIsLoading(false);
+      };
+      loadData();
 
       let fornecedoresSubscription: any = null;
       let lastSuccessfulConnection = Date.now();
@@ -261,7 +239,7 @@ const Fornecedores = () => {
               }
             });
         } catch (error) {
-          console.error('Erro ao configurar subscription de fornecedores:', error);
+          // Silencioso
         }
       };
 
@@ -287,9 +265,7 @@ const Fornecedores = () => {
 
       // 🔄 Refresh periódico silencioso dos dados (a cada 60 segundos)
       const refreshInterval = setInterval(async () => {
-        if (workspaceAtivo?.id) {
-          await loadSuppliers();
-        }
+        await loadSuppliers();
       }, 60000); // 60 segundos
 
       // 🧹 Cleanup ao sair
@@ -305,10 +281,10 @@ const Fornecedores = () => {
         }
       };
     } else if (!user || !workspaceAtivo?.id) {
-      // Não limpar lista quando workspace/user for null - manter dados em memória
-      setIsLoading(false);
+      // Limpar dados quando não autenticado
+      setSuppliers([]);
     }
-  }, [user?.id, workspaceAtivo?.id]); // Recarregar quando mudar workspace ou usuário
+  }, [user?.id, workspaceAtivo?.id, loadSuppliers]); // Recarregar quando mudar workspace ou usuário
 
   const onOpenAdd = () => {
     setEditing(null);
@@ -318,15 +294,7 @@ const Fornecedores = () => {
   };
 
   const handleSave = async (data: SupplierFormData) => {
-    if (!workspaceAtivo?.id) {
-      toast({ 
-        title: 'Erro', 
-        description: 'Workspace não selecionado. Selecione um workspace antes de continuar.',
-        variant: 'destructive' 
-      });
-      return;
-    }
-    
+    if (!user?.id) return;
     try {
       if (!editing) {
         // Gerar próximo código disponível
@@ -344,20 +312,8 @@ const Fornecedores = () => {
             telefone: data.phone || null,
             usuario_id: workspaceAtivo.id,
           } as any);
-        
-        if (error) {
-          // Tratar erros específicos
-          if (error.code === '42501') { // Erro de permissão RLS
-            toast({ 
-              title: 'Erro de permissão', 
-              description: 'Você não tem permissão para realizar esta operação. Verifique as políticas RLS.',
-              variant: 'destructive' 
-            });
-            return;
-          }
-          throw error;
-        }
-        toast({ title: '✅ Fornecedor cadastrado' });
+        if (error) throw error;
+        toast.success('Fornecedor cadastrado');
       } else {
         const { error } = await supabase
           .from('fornecedores')
@@ -367,30 +323,14 @@ const Fornecedores = () => {
             telefone: data.phone || null,
           })
           .eq('id', editing.id)
-          .eq('usuario_id', workspaceAtivo.id); // Garantir que só atualiza do próprio usuário
-        
-        if (error) {
-          if (error.code === '42501') {
-            toast({ 
-              title: 'Erro de permissão', 
-              description: 'Você não tem permissão para atualizar este fornecedor.',
-              variant: 'destructive' 
-            });
-            return;
-          }
-          throw error;
-        }
-        toast({ title: '🔄 Fornecedor atualizado' });
+          .eq('usuario_id', workspaceAtivo.id); // Garantir que só atualiza do workspace correto
+        if (error) throw error;
+        toast.success('Fornecedor atualizado');
       }
       setIsAddOpen(false);
       await loadSuppliers();
     } catch (error: any) {
-      console.error('Erro ao salvar fornecedor:', error);
-      toast({ 
-        title: 'Erro ao salvar', 
-        description: error.message || `Erro ${error.code || 'desconhecido'}: Não foi possível salvar o fornecedor. Verifique se você tem permissões adequadas.`, 
-        variant: 'destructive' 
-      });
+      toast.error('Erro ao salvar', { description: error.message });
     }
   };
 
@@ -423,12 +363,12 @@ const Fornecedores = () => {
         .eq('id', supplierToDelete.id)
         .eq('usuario_id', workspaceAtivo.id); // Garantir que só deleta do workspace correto
       if (error) throw error;
-      toast({ title: '🗑️ Fornecedor removido' });
+      toast.success('Fornecedor removido');
       setIsDeleteOpen(false);
       setSupplierToDelete(null);
       await loadSuppliers();
     } catch (error: any) {
-      toast({ title: 'Erro ao remover', description: error.message, variant: 'destructive' });
+      toast.error('Erro ao remover', { description: error.message });
     }
   };
 
@@ -490,9 +430,8 @@ const Fornecedores = () => {
     document.body.removeChild(link);
     window.URL.revokeObjectURL(url);
     
-    toast({ 
-      title: '✅ Arquivo CSV exportado', 
-      description: `Arquivo com ${dataToExport.length} fornecedor(es) foi baixado.` 
+    toast.success('Arquivo CSV exportado', {
+      description: `Arquivo com ${dataToExport.length} fornecedor(es) foi baixado.`
     });
   };
 
@@ -754,5 +693,6 @@ const Fornecedores = () => {
 };
 
 export default Fornecedores;
+
 
 

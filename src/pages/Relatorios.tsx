@@ -2,10 +2,21 @@
 // BI completo com tabelas estilizadas, gráficos e análises
 
 import React, { useState, useEffect } from "react";
+// Usando Lucide React
 import { 
-  BarChart3, TrendingUp, TrendingDown, Package, Download, 
-  Calendar, ArrowUp, ArrowDown, DollarSign, AlertTriangle,
-  FileText, PieChart, Activity
+  BarChart3,
+  TrendingUp,
+  TrendingDown,
+  Package,
+  Download,
+  Calendar,
+  ArrowUp,
+  ArrowDown,
+  DollarSign,
+  AlertTriangle,
+  FileText,
+  PieChart,
+  Activity
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

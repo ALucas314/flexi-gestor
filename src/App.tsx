@@ -33,6 +33,9 @@ import { ConfigProvider } from "./contexts/ConfigContext";
 // 🔄 Auto-reload quando HMR falha
 import { HMRReloader } from "./components/HMRReloader";
 
+// 🔌 Monitoramento global de conexão Supabase
+import { ConnectionMonitor } from "./components/ConnectionMonitor";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -48,6 +51,8 @@ const App = () => (
             <ConfigProvider>
               {/* 📌 Sidebar Provider - Gerencia estado da sidebar (pinada/overlay) */}
               <SidebarProvider>
+            {/* 🔌 Monitoramento global de conexão Supabase */}
+            <ConnectionMonitor />
             {/* 🔄 Auto-reload quando HMR desconecta */}
             <HMRReloader />
             <Toaster />

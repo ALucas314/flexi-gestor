@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,9 +8,19 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Plus, Trash2, Edit, Phone, User2, UserCircle, Search, Download } from 'lucide-react';
+// Usando Lucide React
+import { 
+  Plus,
+  Trash2,
+  Edit,
+  Phone,
+  User as User2,
+  UserCircle,
+  Search,
+  Download
+} from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -81,7 +91,7 @@ interface Client {
 }
 
 const Clientes = () => {
-  const { toast } = useToast();
+  // toast importado diretamente do sonner
   const { workspaceAtivo } = useWorkspace();
   const { user } = useAuth();
 
@@ -123,15 +133,15 @@ const Clientes = () => {
       return [];
     }
     
-    return clients.filter((c) => {
+    return clients.filter((c, index) => {
       if (!c) return false;
       
-      // Busca por código (do banco de dados)
-      if (c.codigo && String(c.codigo).includes(search)) {
+      // Busca por código (do banco de dados) - case-insensitive para consistência
+      if (c.codigo && String(c.codigo).toLowerCase().includes(term)) {
         return true;
       }
       
-      // Busca por nome - busca parcial
+      // Busca por nome - busca parcial case-insensitive
       if (c.name) {
         const name = String(c.name).toLowerCase().trim();
         if (name.includes(term)) {
@@ -143,43 +153,23 @@ const Clientes = () => {
     });
   }, [clients, searchTerm]);
 
-  // Carrega clientes do Supabase
-  const loadClients = async () => {
-    // Não limpar a lista se não houver workspace - manter dados existentes
-    if (!workspaceAtivo?.id) {
-      // Apenas retornar sem limpar a lista, mantendo os dados existentes
-      return;
-    }
+  // 🔄 Função para recarregar clientes (useCallback para evitar re-criar referência)
+  const loadClients = useCallback(async () => {
+    if (!user?.id || !workspaceAtivo?.id) return;
     
     try {
-      setIsLoading(true);
+      // Filtrar clientes APENAS do workspace ativo
       const { data, error } = await supabase
         .from('clientes')
         .select('*')
-        .eq('usuario_id', workspaceAtivo.id) // Sempre usar workspaceAtivo.id
+        .eq('usuario_id', workspaceAtivo.id) // Filtro explícito por workspace
         .order('codigo', { ascending: true });
-      
+
       if (error) {
-        // Tratar erros específicos
-        if (error.code === '42501') {
-          console.warn('Erro de permissão RLS ao carregar clientes. Verifique as políticas.');
-          // Não limpar lista em caso de erro de permissão, manter dados existentes
-          setIsLoading(false);
-          return;
-        }
-        if (error.code === '42P01') {
-          toast({
-            title: 'Tabela não encontrada',
-            description: 'A tabela de clientes não existe. Execute o script SQL de criação.',
-            variant: 'destructive'
-          });
-          setIsLoading(false);
-          return;
-        }
         throw error;
       }
-      
-      // Mapear dados recebidos
+
+      // Mapear dados do Supabase para o formato esperado
       const mapped: Client[] = (data || []).map((c: any) => ({
         id: c.id,
         codigo: c.codigo,
@@ -188,35 +178,18 @@ const Clientes = () => {
         phone: c.telefone ?? c.phone,
         created_at: c.criado_em ?? c.created_at,
       }));
-      
-      // Sempre atualizar com os dados recebidos do banco
-      // Se não houver dados, ainda assim atualizar para mostrar lista vazia (não manter dados antigos)
+
       setClients(mapped);
-      console.log(`[CLIENTES] Carregados ${mapped.length} clientes do workspace ${workspaceAtivo.id}`);
-    } catch (error: any) {
-      console.error('Erro ao carregar clientes:', error);
-      // Não limpar a lista em caso de erro - manter dados existentes
-      // Apenas mostrar toast se for um erro crítico
-      if (error.code !== '42501') {
-        toast({
-          title: 'Erro ao carregar clientes',
-          description: error.message || 'Verifique nomes de colunas: id, nome (ou name), cpf, telefone (ou phone).',
-          variant: 'destructive'
-        });
-      }
-      // Não limpar clients[] em caso de erro
-    } finally {
-      setIsLoading(false);
+    } catch (error) {
+      console.error('Erro ao carregar clientes');
     }
-  };
+  }, [user?.id, workspaceAtivo?.id]);
 
   // 🔄 Escutar mudanças de workspace para recarregar dados
   useEffect(() => {
     const handleWorkspaceChanged = async () => {
-      console.log('🔄 Workspace mudou (Clientes), recarregando dados...');
-      if (workspaceAtivo?.id) {
-        await loadClients();
-      }
+      console.log('🔄 Workspace mudou, recarregando dados...');
+      await loadClients();
     };
 
     window.addEventListener('workspace-changed', handleWorkspaceChanged);
@@ -224,13 +197,18 @@ const Clientes = () => {
     return () => {
       window.removeEventListener('workspace-changed', handleWorkspaceChanged);
     };
-  }, [workspaceAtivo?.id]);
+  }, [loadClients]);
 
   // 🔄 Carregar dados do Supabase quando o usuário estiver autenticado OU mudar workspace
   useEffect(() => {
     if (user && workspaceAtivo?.id) {
-      // Carregar dados inicialmente
-      loadClients();
+      // Carregar dados
+      const loadData = async () => {
+        setIsLoading(true);
+        await loadClients();
+        setIsLoading(false);
+      };
+      loadData();
 
       let clientesSubscription: any = null;
       let lastSuccessfulConnection = Date.now();
@@ -261,7 +239,7 @@ const Clientes = () => {
               }
             });
         } catch (error) {
-          console.error('Erro ao configurar subscription de clientes:', error);
+          // Silencioso
         }
       };
 
@@ -287,9 +265,7 @@ const Clientes = () => {
 
       // 🔄 Refresh periódico silencioso dos dados (a cada 60 segundos)
       const refreshInterval = setInterval(async () => {
-        if (workspaceAtivo?.id) {
-          await loadClients();
-        }
+        await loadClients();
       }, 60000); // 60 segundos
 
       // 🧹 Cleanup ao sair
@@ -305,10 +281,10 @@ const Clientes = () => {
         }
       };
     } else if (!user || !workspaceAtivo?.id) {
-      // Não limpar lista quando workspace/user for null - manter dados em memória
-      setIsLoading(false);
+      // Limpar dados quando não autenticado
+      setClients([]);
     }
-  }, [user?.id, workspaceAtivo?.id]); // Recarregar quando mudar workspace ou usuário
+  }, [user?.id, workspaceAtivo?.id, loadClients]); // Recarregar quando mudar workspace ou usuário
 
   const onOpenAdd = () => {
     setEditing(null);
@@ -337,7 +313,7 @@ const Clientes = () => {
             usuario_id: workspaceAtivo.id,
           } as any);
         if (error) throw error;
-        toast({ title: '✅ Cliente cadastrado' });
+        toast.success('Cliente cadastrado');
       } else {
         const { error } = await supabase
           .from('clientes')
@@ -349,12 +325,12 @@ const Clientes = () => {
           .eq('id', editing.id)
           .eq('usuario_id', workspaceAtivo.id); // Garantir que só atualiza do workspace correto
         if (error) throw error;
-        toast({ title: '🔄 Cliente atualizado' });
+        toast.success('Cliente atualizado');
       }
       setIsAddOpen(false);
       await loadClients();
     } catch (error: any) {
-      toast({ title: 'Erro ao salvar', description: error.message, variant: 'destructive' });
+      toast.error('Erro ao salvar', { description: error.message });
     }
   };
 
@@ -387,12 +363,12 @@ const Clientes = () => {
         .eq('id', clientToDelete.id)
         .eq('usuario_id', workspaceAtivo.id); // Garantir que só deleta do workspace correto
       if (error) throw error;
-      toast({ title: '🗑️ Cliente removido' });
+      toast.success('Cliente removido');
       setIsDeleteOpen(false);
       setClientToDelete(null);
       await loadClients();
     } catch (error: any) {
-      toast({ title: 'Erro ao remover', description: error.message, variant: 'destructive' });
+      toast.error('Erro ao remover', { description: error.message });
     }
   };
 
@@ -454,9 +430,8 @@ const Clientes = () => {
     document.body.removeChild(link);
     window.URL.revokeObjectURL(url);
     
-    toast({ 
-      title: '✅ Arquivo CSV exportado', 
-      description: `Arquivo com ${dataToExport.length} cliente(s) foi baixado.` 
+    toast.success('Arquivo CSV exportado', {
+      description: `Arquivo com ${dataToExport.length} cliente(s) foi baixado.`
     });
   };
 
@@ -718,4 +693,5 @@ const Clientes = () => {
 };
 
 export default Clientes;
+
 

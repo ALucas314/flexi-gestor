@@ -2,7 +2,20 @@
 // Permite compartilhar dados com outros usuários
 
 import React, { useState, useEffect } from 'react';
-import { Users, UserPlus, Trash2, Mail, Clock, CheckCircle, XCircle, Loader2, Settings, Shield, Copy } from 'lucide-react';
+// Usando Lucide React
+import { 
+  Users,
+  UserPlus,
+  Trash2,
+  Mail,
+  Clock,
+  CheckCircle,
+  XCircle,
+  Loader2,
+  Settings,
+  Shield,
+  Copy
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';

@@ -1,6 +1,22 @@
 import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Plus, TrendingDown, Package, Search, Trash2, Calendar, DollarSign, ShoppingCart, Receipt, CheckCircle, Printer, Share2, Edit, X } from "lucide-react";
+// Usando Lucide React
+import { 
+  Plus,
+  TrendingDown,
+  Package,
+  Search,
+  Trash2,
+  Calendar,
+  DollarSign,
+  ShoppingCart,
+  Receipt,
+  CheckCircle,
+  Printer,
+  Share2,
+  Edit,
+  X
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
