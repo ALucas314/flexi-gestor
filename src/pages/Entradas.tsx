@@ -29,7 +29,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useForm } from "react-hook-form";
 import { useToast } from "@/hooks/use-toast";
 import { useData } from "@/contexts/DataContext";
-import { getBatchesByProduct, createBatch, updateBatchQuantity, checkBatchNumberExists, generateNextAvailableBatchNumber } from "@/lib/batches";
+import { getBatchesByProduct, createBatch, updateBatchQuantity, checkBatchNumberExists, generateNextAvailableBatchNumber, findBatchByNumberAndProduct } from "@/lib/batches";
 import { useAuth } from "@/contexts/AuthContext";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { supabase } from "@/lib/supabase";
@@ -98,6 +98,7 @@ const Entradas = () => {
   const [isBatchDialogOpen, setIsBatchDialogOpen] = useState(false);
   const [batchNumberErrors, setBatchNumberErrors] = useState<{[key: number]: string}>({});
   const [quantityErrors, setQuantityErrors] = useState<{[key: number]: string}>({});
+  const [batchStatusMessages, setBatchStatusMessages] = useState<{[key: number]: {found: boolean, message: string} | null}>({});
   const [selectedProductForBatch, setSelectedProductForBatch] = useState<{id: string, name: string, sku: string, stock: number} | null>(null);
   const [supplierSuggestion, setSupplierSuggestion] = useState<{ id: string; code?: string; name: string } | null>(null);
   // Estado para armazenar todos os fornecedores cadastrados
@@ -369,6 +370,22 @@ const Entradas = () => {
       });
       return reindexed;
     });
+    // Limpar mensagens de status também
+    setBatchStatusMessages(prev => {
+      const newMessages = {...prev};
+      delete newMessages[index];
+      // Reindexar mensagens para lotes que ficaram
+      const reindexed: {[key: number]: {found: boolean, message: string} | null} = {};
+      Object.keys(newMessages).forEach(key => {
+        const oldIndex = parseInt(key);
+        if (oldIndex > index) {
+          reindexed[oldIndex - 1] = newMessages[oldIndex];
+        } else if (oldIndex < index) {
+          reindexed[oldIndex] = newMessages[oldIndex];
+        }
+      });
+      return reindexed;
+    });
   };
 
   // Atualizar dados do lote
@@ -601,22 +618,29 @@ const Entradas = () => {
               );
             }
           } else {
-            // Verificar se o número do lote já existe no banco para este produto
+            // Verificar se o lote existe no banco de dados para este produto
             if (user?.id && batch.batchNumber) {
-              const existsInDatabase = await checkBatchNumberExists(batch.batchNumber, data.productId, user.id);
+              const existingBatchInDb = await findBatchByNumberAndProduct(
+                batch.batchNumber,
+                data.productId,
+                user.id
+              );
               
-              if (existsInDatabase) {
-                toast({
-                  title: "❌ Número de Lote Duplicado!",
-                  description: `O lote "${batch.batchNumber}" já existe no banco de dados para este produto. Por favor, escolha outro número.`,
-                  variant: "destructive",
-                  duration: 5000,
-                });
-                return; // Parar o processo
+              if (existingBatchInDb) {
+                // Lote encontrado no banco - atualizar quantidade ao invés de criar
+                if (user?.id) {
+                  await updateBatchQuantity(
+                    existingBatchInDb.id,
+                    existingBatchInDb.quantity + batch.quantity,
+                    user.id
+                  );
+                }
+                // Continuar para o próximo lote
+                continue;
               }
             }
             
-            // Criar novo lote
+            // Criar novo lote (não existe no banco)
             if (user?.id) {
               const created = await createBatch(
                 data.productId,
@@ -1562,11 +1586,16 @@ const Entradas = () => {
                                         onChange={async (e) => {
                                           const newBatchNumber = e.target.value.trim();
                                           
-                                          // Limpar erro anterior
+                                          // Limpar erro e mensagem de status anteriores
                                           setBatchNumberErrors(prev => {
                                             const newErrors = {...prev};
                                             delete newErrors[index];
                                             return newErrors;
+                                          });
+                                          setBatchStatusMessages(prev => {
+                                            const newMessages = {...prev};
+                                            delete newMessages[index];
+                                            return newMessages;
                                           });
                                           
                                           // Extrair apenas o número para comparação
@@ -1599,7 +1628,7 @@ const Entradas = () => {
                                           
                                           updateBatchData(index, 'batchNumber', newBatchNumber);
 
-                                          // Se número corresponde a um lote existente, preencher datas
+                                          // Se número corresponde a um lote existente na lista local, preencher datas
                                           const matched = availableBatches.find(b => {
                                             if (!b.batchNumber) return false;
                                             const bMatch = b.batchNumber.match(/\d+/);
@@ -1612,6 +1641,45 @@ const Entradas = () => {
                                             }
                                             if (matched.expiryDate) {
                                               updateBatchData(index, 'expiryDate', new Date(matched.expiryDate));
+                                            }
+                                          }
+
+                                          // Verificar se o lote existe no banco de dados para este produto
+                                          if (newBatchNumber && newBatchNumber.trim() !== '' && selectedProductId && user?.id) {
+                                            try {
+                                              const existingBatch = await findBatchByNumberAndProduct(
+                                                newBatchNumber,
+                                                selectedProductId,
+                                                user.id
+                                              );
+                                              
+                                              if (existingBatch) {
+                                                // Lote encontrado - mostrar mensagem e preencher datas se houver
+                                                setBatchStatusMessages(prev => ({
+                                                  ...prev,
+                                                  [index]: {
+                                                    found: true,
+                                                    message: `✅ Lote encontrado (Quantidade atual: ${existingBatch.quantity})`
+                                                  }
+                                                }));
+                                                
+                                                // Preencher datas do lote existente
+                                                if (existingBatch.expiryDate) {
+                                                  updateBatchData(index, 'expiryDate', existingBatch.expiryDate);
+                                                }
+                                              } else {
+                                                // Lote não existe - mostrar mensagem de criação
+                                                setBatchStatusMessages(prev => ({
+                                                  ...prev,
+                                                  [index]: {
+                                                    found: false,
+                                                    message: `📦 Criar lote (ainda não existe)`
+                                                  }
+                                                }));
+                                              }
+                                            } catch (error) {
+                                              // Em caso de erro, não mostrar mensagem de status
+                                              console.error('Erro ao verificar lote:', error);
                                             }
                                           }
                                         }}
@@ -1635,17 +1703,18 @@ const Entradas = () => {
                                         <p className="text-xs text-red-600 bg-red-50 p-2 rounded-md border border-red-200">
                                           {batchNumberErrors[index]}
                                         </p>
+                                      ) : batchStatusMessages[index] ? (
+                                        <p className={`text-xs p-2 rounded-md border ${
+                                          batchStatusMessages[index]?.found
+                                            ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                                            : 'text-blue-700 bg-blue-50 border-blue-200'
+                                        }`}>
+                                          {batchStatusMessages[index]?.message}
+                                        </p>
                                       ) : (
-                                        <>
-                                          <p className="text-xs text-gray-500">
-                                            💡 Gerado automaticamente. Você pode editar se necessário.
-                                          </p>
-                                          {existingBatch && (
-                                            <p className="text-xs text-emerald-700 bg-emerald-50 p-2 rounded-md border border-emerald-200">
-                                              ✅ Lote encontrado: {existingBatch.batchNumber}
-                                            </p>
-                                          )}
-                                        </>
+                                        <p className="text-xs text-gray-500">
+                                          💡 Informe o número do lote. O sistema verificará se já existe.
+                                        </p>
                                       )}
                                     </div>
                                     {/* Campo Quantidade */}

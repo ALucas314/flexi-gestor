@@ -155,9 +155,14 @@ const Clientes = () => {
 
   // 🔄 Função para recarregar clientes (useCallback para evitar re-criar referência)
   const loadClients = useCallback(async () => {
-    if (!user?.id || !workspaceAtivo?.id) return;
+    if (!user?.id || !workspaceAtivo?.id) {
+      console.log('⚠️ [Clientes] Não carregando: user.id =', user?.id, 'workspaceAtivo.id =', workspaceAtivo?.id);
+      return;
+    }
     
     try {
+      console.log('🔄 [Clientes] Carregando clientes para workspace:', workspaceAtivo.id);
+      
       // Filtrar clientes APENAS do workspace ativo
       const { data, error } = await supabase
         .from('clientes')
@@ -166,8 +171,12 @@ const Clientes = () => {
         .order('codigo', { ascending: true });
 
       if (error) {
+        console.error('❌ [Clientes] Erro ao buscar clientes:', error);
+        toast.error('Erro ao carregar clientes', { description: error.message });
         throw error;
       }
+
+      console.log('✅ [Clientes] Clientes encontrados:', data?.length || 0, 'registros');
 
       // Mapear dados do Supabase para o formato esperado
       const mapped: Client[] = (data || []).map((c: any) => ({
@@ -180,8 +189,11 @@ const Clientes = () => {
       }));
 
       setClients(mapped);
-    } catch (error) {
-      console.error('Erro ao carregar clientes');
+    } catch (error: any) {
+      console.error('❌ [Clientes] Erro ao carregar clientes:', error);
+      // NÃO limpar dados em caso de erro - pode ser apenas desconexão temporária
+      // Os dados já carregados devem permanecer visíveis
+      // setClients([]); // REMOVIDO - mantém dados mesmo com erro de conexão
     }
   }, [user?.id, workspaceAtivo?.id]);
 
@@ -199,16 +211,46 @@ const Clientes = () => {
     };
   }, [loadClients]);
 
+  // 🔄 Escutar logout para limpar dados (mas NÃO limpar durante desconexões)
+  useEffect(() => {
+    const handleSignOut = async () => {
+      console.log('🚪 [Clientes] Logout detectado - limpando dados');
+      setClients([]);
+    };
+
+    // Listener para eventos de logout do Supabase
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === 'SIGNED_OUT') {
+          handleSignOut();
+        }
+      }
+    );
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
   // 🔄 Carregar dados do Supabase quando o usuário estiver autenticado OU mudar workspace
   useEffect(() => {
     if (user && workspaceAtivo?.id) {
       // Carregar dados
       const loadData = async () => {
-        setIsLoading(true);
-        await loadClients();
-        setIsLoading(false);
+        try {
+          setIsLoading(true);
+          await loadClients();
+        } catch (error) {
+          // Erro silencioso - não quebrar a aplicação
+          console.error('⚠️ [Clientes] Erro ao carregar dados iniciais:', error);
+        } finally {
+          setIsLoading(false);
+        }
       };
-      loadData();
+      loadData().catch(error => {
+        // Catch adicional para garantir que nenhuma promessa não tratada quebre a aplicação
+        console.error('⚠️ [Clientes] Erro não tratado no loadData:', error);
+      });
 
       let clientesSubscription: any = null;
       let lastSuccessfulConnection = Date.now();
@@ -230,7 +272,13 @@ const Clientes = () => {
                 filter: `usuario_id=eq.${workspaceAtivo.id}`
               }, 
               async (payload) => {
-                await loadClients();
+                // loadClients já verifica user e workspace internamente
+                try {
+                  await loadClients();
+                } catch (error) {
+                  // Erro silencioso - não quebrar a subscription
+                  console.error('⚠️ [Clientes] Erro ao atualizar via subscription:', error);
+                }
               }
             )
             .subscribe((status) => {
@@ -249,23 +297,32 @@ const Clientes = () => {
       // 🔄 Health check que detecta desconexão e reconecta
       // Verifica a cada 30 segundos se a última conexão foi há mais de 2 minutos
       const healthCheckInterval = setInterval(async () => {
+        // loadClients já verifica user e workspace internamente, então não precisa verificar aqui
         const timeSinceLastConnection = Date.now() - lastSuccessfulConnection;
-        // Se não houve conexão bem-sucedida nos últimos 2 minutos, fazer reload
+        // Se não houve conexão bem-sucedida nos últimos 2 minutos, tentar reconectar
         if (timeSinceLastConnection > 120000) {
           try {
             // Tentar reconectar silenciosamente, sem recarregar a página
             reconfigureSubscriptions();
+            // loadClients retorna early se não há user/workspace, então seguro chamar
             await loadClients();
             lastSuccessfulConnection = Date.now();
           } catch (e) {
-            // Silencioso: mantém a UI estável
+            // Erro silencioso - não quebrar o intervalo
+            console.error('⚠️ [Clientes] Erro no health check:', e);
           }
         }
       }, 30000); // Verifica a cada 30 segundos
 
       // 🔄 Refresh periódico silencioso dos dados (a cada 60 segundos)
+      // loadClients já verifica user e workspace internamente, então seguro chamar
       const refreshInterval = setInterval(async () => {
-        await loadClients();
+        try {
+          await loadClients();
+        } catch (error) {
+          // Erro silencioso - não quebrar o intervalo
+          console.error('⚠️ [Clientes] Erro no refresh periódico:', error);
+        }
       }, 60000); // 60 segundos
 
       // 🧹 Cleanup ao sair
@@ -281,8 +338,11 @@ const Clientes = () => {
         }
       };
     } else if (!user || !workspaceAtivo?.id) {
-      // Limpar dados quando não autenticado
-      setClients([]);
+      // Não limpar dados imediatamente - pode ser apenas desconexão temporária
+      // Só limpar se realmente não há usuário (logout)
+      // Durante desconexão, manter os dados visíveis para o usuário
+      console.log('⚠️ [Clientes] User ou workspace não disponível - mantendo dados em cache');
+      // NÃO limpar: setClients([]);
     }
   }, [user?.id, workspaceAtivo?.id, loadClients]); // Recarregar quando mudar workspace ou usuário
 

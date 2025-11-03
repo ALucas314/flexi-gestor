@@ -135,6 +135,20 @@ const Financeiro = () => {
     };
   }).filter(p => p.totalVenda > 0 || p.totalCompraTotal > 0); // Apenas produtos com movimentações
 
+  // Função helper para calcular margem de contribuição em porcentagem
+  // Margem = (Lucro / Total de Venda) × 100
+  const calcularMargemContribuicao = (lucro: number, totalVenda: number): number => {
+    if (!totalVenda || totalVenda === 0) return 0;
+    const margem = (lucro / totalVenda) * 100;
+    return Number(margem.toFixed(2)); // Arredondar para 2 casas decimais
+  };
+
+  // Função helper para formatar margem como percentual
+  const formatarMargemPercentual = (margem: number): string => {
+    const sinal = margem >= 0 ? '+' : '';
+    return `${sinal}${margem.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+  };
+
   // Lucro total de todos os produtos
   const lucroTotal = profitByProduct.reduce((sum, p) => sum + p.lucro, 0);
   
@@ -452,7 +466,7 @@ Compra registrada com sucesso!
                 📊 Lucro por Produto
               </CardTitle>
               <CardDescription className="text-slate-600">
-                Margem de contribuição exibida em valor (R$) = Lucro
+                Margem de contribuição em porcentagem (%) = (Lucro / Total de Venda) × 100
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -484,11 +498,12 @@ Compra registrada com sucesso!
                       </TableRow>
                     ) : (
                       profitByProductSorted.map((item) => {
-                        // Margem de contribuição = Total de Venda / Lucro
-                        // Exibida em valor monetário como R$ X.XX
-                        const margemContribuicao = item.lucro > 0 
-                          ? item.totalVenda / item.lucro 
-                          : 0;
+                        // Calcular margem de contribuição em porcentagem
+                        // Fórmula: (Lucro / Total de Venda) × 100
+                        // Exemplo: Se Lucro = 77,671 e Total Venda = 360,00
+                        // Margem = (77,671 / 360,00) × 100 = 21,57%
+                        const margemContribuicao = calcularMargemContribuicao(item.lucro, item.totalVenda);
+                        const margemFormatada = formatarMargemPercentual(margemContribuicao);
                         
                         return (
                           <TableRow key={item.productId} className="hover:bg-slate-50 transition-colors">
@@ -515,7 +530,7 @@ Compra registrada com sucesso!
                             </TableCell>
                             <TableCell>
                               <span className={`font-bold text-sm ${margemContribuicao >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                {margemContribuicao >= 0 ? '+' : ''}R$ {margemContribuicao.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                {margemFormatada}
                               </span>
                             </TableCell>
                             <TableCell className="hidden lg:table-cell">

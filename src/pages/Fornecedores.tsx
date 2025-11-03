@@ -155,9 +155,14 @@ const Fornecedores = () => {
 
   // 🔄 Função para recarregar fornecedores (useCallback para evitar re-criar referência)
   const loadSuppliers = useCallback(async () => {
-    if (!user?.id || !workspaceAtivo?.id) return;
+    if (!user?.id || !workspaceAtivo?.id) {
+      console.log('⚠️ [Fornecedores] Não carregando: user.id =', user?.id, 'workspaceAtivo.id =', workspaceAtivo?.id);
+      return;
+    }
     
     try {
+      console.log('🔄 [Fornecedores] Carregando fornecedores para workspace:', workspaceAtivo.id);
+      
       // Filtrar fornecedores APENAS do workspace ativo
       const { data, error } = await supabase
         .from('fornecedores')
@@ -166,8 +171,12 @@ const Fornecedores = () => {
         .order('codigo', { ascending: true });
 
       if (error) {
+        console.error('❌ [Fornecedores] Erro ao buscar fornecedores:', error);
+        toast.error('Erro ao carregar fornecedores', { description: error.message });
         throw error;
       }
+
+      console.log('✅ [Fornecedores] Fornecedores encontrados:', data?.length || 0, 'registros');
 
       // Mapear dados do Supabase para o formato esperado
       const mapped: Supplier[] = (data || []).map((s: any) => ({
@@ -180,8 +189,11 @@ const Fornecedores = () => {
       }));
 
       setSuppliers(mapped);
-    } catch (error) {
-      console.error('Erro ao carregar fornecedores');
+    } catch (error: any) {
+      console.error('❌ [Fornecedores] Erro ao carregar fornecedores:', error);
+      // NÃO limpar dados em caso de erro - pode ser apenas desconexão temporária
+      // Os dados já carregados devem permanecer visíveis
+      // setSuppliers([]); // REMOVIDO - mantém dados mesmo com erro de conexão
     }
   }, [user?.id, workspaceAtivo?.id]);
 
@@ -199,16 +211,46 @@ const Fornecedores = () => {
     };
   }, [loadSuppliers]);
 
+  // 🔄 Escutar logout para limpar dados (mas NÃO limpar durante desconexões)
+  useEffect(() => {
+    const handleSignOut = async () => {
+      console.log('🚪 [Fornecedores] Logout detectado - limpando dados');
+      setSuppliers([]);
+    };
+
+    // Listener para eventos de logout do Supabase
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === 'SIGNED_OUT') {
+          handleSignOut();
+        }
+      }
+    );
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
   // 🔄 Carregar dados do Supabase quando o usuário estiver autenticado OU mudar workspace
   useEffect(() => {
     if (user && workspaceAtivo?.id) {
       // Carregar dados
       const loadData = async () => {
-        setIsLoading(true);
-        await loadSuppliers();
-        setIsLoading(false);
+        try {
+          setIsLoading(true);
+          await loadSuppliers();
+        } catch (error) {
+          // Erro silencioso - não quebrar a aplicação
+          console.error('⚠️ [Fornecedores] Erro ao carregar dados iniciais:', error);
+        } finally {
+          setIsLoading(false);
+        }
       };
-      loadData();
+      loadData().catch(error => {
+        // Catch adicional para garantir que nenhuma promessa não tratada quebre a aplicação
+        console.error('⚠️ [Fornecedores] Erro não tratado no loadData:', error);
+      });
 
       let fornecedoresSubscription: any = null;
       let lastSuccessfulConnection = Date.now();
@@ -230,7 +272,13 @@ const Fornecedores = () => {
                 filter: `usuario_id=eq.${workspaceAtivo.id}`
               }, 
               async (payload) => {
-                await loadSuppliers();
+                // loadSuppliers já verifica user e workspace internamente
+                try {
+                  await loadSuppliers();
+                } catch (error) {
+                  // Erro silencioso - não quebrar a subscription
+                  console.error('⚠️ [Fornecedores] Erro ao atualizar via subscription:', error);
+                }
               }
             )
             .subscribe((status) => {
@@ -249,23 +297,32 @@ const Fornecedores = () => {
       // 🔄 Health check que detecta desconexão e reconecta
       // Verifica a cada 30 segundos se a última conexão foi há mais de 2 minutos
       const healthCheckInterval = setInterval(async () => {
+        // loadSuppliers já verifica user e workspace internamente, então não precisa verificar aqui
         const timeSinceLastConnection = Date.now() - lastSuccessfulConnection;
-        // Se não houve conexão bem-sucedida nos últimos 2 minutos, fazer reload
+        // Se não houve conexão bem-sucedida nos últimos 2 minutos, tentar reconectar
         if (timeSinceLastConnection > 120000) {
           try {
             // Tentar reconectar silenciosamente, sem recarregar a página
             reconfigureSubscriptions();
+            // loadSuppliers retorna early se não há user/workspace, então seguro chamar
             await loadSuppliers();
             lastSuccessfulConnection = Date.now();
           } catch (e) {
-            // Silencioso: mantém a UI estável
+            // Erro silencioso - não quebrar o intervalo
+            console.error('⚠️ [Fornecedores] Erro no health check:', e);
           }
         }
       }, 30000); // Verifica a cada 30 segundos
 
       // 🔄 Refresh periódico silencioso dos dados (a cada 60 segundos)
+      // loadSuppliers já verifica user e workspace internamente, então seguro chamar
       const refreshInterval = setInterval(async () => {
-        await loadSuppliers();
+        try {
+          await loadSuppliers();
+        } catch (error) {
+          // Erro silencioso - não quebrar o intervalo
+          console.error('⚠️ [Fornecedores] Erro no refresh periódico:', error);
+        }
       }, 60000); // 60 segundos
 
       // 🧹 Cleanup ao sair
@@ -281,8 +338,11 @@ const Fornecedores = () => {
         }
       };
     } else if (!user || !workspaceAtivo?.id) {
-      // Limpar dados quando não autenticado
-      setSuppliers([]);
+      // Não limpar dados imediatamente - pode ser apenas desconexão temporária
+      // Só limpar se realmente não há usuário (logout)
+      // Durante desconexão, manter os dados visíveis para o usuário
+      console.log('⚠️ [Fornecedores] User ou workspace não disponível - mantendo dados em cache');
+      // NÃO limpar: setSuppliers([]);
     }
   }, [user?.id, workspaceAtivo?.id, loadSuppliers]); // Recarregar quando mudar workspace ou usuário
 

@@ -71,6 +71,46 @@ export const checkBatchNumberExists = async (
   }
 };
 
+// Buscar lote específico por número e produto (para verificar se existe e obter informações)
+export const findBatchByNumberAndProduct = async (
+  batchNumber: string,
+  productId: string,
+  userId?: string
+): Promise<Batch | null> => {
+  try {
+    const { data, error } = await supabase
+      .from('lotes')
+      .select('*')
+      .eq('numero_lote', batchNumber)
+      .eq('produto_id', productId)
+      .limit(1);
+
+    if (error) {
+      console.error('Erro ao buscar lote:', error);
+      return null;
+    }
+
+    if (!data || data.length === 0) {
+      return null;
+    }
+
+    const b = data[0];
+    return {
+      id: b.id,
+      productId: b.produto_id,
+      batchNumber: b.numero_lote,
+      quantity: b.quantidade,
+      unitCost: parseFloat(b.custo_unitario) || 0,
+      manufactureDate: undefined,
+      expiryDate: b.data_validade ? new Date(b.data_validade) : undefined,
+      createdAt: new Date(b.criado_em)
+    };
+  } catch (error) {
+    console.error('Erro ao buscar lote:', error);
+    return null;
+  }
+};
+
 // Buscar todos os lotes de todos os produtos (numeração global)
 const getAllBatchesGlobal = async (userId: string): Promise<Batch[]> => {
   try {
