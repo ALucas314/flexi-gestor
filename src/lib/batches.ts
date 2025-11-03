@@ -71,6 +71,44 @@ export const checkBatchNumberExists = async (
   }
 };
 
+// Buscar lote específico por número globalmente (sem filtrar por produto)
+export const findBatchByNumber = async (
+  batchNumber: string,
+  userId?: string
+): Promise<Batch | null> => {
+  try {
+    const { data, error } = await supabase
+      .from('lotes')
+      .select('*')
+      .eq('numero_lote', batchNumber)
+      .limit(1);
+
+    if (error) {
+      console.error('Erro ao buscar lote:', error);
+      return null;
+    }
+
+    if (!data || data.length === 0) {
+      return null;
+    }
+
+    const b = data[0];
+    return {
+      id: b.id,
+      productId: b.produto_id,
+      batchNumber: b.numero_lote,
+      quantity: b.quantidade,
+      unitCost: parseFloat(b.custo_unitario) || 0,
+      manufactureDate: undefined,
+      expiryDate: b.data_validade ? new Date(b.data_validade) : undefined,
+      createdAt: new Date(b.criado_em)
+    };
+  } catch (error) {
+    console.error('Erro ao buscar lote:', error);
+    return null;
+  }
+};
+
 // Buscar lote específico por número e produto (para verificar se existe e obter informações)
 export const findBatchByNumberAndProduct = async (
   batchNumber: string,
@@ -229,11 +267,18 @@ export const createBatch = async (
   expiryDate?: Date
 ): Promise<Batch | null> => {
   try {
-    // Validar se o número do lote já existe GLOBALMENTE (em qualquer produto)
-    const exists = await checkBatchNumberExists(batchNumber, undefined, userId);
-    if (exists) {
-      console.error(`Número de lote '${batchNumber}' já existe no sistema`);
-      throw new Error(`Número de lote '${batchNumber}' já existe. Use outro número.`);
+    // Verificar se o número do lote já existe GLOBALMENTE (em qualquer produto)
+    // Se existir, não criar novo - a lógica de adicionar ao existente deve ser feita antes
+    const existingBatch = await findBatchByNumber(batchNumber, userId);
+    if (existingBatch) {
+      // Se o lote existente é do mesmo produto, não deveria chegar aqui
+      // (a lógica de adicionar ao existente deve ser feita antes)
+      // Mas se for de outro produto, permitir criar (números podem ser iguais em produtos diferentes)
+      if (existingBatch.productId === productId) {
+        console.error(`Número de lote '${batchNumber}' já existe para este produto`);
+        throw new Error(`Número de lote '${batchNumber}' já existe para este produto. Adicione quantidade ao lote existente.`);
+      }
+      // Se for de outro produto, permitir criar (números podem ser iguais em produtos diferentes)
     }
 
     // Buscar o produto para pegar o usuario_id correto (pode ser do usuário compartilhado)

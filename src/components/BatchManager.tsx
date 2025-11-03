@@ -17,7 +17,7 @@ import {
   Trash2,
   Edit
 } from 'lucide-react';
-import { getBatchesByProduct, createBatch, deleteBatch, checkBatchNumberExists, generateNextAvailableBatchNumber, findBatchByNumberAndProduct, updateBatchQuantity } from '@/lib/batches';
+import { getBatchesByProduct, createBatch, deleteBatch, checkBatchNumberExists, generateNextAvailableBatchNumber, findBatchByNumberAndProduct, findBatchByNumber, updateBatchQuantity } from '@/lib/batches';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useToast } from '@/hooks/use-toast';
@@ -156,14 +156,15 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
         return;
       }
 
-      // Verificar se o número do lote já existe PARA ESTE PRODUTO
-      // NOTA: Números de lote podem ser iguais em produtos diferentes
-      const existsForThisProduct = await findBatchByNumberAndProduct(formData.batchNumber, productId, user.id);
+      // Verificar se o número do lote já existe GLOBALMENTE
+      // Se existir para o mesmo produto, adicionar quantidade ao lote existente
+      // Se não existir, criar um novo lote
+      const existingBatch = await findBatchByNumber(formData.batchNumber, user.id);
       
-      if (existsForThisProduct) {
-        // Lote já existe para este produto - vamos apenas atualizar a quantidade
-        const newQuantity = existsForThisProduct.quantity + quantity;
-        await updateBatchQuantity(existsForThisProduct.id, newQuantity, user.id);
+      if (existingBatch && existingBatch.productId === productId) {
+        // Lote já existe para este produto - adicionar quantidade ao lote existente
+        const newQuantity = existingBatch.quantity + quantity;
+        await updateBatchQuantity(existingBatch.id, newQuantity, user.id);
         
         toast({
           title: '✅ Quantidade Adicionada!',
@@ -176,6 +177,8 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
         onBatchesChange?.();
         return;
       }
+      
+      // Se o lote existe mas é de outro produto, permitir criar (números podem ser iguais em produtos diferentes)
 
       setIsLoading(true);
 

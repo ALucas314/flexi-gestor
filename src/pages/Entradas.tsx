@@ -29,7 +29,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useForm } from "react-hook-form";
 import { useToast } from "@/hooks/use-toast";
 import { useData } from "@/contexts/DataContext";
-import { getBatchesByProduct, createBatch, updateBatchQuantity, checkBatchNumberExists, generateNextAvailableBatchNumber, findBatchByNumberAndProduct } from "@/lib/batches";
+import { getBatchesByProduct, createBatch, updateBatchQuantity, checkBatchNumberExists, generateNextAvailableBatchNumber, findBatchByNumberAndProduct, findBatchByNumber } from "@/lib/batches";
 import { useAuth } from "@/contexts/AuthContext";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { supabase } from "@/lib/supabase";
@@ -632,38 +632,37 @@ const Entradas = () => {
         for (const batch of consolidatedBatches.values()) {
           if (!user?.id || !batch.batchNumber) continue;
           
-          // Primeiro: Verificar se o lote existe no banco de dados (verificação principal)
-          // Esta é a verificação mais importante - verifica se o lote existe para este produto
+          // Primeiro: Verificar se o lote existe GLOBALMENTE no banco de dados
+          // Se existir para o mesmo produto, adicionar quantidade ao lote existente
+          // Se não existir, criar um novo lote
           let existingBatchInDb = null;
           try {
-            existingBatchInDb = await findBatchByNumberAndProduct(
-              batch.batchNumber,
-              data.productId,
-              user.id
-            );
+            // Buscar lote globalmente primeiro
+            existingBatchInDb = await findBatchByNumber(batch.batchNumber, user.id);
+            
+            // Se encontrou um lote e é do mesmo produto, adicionar quantidade
+            if (existingBatchInDb && existingBatchInDb.productId === data.productId) {
+              try {
+                await updateBatchQuantity(
+                  existingBatchInDb.id,
+                  existingBatchInDb.quantity + batch.quantity,
+                  user.id
+                );
+                // Sucesso ao atualizar lote existente
+                continue; // Continuar para o próximo lote
+              } catch (error) {
+                console.error('Erro ao atualizar lote:', error);
+                toast({
+                  title: "❌ Erro ao Atualizar Lote",
+                  description: `Não foi possível atualizar o lote "${batch.batchNumber}". Tente novamente.`,
+                  variant: "destructive",
+                });
+                return;
+              }
+            }
+            // Se o lote existe mas é de outro produto, continuar para criar novo (números podem ser iguais)
           } catch (error) {
             console.error('Erro ao buscar lote no banco:', error);
-          }
-          
-          // Se o lote existe no banco, SEMPRE atualizar a quantidade (adicionar ao existente)
-          if (existingBatchInDb) {
-            try {
-              await updateBatchQuantity(
-                existingBatchInDb.id,
-                existingBatchInDb.quantity + batch.quantity,
-                user.id
-              );
-              // Sucesso ao atualizar lote existente
-              continue; // Continuar para o próximo lote
-            } catch (error) {
-              console.error('Erro ao atualizar lote:', error);
-              toast({
-                title: "❌ Erro ao Atualizar Lote",
-                description: `Não foi possível atualizar o lote "${batch.batchNumber}". Tente novamente.`,
-                variant: "destructive",
-              });
-              return;
-            }
           }
           
           // Se não encontrou no banco, verificar na lista local (availableBatches) como fallback
@@ -711,13 +710,9 @@ const Entradas = () => {
             
             if (!created) {
               // Se falhou ao criar, verificar novamente se existe (pode ter sido criado em paralelo)
-              const doubleCheck = await findBatchByNumberAndProduct(
-                batch.batchNumber,
-                data.productId,
-                user.id
-              );
+              const doubleCheck = await findBatchByNumber(batch.batchNumber, user.id);
               
-              if (doubleCheck) {
+              if (doubleCheck && doubleCheck.productId === data.productId) {
                 // Lote foi criado em outro momento - atualizar quantidade
                 await updateBatchQuantity(
                   doubleCheck.id,
@@ -738,14 +733,10 @@ const Entradas = () => {
             // Se erro indica que lote já existe, tentar atualizar
             const errorMessage = error?.message || '';
             if (errorMessage.includes('já existe') || errorMessage.includes('duplicat')) {
-              // Tentar encontrar o lote e atualizar
-              const existing = await findBatchByNumberAndProduct(
-                batch.batchNumber,
-                data.productId,
-                user.id
-              );
-              if (existing) {
-                // Lote encontrado - atualizar quantidade
+              // Tentar encontrar o lote globalmente e atualizar se for do mesmo produto
+              const existing = await findBatchByNumber(batch.batchNumber, user.id);
+              if (existing && existing.productId === data.productId) {
+                // Lote encontrado para este produto - atualizar quantidade
                 try {
                   await updateBatchQuantity(
                     existing.id,
@@ -762,11 +753,15 @@ const Entradas = () => {
                   });
                   return;
                 }
+              } else if (existing) {
+                // Lote existe mas é de outro produto - permitir criar (números podem ser iguais)
+                // Continuar para criar novo lote
+                continue;
               } else {
-                // Lote existe globalmente mas não para este produto
+                // Lote não foi encontrado - erro inesperado
                 toast({
-                  title: "⚠️ Número de Lote Já Existe",
-                  description: `O lote "${batch.batchNumber}" já existe para outro produto. Use um número diferente.`,
+                  title: "❌ Erro ao Criar Lote",
+                  description: `Não foi possível criar o lote "${batch.batchNumber}". Tente novamente.`,
                   variant: "destructive",
                 });
                 return;
@@ -1848,26 +1843,35 @@ const Entradas = () => {
                                             }
                                           }
 
-                                          // Verificar se o lote existe no banco de dados para este produto
+                                          // Verificar se o lote existe no banco de dados GLOBALMENTE
                                           if (newBatchNumber && newBatchNumber.trim() !== '' && selectedProductId && user?.id) {
                                             try {
-                                              const existingBatch = await findBatchByNumberAndProduct(
-                                                newBatchNumber,
-                                                selectedProductId,
-                                                user.id
-                                              );
+                                              // Buscar lote globalmente primeiro
+                                              const existingBatch = await findBatchByNumber(newBatchNumber, user.id);
                                               
                                               if (existingBatch) {
-                                                // Lote encontrado - mostrar mensagem e preencher datas se houver
-                                                setBatchStatusMessages(prev => ({
-                                                  ...prev,
-                                                  [index]: {
-                                                    found: true,
-                                                    message: `✅ Lote encontrado. Inserir no lote encontrado (Quantidade atual: ${existingBatch.quantity})`
-                                                  }
-                                                }));
+                                                // Lote encontrado (mesmo produto ou outro produto) - produtos diferentes podem estar no mesmo lote
+                                                if (existingBatch.productId === selectedProductId) {
+                                                  // Lote encontrado para este produto - adicionar quantidade ao lote existente
+                                                  setBatchStatusMessages(prev => ({
+                                                    ...prev,
+                                                    [index]: {
+                                                      found: true,
+                                                      message: `✅ Lote localizado, adicionar no lote selecionado (Quantidade atual: ${existingBatch.quantity})`
+                                                    }
+                                                  }));
+                                                } else {
+                                                  // Lote encontrado para outro produto - permitir criar novo registro com mesmo número (produtos diferentes podem estar no mesmo lote)
+                                                  setBatchStatusMessages(prev => ({
+                                                    ...prev,
+                                                    [index]: {
+                                                      found: true,
+                                                      message: `✅ Lote localizado, adicionar no lote selecionado`
+                                                    }
+                                                  }));
+                                                }
                                                 
-                                                // Preencher datas do lote existente
+                                                // Preencher datas do lote existente se houver
                                                 if (existingBatch.expiryDate) {
                                                   updateBatchData(index, 'expiryDate', existingBatch.expiryDate);
                                                 }
