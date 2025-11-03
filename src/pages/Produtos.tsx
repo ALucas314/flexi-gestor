@@ -130,40 +130,33 @@ const Produtos = () => {
     refreshCustomUnits
   } = useData();
 
+  // Categorias padrão (não podem ser excluídas)
+  const defaultCategories = [
+    "Geral",
+    "Alimentos",
+    "Bebidas",
+    "Eletrônicos",
+    "Roupas",
+    "Acessórios",
+    "Complementos",
+    "Embalagens",
+    "Outros"
+  ];
+
   // Usar categorias e unidades do contexto (que vem do banco de dados)
   useEffect(() => {
     if (categoriesFromContext.length > 0) {
-      // Adicionar categorias padrão se não houver nenhuma no banco
-      const defaultCategories = [
-        "Geral",
-        "Alimentos",
-        "Bebidas",
-        "Eletrônicos",
-        "Roupas",
-        "Acessórios",
-        "Complementos",
-        "Embalagens",
-        "Outros"
-      ];
       // Combinar categorias do banco com padrões (sem duplicatas)
       const combined = [...new Set([...defaultCategories, ...categoriesFromContext])];
       setCategories(combined);
     } else {
       // Se não há categorias no banco, usar apenas as padrão
-      const defaultCategories = [
-        "Geral",
-        "Alimentos",
-        "Bebidas",
-        "Eletrônicos",
-        "Roupas",
-        "Acessórios",
-        "Complementos",
-        "Embalagens",
-        "Outros"
-      ];
       setCategories(defaultCategories);
     }
   }, [categoriesFromContext]);
+
+  // Separar categorias padrão das personalizadas
+  const customCategories = categories.filter(cat => !defaultCategories.includes(cat));
 
   // Usar unidades do contexto
   useEffect(() => {
@@ -464,6 +457,15 @@ const Produtos = () => {
     }
   };  // Função para deletar categoria
   const handleDeleteCategory = async (categoryToDelete: string) => {
+    // Verificar se é uma categoria padrão (não pode ser excluída)
+    if (defaultCategories.includes(categoryToDelete)) {
+      toast.error("❌ Categoria Padrão", {
+        description: "Categorias padrão não podem ser excluídas.",
+        duration: 3000,
+      });
+      return;
+    }
+
     try {
       // Deletar do banco de dados (a verificação de produtos já é feita no contexto)
       await deleteCategory(categoryToDelete);
@@ -1649,36 +1651,50 @@ const Produtos = () => {
             </div>
 
             {/* Lista de Categorias */}
-            <div className="space-y-2">
-              <h4 className="text-sm font-semibold">Categorias Existentes</h4>
-              <div className="max-h-64 overflow-y-auto border rounded-lg divide-y">
-                {categories.length === 0 ? (
-                  <div className="p-4 text-center text-sm text-gray-500">
-                    Nenhuma categoria cadastrada
-                  </div>
-                ) : (
-                  categories.map((category) => (
+            <div className="space-y-4">
+              {/* Categorias Padrão */}
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-gray-600">Categorias Padrão (não podem ser excluídas)</h4>
+                <div className="max-h-32 overflow-y-auto border rounded-lg divide-y bg-gray-50">
+                  {defaultCategories.map((category) => (
                     <div
                       key={category}
-                      className="flex items-center justify-between p-3 hover:bg-gray-50"
+                      className="flex items-center justify-between p-3"
                     >
-                      <span className="text-sm font-medium">🏷️ {category}</span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setCategoryToDelete(category);
-                          handleDeleteCategory(category);
-                        }}
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <span className="text-sm text-gray-700">🏷️ {category}</span>
                     </div>
-                  ))
-                )}
+                  ))}
+                </div>
               </div>
+
+              {/* Categorias Personalizadas */}
+              {customCategories.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-semibold">Categorias Personalizadas</h4>
+                  <div className="max-h-32 overflow-y-auto border rounded-lg divide-y">
+                    {customCategories.map((category) => (
+                      <div
+                        key={category}
+                        className="flex items-center justify-between p-3 hover:bg-gray-50"
+                      >
+                        <span className="text-sm font-medium">🏷️ {category}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setCategoryToDelete(category);
+                            handleDeleteCategory(category);
+                          }}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
