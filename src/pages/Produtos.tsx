@@ -7,14 +7,20 @@ import {
   Trash2,
   Package,
   Calendar,
-  X
+  X,
+  Tag,
+  CheckCircle,
+  AlertTriangle,
+  Hash,
+  FileText,
+  Coins
 } from "lucide-react";
 import { BatchManager } from "@/components/BatchManager";
 
 import { Button } from "@/components/ui/button";
 import DangerButton from "@/components/ui/DangerButton";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -33,12 +39,12 @@ import { useResponsive } from "@/hooks/use-responsive";
 const productSchema = z.object({
   sku: z.string().optional(), // SKU será gerado automaticamente
   name: z.string()
-    .min(1, "❌ Descrição/Nome do produto é obrigatório")
-    .min(3, "❌ Descrição deve ter pelo menos 3 caracteres")
-    .max(200, "❌ Descrição deve ter no máximo 200 caracteres"),
+    .min(1, "Descrição/Nome do produto é obrigatório")
+    .min(3, "Descrição deve ter pelo menos 3 caracteres")
+    .max(200, "Descrição deve ter no máximo 200 caracteres"),
   unitOfMeasure: z.string()
-    .min(1, "❌ Unidade de medida é obrigatória")
-    .max(20, "❌ Unidade de medida deve ter no máximo 20 caracteres"),
+    .min(1, "Unidade de medida é obrigatória")
+    .max(20, "Unidade de medida deve ter no máximo 20 caracteres"),
   category: z.string().optional().default("Geral"),
   managedByBatch: z.boolean().optional().default(false), // Campo opcional para gerenciamento por lote
   minStock: z.number().optional(), // Estoque mínimo
@@ -98,16 +104,16 @@ const Produtos = () => {
   
   // Unidades padrão
   const defaultUnits = [
-    { value: "UN", label: "📦 UN (Unidade)" },
-    { value: "CX", label: "📦 CX (Caixa)" },
-    { value: "KG", label: "⚖️ KG (Quilo)" },
-    { value: "G", label: "⚖️ G (Grama)" },
-    { value: "L", label: "💧 L (Litro)" },
-    { value: "ML", label: "💧 ML (Mililitro)" },
-    { value: "M", label: "📏 M (Metro)" },
-    { value: "CM", label: "📏 CM (Centímetro)" },
-    { value: "PAC", label: "📦 PAC (Pacote)" },
-    { value: "SAC", label: "📦 SAC (Saco)" },
+    { value: "UN", label: "UN (Unidade)" },
+    { value: "CX", label: "CX (Caixa)" },
+    { value: "KG", label: "KG (Quilo)" },
+    { value: "G", label: "G (Grama)" },
+    { value: "L", label: "L (Litro)" },
+    { value: "ML", label: "ML (Mililitro)" },
+    { value: "M", label: "M (Metro)" },
+    { value: "CM", label: "CM (Centímetro)" },
+    { value: "PAC", label: "PAC (Pacote)" },
+    { value: "SAC", label: "SAC (Saco)" },
   ];
   
   // Hooks
@@ -180,7 +186,7 @@ const Produtos = () => {
     ...defaultUnits,
     ...customUnits.map(unit => ({
       value: unit,
-      label: `📏 ${unit} (Personalizada)`
+      label: `${unit} (Personalizada)`
     }))
   ];
   
@@ -307,7 +313,7 @@ const Produtos = () => {
       const isEditingCurrentSku = editingProduct && editingProduct.sku && editingProduct.sku.toLowerCase() === currentSku.toLowerCase();
       
       if (isDuplicated && !isEditingCurrentSku) {
-        setSkuDuplicateError("❌ Este SKU já foi adicionado. Escolha outro código.");
+        setSkuDuplicateError("Este SKU já foi adicionado. Escolha outro código.");
       } else {
         setSkuDuplicateError("");
       }
@@ -400,7 +406,7 @@ const Produtos = () => {
       priority: 'medium',
       render: (product) => (
         <span className="text-sm sm:text-base text-muted-foreground">
-          🏷️ {product.category || 'Geral'}
+          <span className="flex items-center gap-2"><Tag className="h-4 w-4" /> {product.category || 'Geral'}</span>
         </span>
       )
     },
@@ -415,7 +421,7 @@ const Produtos = () => {
           <div className="flex items-center justify-end sm:justify-start">
             {managedByBatch ? (
               <ResponsiveBadge variant="default" className="text-xs bg-indigo-100 text-indigo-700 whitespace-nowrap">
-                📅 Sim
+                <span className="flex items-center gap-2"><Calendar className="h-4 w-4" /> Sim</span>
               </ResponsiveBadge>
             ) : (
               <span className="text-sm sm:text-base text-muted-foreground whitespace-nowrap">Não</span>
@@ -429,7 +435,7 @@ const Produtos = () => {
   // Função para adicionar nova categoria
   const handleAddCategory = async () => {
     if (!newCategoryName.trim()) {
-      toast.error("❌ Campo Vazio", {
+      toast.error("Campo Vazio", {
         description: "Por favor, digite um nome para a categoria.",
       });
       return;
@@ -447,11 +453,11 @@ const Produtos = () => {
       // Selecionar a nova categoria no campo
       form.setValue("category", categoryValue);
       
-      toast.success("✅ Categoria Adicionada!", {
+      toast.success("Categoria Adicionada!", {
         description: `A categoria "${categoryValue}" foi adicionada com sucesso ao banco de dados.`,
       });
     } catch (error: any) {
-      toast.error("❌ Erro ao Adicionar Categoria", {
+      toast.error("Erro ao Adicionar Categoria", {
         description: error.message || "Não foi possível adicionar a categoria. Tente novamente.",
       });
     }
@@ -459,7 +465,7 @@ const Produtos = () => {
   const handleDeleteCategory = async (categoryToDelete: string) => {
     // Verificar se é uma categoria padrão (não pode ser excluída)
     if (defaultCategories.includes(categoryToDelete)) {
-      toast.error("❌ Categoria Padrão", {
+      toast.error("Categoria Padrão", {
         description: "Categorias padrão não podem ser excluídas.",
         duration: 3000,
       });
@@ -476,11 +482,11 @@ const Produtos = () => {
         form.setValue("category", "Geral");
       }
       
-      toast.success("✅ Categoria Excluída!", {
+      toast.success("Categoria Excluída!", {
         description: `A categoria "${categoryToDelete}" foi removida do banco de dados.`,
       });
     } catch (error: any) {
-      toast.error("❌ Erro ao Excluir Categoria", {
+      toast.error("Erro ao Excluir Categoria", {
         description: error.message || "Não foi possível excluir a categoria. Tente novamente.",
         duration: 6000,
       });
@@ -558,14 +564,14 @@ const Produtos = () => {
       setIsAddDialogOpen(false);
       form.reset();
 
-      toast.success("✅ Produto Adicionado!", {
+      toast.success("Produto Adicionado!", {
         description: `${data.name} foi adicionado com sucesso ao catálogo.`,
       });
     } catch (error: any) {
-      console.error('❌ Erro completo:', error);
-      console.error('❌ Tipo do erro:', typeof error);
-      console.error('❌ Error.message:', error?.message);
-      console.error('❌ Error.toString():', error?.toString?.());
+      console.error('Erro completo:', error);
+      console.error('Tipo do erro:', typeof error);
+      console.error('Error.message:', error?.message);
+      console.error('Error.toString():', error?.toString?.());
       
       // Extrair mensagem de erro de forma robusta
       let errorMessage = "Ocorreu um erro ao adicionar o produto.";
@@ -586,9 +592,9 @@ const Produtos = () => {
         errorMessage = 'O SKU deste produto já foi adicionado. Escolha outro código.';
       }
       
-      console.error('❌ MENSAGEM FINAL QUE SERÁ EXIBIDA:', errorMessage);
+      console.error('MENSAGEM FINAL QUE SERÁ EXIBIDA:', errorMessage);
       
-      toast.error("❌ Erro ao Adicionar Produto", {
+      toast.error("Erro ao Adicionar Produto", {
         description: errorMessage,
         duration: 7000,
       });
@@ -606,11 +612,11 @@ const Produtos = () => {
       setEditingProduct(null);
       form.reset();
 
-      toast.success("✅ Produto Atualizado!", {
+      toast.success("Produto Atualizado!", {
         description: `${data.name} foi atualizado com sucesso.`,
       });
     } catch (error: any) {
-      console.error('❌ Erro completo ao atualizar:', error);
+      console.error('Erro completo ao atualizar:', error);
       
       // Extrair mensagem de erro de forma robusta
       let errorMessage = "Ocorreu um erro ao atualizar o produto.";
@@ -628,7 +634,7 @@ const Produtos = () => {
         errorMessage = 'O SKU deste produto já foi adicionado. Escolha outro código.';
       }
       
-      toast.error("❌ Erro ao Atualizar Produto", {
+      toast.error("Erro ao Atualizar Produto", {
         description: errorMessage,
         duration: 7000,
       });
@@ -643,7 +649,7 @@ const Produtos = () => {
       
       await deleteProductContext(productToDelete.id);
 
-      toast.success("🗑️ Produto Removido!", {
+      toast.success("Produto Removido!", {
         description: `${productToDelete.name} foi removido do catálogo.`,
       });
 
@@ -651,7 +657,7 @@ const Produtos = () => {
       setIsDeleteDialogOpen(false);
       setProductToDelete(null);
     } catch (error: any) {
-      toast.error("❌ Erro ao Remover Produto", {
+      toast.error("Erro ao Remover Produto", {
         description: error.message || "Não foi possível remover o produto. Tente novamente.",
       });
     } finally {
@@ -669,7 +675,7 @@ const Produtos = () => {
             <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
               <Package className="w-8 h-8 text-white" />
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">🍇 Carregando Produtos...</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2 flex items-center gap-2"><Package className="h-5 w-5" /> Carregando Produtos...</h3>
             <p className="text-gray-600">Preparando seu catálogo de produtos</p>
           </div>
         </div>
@@ -722,7 +728,7 @@ const Produtos = () => {
           <DialogContent className="max-w-md sm:max-w-lg flex flex-col max-h-[90vh] overflow-hidden">
             <DialogHeader className="space-y-2 pb-4 sm:pb-3 flex-shrink-0">
               <DialogTitle className="text-base sm:text-xl font-bold text-neutral-900">
-                📦 Adicionar Novo Produto
+                <span className="flex items-center gap-2"><Package className="h-4 w-4" /> Adicionar Novo Produto</span>
               </DialogTitle>
               <DialogDescription className="text-sm text-neutral-600">
                 Preencha as informações detalhadas do produto para seu catálogo
@@ -738,7 +744,7 @@ const Produtos = () => {
                   render={({ field }) => (
                     <FormItem className="space-y-3">
                       <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
-                        📝 Descrição do Produto
+                        <span className="flex items-center gap-2"><FileText className="h-4 w-4" /> Descrição do Produto</span>
                       </FormLabel>
                       <FormControl>
                         <Input 
@@ -758,7 +764,7 @@ const Produtos = () => {
                   render={({ field }) => (
                     <FormItem className="space-y-3">
                       <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700 flex items-center justify-between">
-                        <span>📏 Unidade de Medida</span>
+                        <span className="flex items-center gap-2"><Hash className="h-4 w-4" /> Unidade de Medida</span>
                         <Button
                           type="button"
                           variant="ghost"
@@ -803,7 +809,7 @@ const Produtos = () => {
                                   key={unit} 
                                   value={unit}
                                 >
-                                  📏 {unit} (Personalizada)
+                                  <span className="flex items-center gap-2"><Hash className="h-4 w-4" /> {unit} (Personalizada)</span>
                                 </SelectItem>
                               ))}
                             </>
@@ -866,7 +872,7 @@ const Produtos = () => {
                   render={({ field }) => (
                     <FormItem className="space-y-3">
                       <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700 flex items-center justify-between">
-                        <span>🏷️ Categoria</span>
+                        <span className="flex items-center gap-2"><Tag className="h-4 w-4" /> Categoria</span>
                         <Button
                           type="button"
                           variant="ghost"
@@ -898,7 +904,7 @@ const Produtos = () => {
                               key={category} 
                               value={category}
                             >
-                              🏷️ {category}
+                              <span className="flex items-center gap-2"><Tag className="h-4 w-4" /> {category}</span>
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -959,7 +965,7 @@ const Produtos = () => {
                   render={({ field }) => (
                     <FormItem className="flex items-center justify-between rounded-xl border-2 border-neutral-200 p-4">
                       <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
-                        📅 Gerenciamento por Lote
+                        <span className="flex items-center gap-2"><Calendar className="h-4 w-4" /> Gerenciamento por Lote</span>
                       </FormLabel>
                       <FormControl>
                         <div className="flex items-center space-x-3">
@@ -986,7 +992,7 @@ const Produtos = () => {
                   render={({ field }) => (
                     <FormItem className="space-y-3">
                       <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
-                        ⚠️ Estoque Mínimo
+                        <span className="flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Estoque Mínimo</span>
                       </FormLabel>
                       <FormControl>
                         <Input
@@ -1017,10 +1023,10 @@ const Produtos = () => {
                   </div>
                 <DialogFooter className="flex flex-col sm:flex-row gap-2 pt-4 mt-4 flex-shrink-0 border-t border-neutral-200">
                   <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)} className="w-full sm:w-auto h-11 sm:h-10 text-sm">
-                    ❌ Cancelar
+                    <span className="flex items-center gap-2"><X className="h-4 w-4" /> Cancelar</span>
                   </Button>
                   <Button type="submit" className="w-full sm:w-auto h-11 sm:h-10 text-sm bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white shadow-lg hover:shadow-xl transition-all duration-200">
-                    📦 Adicionar Produto
+                    <span className="flex items-center gap-2"><Package className="h-4 w-4" /> Adicionar Produto</span>
                   </Button>
                 </DialogFooter>
               </form>
@@ -1041,7 +1047,7 @@ const Produtos = () => {
               <div className="text-sm sm:text-sm opacity-90">Total</div>
             </div>
           </div>
-          <h3 className="text-base sm:text-lg font-semibold mb-1 sm:mb-2">🍇 Total de Produtos</h3>
+          <h3 className="text-base sm:text-lg font-semibold mb-1 sm:mb-2 flex items-center gap-2"><Package className="h-4 w-4" /> Total de Produtos</h3>
           <p className="text-sm sm:text-sm opacity-80">Produtos cadastrados no sistema</p>
         </div>
 
@@ -1088,7 +1094,7 @@ const Produtos = () => {
               <div className="text-sm sm:text-sm opacity-90">Valor</div>
             </div>
           </div>
-          <h3 className="text-base sm:text-lg font-semibold mb-1 sm:mb-2">💰 Valor Total</h3>
+          <h3 className="text-base sm:text-lg font-semibold mb-1 sm:mb-2 flex items-center gap-2"><Coins className="h-4 w-4" /> Valor Total</h3>
           <p className="text-sm sm:text-sm opacity-80">Valor total em estoque</p>
         </div>
 
@@ -1104,7 +1110,7 @@ const Produtos = () => {
               <div className="text-sm sm:text-sm opacity-90">Baixo</div>
             </div>
           </div>
-          <h3 className="text-base sm:text-lg font-semibold mb-1 sm:mb-2">⚠️ Estoque Baixo</h3>
+          <h3 className="text-base sm:text-lg font-semibold mb-1 sm:mb-2 flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Estoque Baixo</h3>
           <p className="text-sm sm:text-sm opacity-80">Produtos com estoque mínimo</p>
         </div>
       </div>
@@ -1125,19 +1131,26 @@ const Produtos = () => {
       </Card>
 
       {/* Tabela de Produtos Responsiva */}
-      <div>
-        <div className="mb-2 sm:mb-4">
-          <h2 className="text-base sm:text-lg font-semibold text-neutral-900">📋 Lista de Produtos</h2>
-        </div>
-        
-        {/* Mensagem especial quando não há produtos */}
-        {products.length === 0 ? (
-          <Card className="bg-gradient-to-br from-purple-50 to-blue-50 border border-purple-200/50 shadow-lg">
-            <CardContent className="p-4 sm:p-8 text-center">
+      <Card className="shadow-lg">
+        <CardHeader className="bg-gradient-to-r from-indigo-50 to-purple-50">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-blue-600" />
+                Lista de Produtos
+              </CardTitle>
+              <CardDescription>Gerencie seus produtos cadastrados</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          {/* Mensagem especial quando não há produtos */}
+          {products.length === 0 ? (
+            <div className="p-4 sm:p-8 text-center">
               <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex items-center justify-center mx-auto mb-4 sm:mb-6">
                 <Package className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
               </div>
-              <h3 className="text-xl sm:text-xl font-bold text-gray-900 mb-2 sm:mb-3">🍇 Bem-vindo ao Flexi Gestor!</h3>
+              <h3 className="text-xl sm:text-xl font-bold text-gray-900 mb-2 sm:mb-3 flex items-center gap-2 justify-center"><Package className="h-5 w-5" /> Bem-vindo ao Flexi Gestor!</h3>
               <p className="text-base sm:text-base text-gray-600 mb-4 sm:mb-6 max-w-md mx-auto">
                 Parece que você ainda não tem produtos cadastrados. Clique no botão abaixo para adicionar seu primeiro produto.
               </p>
@@ -1145,7 +1158,7 @@ const Produtos = () => {
               {/* Debug Info - Discreto */}
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-2 sm:p-3 mb-4 sm:mb-6 text-center">
                 <p className="text-xs text-gray-600">
-                  Sistema funcionando • {products.length} produtos • DataContext ✅
+                  Sistema funcionando • {products.length} produtos • DataContext <CheckCircle className="h-3 w-3 text-green-600 inline" />
                 </p>
               </div>
               
@@ -1158,22 +1171,24 @@ const Produtos = () => {
                   <span className="text-xs sm:text-sm">Adicionar Primeiro Produto</span>
                 </Button>
               </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <ResponsiveTable
-            data={filteredProducts}
-            columns={columns}
-            actions={actions}
-            keyExtractor={(product) => product.id}
-            emptyMessage="Nenhum produto encontrado"
-            showMobileCards={true}
-            mobileCardTitle={(product) => product.name}
-            mobileCardSubtitle={(product) => `${product.sku} • ${product.unitOfMeasure || 'UN'}`}
-            cardClassName="hover:shadow-xl transition-all duration-300"
-          />
-        )}
-      </div>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <ResponsiveTable
+                data={filteredProducts}
+                columns={columns}
+                actions={actions}
+                keyExtractor={(product) => product.id}
+                emptyMessage="Nenhum produto encontrado"
+                showMobileCards={true}
+                mobileCardTitle={(product) => product.name}
+                mobileCardSubtitle={(product) => `${product.sku} • ${product.unitOfMeasure || 'UN'}`}
+                cardClassName="hover:shadow-xl transition-all duration-300"
+              />
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
             {/* Modal de Edição */}
             <Dialog open={isEditDialogOpen} onOpenChange={(open) => {
@@ -1204,7 +1219,7 @@ const Produtos = () => {
                       render={({ field }) => (
                         <FormItem className="space-y-3">
                           <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
-                            🏷️ Código do Produto
+                            <span className="flex items-center gap-2"><Tag className="h-4 w-4" /> Código do Produto</span>
                           </FormLabel>
                           <FormControl>
                             <Input 
@@ -1230,7 +1245,7 @@ const Produtos = () => {
                       render={({ field }) => (
                         <FormItem className="space-y-3">
                           <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
-                            📝 Descrição do Produto
+                            <span className="flex items-center gap-2"><FileText className="h-4 w-4" /> Descrição do Produto</span>
                           </FormLabel>
                           <FormControl>
                             <Input 
@@ -1250,7 +1265,7 @@ const Produtos = () => {
                       render={({ field }) => (
                         <FormItem className="space-y-3">
                           <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700 flex items-center justify-between">
-                            <span>📏 Unidade de Medida</span>
+                            <span className="flex items-center gap-2"><Hash className="h-4 w-4" /> Unidade de Medida</span>
                             <Button
                               type="button"
                               variant="ghost"
@@ -1359,7 +1374,7 @@ const Produtos = () => {
                       render={({ field }) => (
                         <FormItem className="space-y-3">
                           <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700 flex items-center justify-between">
-                            <span>🏷️ Categoria</span>
+                            <span className="flex items-center gap-2"><Tag className="h-4 w-4" /> Categoria</span>
                             <Button
                               type="button"
                               variant="ghost"
@@ -1391,7 +1406,7 @@ const Produtos = () => {
                                   key={category} 
                                   value={category}
                                 >
-                                  🏷️ {category}
+                                  <span className="flex items-center gap-2"><Tag className="h-4 w-4" /> {category}</span>
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -1452,7 +1467,7 @@ const Produtos = () => {
                       render={({ field }) => (
                         <FormItem className="flex items-center justify-between rounded-xl border-2 border-neutral-200 p-4">
                           <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
-                            📅 Gerenciamento por Lote
+                            <span className="flex items-center gap-2"><Calendar className="h-4 w-4" /> Gerenciamento por Lote</span>
                           </FormLabel>
                           <FormControl>
                             <div className="flex items-center space-x-3">
@@ -1476,7 +1491,7 @@ const Produtos = () => {
                       </div>
                     <DialogFooter className="flex flex-col sm:flex-row gap-2 pt-4 mt-4 flex-shrink-0 border-t border-neutral-200">
                       <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)} className="w-full sm:w-auto h-11 sm:h-10 text-sm">
-                        ❌ Cancelar
+                        <span className="flex items-center gap-2"><X className="h-4 w-4" /> Cancelar</span>
                       </Button>
                       <Button type="submit" className="w-full sm:w-auto h-11 sm:h-10 text-sm bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white shadow-lg hover:shadow-xl transition-all duration-200">
                         💾 Salvar Alterações
@@ -1492,8 +1507,7 @@ const Produtos = () => {
               <DialogContent className="max-w-md sm:max-w-lg">
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl">
-                    <Trash2 className="h-5 w-4 text-destructive" />
-                    🗑️ Confirmar Exclusão de Produto
+                    <span className="flex items-center gap-2"><Trash2 className="h-4 w-4 text-destructive" /> Confirmar Exclusão de Produto</span>
                   </DialogTitle>
                   <DialogDescription className="text-sm sm:text-base">
                     Esta ação não pode ser desfeita. O produto será removido permanentemente.
@@ -1502,7 +1516,7 @@ const Produtos = () => {
 
                 <div className="py-4">
                   <div className="bg-muted/50 rounded-lg p-4">
-                    <h4 className="font-semibold text-sm mb-2">🍇 Produto a ser excluído:</h4>
+                    <h4 className="font-semibold text-sm mb-2 flex items-center gap-2"><Package className="h-4 w-4" /> Produto a ser excluído:</h4>
                     <div className="space-y-1">
                       <p className="font-medium text-sm sm:text-base">{productToDelete?.name}</p>
                       <p className="text-xs sm:text-sm text-muted-foreground">{productToDelete?.sku}</p>
@@ -1521,14 +1535,13 @@ const Produtos = () => {
                     }}
                     className="w-full sm:w-auto"
                   >
-                    ❌ Cancelar
+                    <span className="flex items-center gap-2"><X className="h-4 w-4" /> Cancelar</span>
                   </Button>
                   <DangerButton
                     type="button"
                     onClick={confirmDelete}
                     disabled={isDeleting}
                     className="w-full sm:w-auto"
-                    icon={!isDeleting ? <Trash2 className="h-4 w-4 mr-2" /> : undefined}
                   >
                     {isDeleting ? (
                       <>
@@ -1537,7 +1550,7 @@ const Produtos = () => {
                       </>
                     ) : (
                       <>
-                        🗑️ Excluir Produto
+                        <span className="flex items-center gap-2"><Trash2 className="h-4 w-4" /> Excluir Produto</span>
                       </>
                     )}
                   </DangerButton>
@@ -1578,7 +1591,7 @@ const Produtos = () => {
 
           <div className="py-4">
             <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-              <h4 className="font-semibold text-sm mb-2 text-red-900">⚠️ Atenção:</h4>
+              <h4 className="font-semibold text-sm mb-2 text-red-900 flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Atenção:</h4>
               <p className="text-xs sm:text-sm text-red-700">
                 Se houver produtos usando esta unidade, a exclusão será bloqueada para evitar problemas nos dados.
               </p>
@@ -1615,7 +1628,7 @@ const Produtos = () => {
         <DialogContent className="max-w-md sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl">
-              🏷️ Gerenciar Categorias
+              <span className="flex items-center gap-2"><Tag className="h-4 w-4" /> Gerenciar Categorias</span>
             </DialogTitle>
             <DialogDescription className="text-sm sm:text-base">
               Crie, edite e exclua categorias de produtos
@@ -1661,7 +1674,7 @@ const Produtos = () => {
                       key={category}
                       className="flex items-center justify-between p-3"
                     >
-                      <span className="text-sm text-gray-700">🏷️ {category}</span>
+                      <span className="text-sm text-gray-700 flex items-center gap-2"><Tag className="h-3 w-3" /> {category}</span>
                     </div>
                   ))}
                 </div>
@@ -1677,7 +1690,7 @@ const Produtos = () => {
                         key={category}
                         className="flex items-center justify-between p-3 hover:bg-gray-50"
                       >
-                        <span className="text-sm font-medium">🏷️ {category}</span>
+                        <span className="text-sm font-medium flex items-center gap-2"><Tag className="h-3 w-3" /> {category}</span>
                         <Button
                           type="button"
                           variant="ghost"
@@ -1717,7 +1730,7 @@ const Produtos = () => {
         <DialogContent className="max-w-md sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl">
-              📏 Gerenciar Unidades de Medida
+              <span className="flex items-center gap-2"><Hash className="h-4 w-4" /> Gerenciar Unidades de Medida</span>
             </DialogTitle>
             <DialogDescription className="text-sm sm:text-base">
               Crie e exclua unidades de medida personalizadas
@@ -1770,7 +1783,7 @@ const Produtos = () => {
                       key={unit}
                       className="flex items-center justify-between p-3 hover:bg-gray-50"
                     >
-                      <span className="text-sm font-medium">📏 {unit} (Personalizada)</span>
+                      <span className="text-sm font-medium flex items-center gap-2"><Hash className="h-3 w-3" /> {unit} (Personalizada)</span>
                       <Button
                         type="button"
                         variant="ghost"

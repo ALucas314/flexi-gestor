@@ -12,12 +12,29 @@ import {
   Filter,
   Download,
   Eye,
-  X
+  X,
+  Tag,
+  Building2,
+  Hash,
+  Coins,
+  FileText,
+  Smartphone,
+  CreditCard,
+  BarChart3,
+  Factory,
+  Clock,
+  CheckCircle,
+  AlertTriangle,
+  Upload,
+  Sparkles,
+  Info,
+  Settings,
+  Target
 } from "lucide-react";
 import { BatchManager } from "@/components/BatchManager";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -310,7 +327,7 @@ const Entradas = () => {
       // Se não há produto selecionado, mostrar aviso
       if (!selectedProductId) {
         toast({
-          title: "⚠️ Produto não selecionado",
+          title: "Produto não selecionado",
           description: "Por favor, selecione um produto antes de adicionar lotes.",
           variant: "destructive",
         });
@@ -576,7 +593,7 @@ const Entradas = () => {
         for (const batch of selectedBatches) {
           if (!batch.batchNumber || batch.quantity <= 0) {
             toast({
-              title: "⚠️ Dados Incompletos!",
+              title: "Dados Incompletos!",
               description: "Todos os lotes devem ter número e quantidade válidos.",
               variant: "destructive",
             });
@@ -584,7 +601,7 @@ const Entradas = () => {
           }
           if (!batch.unitCost || batch.unitCost <= 0) {
             toast({
-              title: "⚠️ Custo Obrigatório!",
+              title: "Custo Obrigatório!",
               description: "Todos os lotes devem ter um custo unitário válido maior que zero.",
               variant: "destructive",
             });
@@ -665,7 +682,7 @@ const Entradas = () => {
               } catch (error) {
                 console.error('Erro ao atualizar lote:', error);
                 toast({
-                  title: "❌ Erro ao Atualizar Lote",
+                  title: "Erro ao Atualizar Lote",
                   description: `Não foi possível atualizar o lote "${batch.batchNumber}". Tente novamente.`,
                   variant: "destructive",
                 });
@@ -699,7 +716,7 @@ const Entradas = () => {
             } catch (error) {
               console.error('Erro ao atualizar lote local:', error);
               toast({
-                title: "❌ Erro ao Atualizar Lote",
+                title: "Erro ao Atualizar Lote",
                 description: `Não foi possível atualizar o lote "${batch.batchNumber}". Tente novamente.`,
                 variant: "destructive",
               });
@@ -733,7 +750,7 @@ const Entradas = () => {
                 );
               } else {
                 toast({
-                  title: "❌ Erro ao Criar Lote",
+                  title: "Erro ao Criar Lote",
                   description: `Não foi possível criar o lote "${batch.batchNumber}". Tente novamente.`,
                   variant: "destructive",
                 });
@@ -759,7 +776,7 @@ const Entradas = () => {
                 } catch (updateError) {
                   console.error('Erro ao atualizar lote após criação falha:', updateError);
                   toast({
-                    title: "❌ Erro ao Atualizar Lote",
+                    title: "Erro ao Atualizar Lote",
                     description: `Não foi possível atualizar o lote "${batch.batchNumber}". Tente novamente.`,
                     variant: "destructive",
                   });
@@ -772,7 +789,7 @@ const Entradas = () => {
               } else {
                 // Lote não foi encontrado - erro inesperado
                 toast({
-                  title: "❌ Erro ao Criar Lote",
+                  title: "Erro ao Criar Lote",
                   description: `Não foi possível criar o lote "${batch.batchNumber}". Tente novamente.`,
                   variant: "destructive",
                 });
@@ -781,7 +798,7 @@ const Entradas = () => {
             }
             
             toast({
-              title: "❌ Erro ao Criar Lote",
+                  title: "Erro ao Criar Lote",
               description: `Não foi possível criar o lote "${batch.batchNumber}". ${errorMessage || 'Tente novamente.'}`,
               variant: "destructive",
             });
@@ -841,14 +858,14 @@ const Entradas = () => {
           const salePrice = averageCost * (1 + markup / 100);
           await updateProduct(data.productId, { price: salePrice });
           toast({
-            title: "💰 Preço de Venda Atualizado",
+            title: "Preço de Venda Atualizado",
             description: `Preço de venda do produto atualizado para R$ ${salePrice.toFixed(2)} (baseado no custo médio de R$ ${averageCost.toFixed(2)} + ${markup}% de markup)`,
             variant: "default",
           });
         } else if (markup === 0 || markup === undefined || markup === null) {
           // Aviso se markup não foi informado
           toast({
-            title: "⚠️ Markup não informado",
+            title: "Markup não informado",
             description: "O preço de venda não foi atualizado. Informe um percentual de markup para calcular o preço de venda automaticamente.",
             variant: "default",
           });
@@ -861,19 +878,19 @@ const Entradas = () => {
 
         // Adicionar notificação
         addNotification(
-          '📦 Nova Entrada Registrada',
+          'Nova Entrada Registrada',
           `Produto: ${product.name}\nQuantidade: ${totalQuantity} unidades\nLotes: ${selectedBatches.length}\nFornecedor: ${data.supplier}\nCusto Médio: R$ ${(totalCost / totalQuantity).toFixed(2)}\nTotal: R$ ${totalCost.toFixed(2)}`,
           'success'
         );
 
         toast({
-          title: "✅ Entrada Registrada!",
+          title: "Entrada Registrada!",
           description: `${totalQuantity} unidades de ${product.name} foram registradas em ${selectedBatches.length} lote(s).`,
           variant: "default",
         });
       } catch (error: any) {
         toast({
-          title: "❌ Erro ao Criar Lotes",
+          title: "Erro ao Criar Lotes",
           description: error.message || "Não foi possível criar os lotes. Tente novamente.",
           variant: "destructive",
         });
@@ -915,14 +932,14 @@ const Entradas = () => {
         const salePrice = data.unitCost * (1 + markup / 100);
         await updateProduct(data.productId, { price: salePrice });
         toast({
-          title: "💰 Preço de Venda Atualizado",
+          title: "Preço de Venda Atualizado",
           description: `Preço de venda do produto atualizado para R$ ${salePrice.toFixed(2)} (baseado no custo de R$ ${data.unitCost.toFixed(2)} + ${markup}% de markup)`,
           variant: "default",
         });
       } else if (markup === 0 || markup === undefined || markup === null) {
         // Aviso se markup não foi informado
         toast({
-          title: "⚠️ Markup não informado",
+          title: "Markup não informado",
           description: "O preço de venda não foi atualizado. Informe um percentual de markup para calcular o preço de venda automaticamente.",
           variant: "default",
         });
@@ -933,13 +950,13 @@ const Entradas = () => {
 
       // Adicionar notificação
       addNotification(
-        '📦 Nova Entrada Registrada',
+        'Nova Entrada Registrada',
         `Produto: ${product.name}\nQuantidade: ${data.quantity} unidades\nFornecedor: ${data.supplier}\nCusto: R$ ${data.unitCost.toFixed(2)}\nTotal: R$ ${(data.quantity * data.unitCost).toFixed(2)}`,
         'success'
       );
 
       toast({
-        title: "✅ Entrada Registrada!",
+        title: "Entrada Registrada!",
         description: `${data.quantity} unidades de ${product.name} foram registradas.`,
         variant: "default",
       });
@@ -1025,7 +1042,7 @@ const Entradas = () => {
       await deleteMovement(entryToDelete.id);
 
       toast({
-        title: "✅ Entrada Removida!",
+        title: "Entrada Removida!",
         description: `Entrada de ${entryToDelete.quantity} unidades foi removida e o estoque foi ajustado.`,
         variant: "default",
       });
@@ -1035,7 +1052,7 @@ const Entradas = () => {
       setEntryToDelete(null);
     } catch (error: any) {
       toast({
-        title: "❌ Erro ao Remover",
+        title: "Erro ao Remover",
         description: error.message || "Não foi possível remover a entrada.",
         variant: "destructive",
       });
@@ -1143,7 +1160,7 @@ const Entradas = () => {
         // Tratar campos especiais e formatação
         if (typeof field === 'string') {
           // Sempre envolver em aspas para garantir formatação correta
-          if (field.includes(',') || field.includes(';') || field.includes('\n') || field.includes('"') || field.includes('R$') || field.includes('📊') || field.includes('💰')) {
+          if (field.includes(',') || field.includes(';') || field.includes('\n') || field.includes('"') || field.includes('R$')) {
             return `"${field.replace(/"/g, '""')}"`; // Escapar aspas duplas
           }
           // Se o campo está vazio, retornar espaço
@@ -1193,7 +1210,7 @@ const Entradas = () => {
             <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
               <TrendingUp className="w-8 h-8 text-white" />
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">📦 Carregando Entradas...</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2 flex items-center gap-2"><Package className="h-5 w-5" /> Carregando Entradas...</h3>
             <p className="text-gray-600">Preparando dados de estoque</p>
           </div>
         </div>
@@ -1242,7 +1259,7 @@ const Entradas = () => {
             <DialogContent className="max-w-md sm:max-w-lg md:max-w-2xl max-h-[90vh] flex flex-col p-0">
               <DialogHeader className="space-y-2 pb-4 px-6 pt-6 border-b">
                 <DialogTitle className="text-base sm:text-xl font-bold text-neutral-900">
-                  ✨ Registrar Nova Compra
+                  <span className="flex items-center gap-2"><Sparkles className="h-4 w-4" /> Registrar Nova Compra</span>
                 </DialogTitle>
                 <DialogDescription className="text-sm text-neutral-600">
                   Preencha as informações detalhadas da compra de estoque para manter o controle preciso
@@ -1267,7 +1284,7 @@ const Entradas = () => {
                         return (
                           <FormItem className="space-y-3">
                             <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
-                              🏷️ Produto
+                              <span className="flex items-center gap-2"><Tag className="h-4 w-4" /> Produto</span>
                             </FormLabel>
                             <div className="relative">
                               {selectedProduct ? (
@@ -1368,7 +1385,7 @@ const Entradas = () => {
                       render={({ field }) => (
                         <FormItem className="space-y-3">
                           <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
-                            🏢 Fornecedor
+                            <span className="flex items-center gap-2"><Building2 className="h-4 w-4" /> Fornecedor</span>
                           </FormLabel>
                           <FormControl>
                             <div className="relative" ref={supplierInputRef}>
@@ -1459,7 +1476,7 @@ const Entradas = () => {
                         <Card className="border-2 border-indigo-200">
                           <CardHeader className="pb-3">
                             <CardTitle className="text-lg font-semibold text-gray-900">
-                              📦 Informações da Compra
+                              <span className="flex items-center gap-2"><Package className="h-4 w-4" /> Informações da Compra</span>
                             </CardTitle>
                             <p className="text-sm text-gray-600">{selectedProduct?.name || 'Produto selecionado'}</p>
                           </CardHeader>
@@ -1471,7 +1488,7 @@ const Entradas = () => {
                                 render={({ field }) => (
                                   <FormItem className="space-y-2">
                                     <FormLabel className="text-sm font-semibold text-neutral-700">
-                                      🔢 Quantidade *
+                                      <span className="flex items-center gap-2"><Hash className="h-4 w-4" /> Quantidade *</span>
                                     </FormLabel>
                                     <FormControl>
                                       <Input
@@ -1504,7 +1521,7 @@ const Entradas = () => {
                                 render={({ field }) => (
                                   <FormItem className="space-y-2">
                                     <FormLabel className="text-sm font-semibold text-neutral-700">
-                                      💰 Custo Unitário (R$)
+                                      <span className="flex items-center gap-2"><Coins className="h-4 w-4" /> Custo Unitário (R$)</span>
                                     </FormLabel>
                                     <FormControl>
                                       <Input
@@ -1538,7 +1555,7 @@ const Entradas = () => {
                                 render={({ field }) => (
                                   <FormItem className="space-y-2">
                                     <FormLabel className="text-sm font-semibold text-neutral-700">
-                                      💳 Forma de Pagamento
+                                      <span className="flex items-center gap-2"><CreditCard className="h-4 w-4" /> Forma de Pagamento</span>
                                     </FormLabel>
                                     <FormControl>
                                       <Select
@@ -1549,14 +1566,14 @@ const Entradas = () => {
                                           <SelectValue placeholder="Selecione a forma de pagamento" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                          <SelectItem value="avista">💵 À vista</SelectItem>
-                                          <SelectItem value="pix">📱 PIX</SelectItem>
-                                          <SelectItem value="debito">💳 Débito</SelectItem>
-                                          <SelectItem value="credito">💳 Crédito</SelectItem>
-                                          <SelectItem value="boleto">📄 Boleto</SelectItem>
-                                          <SelectItem value="cheque">📝 Cheque</SelectItem>
-                                          <SelectItem value="transferencia">🏦 Transferência</SelectItem>
-                                          <SelectItem value="parcelado">📊 Parcelado</SelectItem>
+                                          <SelectItem value="avista"><span className="flex items-center gap-2"><DollarSign className="h-4 w-4" /> À vista</span></SelectItem>
+                                          <SelectItem value="pix"><span className="flex items-center gap-2"><Smartphone className="h-4 w-4" /> PIX</span></SelectItem>
+                                          <SelectItem value="debito"><span className="flex items-center gap-2"><CreditCard className="h-4 w-4" /> Débito</span></SelectItem>
+                                          <SelectItem value="credito"><span className="flex items-center gap-2"><CreditCard className="h-4 w-4" /> Crédito</span></SelectItem>
+                                          <SelectItem value="boleto"><span className="flex items-center gap-2"><FileText className="h-4 w-4" /> Boleto</span></SelectItem>
+                                          <SelectItem value="cheque"><span className="flex items-center gap-2"><FileText className="h-4 w-4" /> Cheque</span></SelectItem>
+                                          <SelectItem value="transferencia"><span className="flex items-center gap-2"><Upload className="h-4 w-4" /> Transferência</span></SelectItem>
+                                          <SelectItem value="parcelado"><span className="flex items-center gap-2"><BarChart3 className="h-4 w-4" /> Parcelado</span></SelectItem>
                                         </SelectContent>
                                       </Select>
                                     </FormControl>
@@ -1571,7 +1588,7 @@ const Entradas = () => {
                                   render={({ field }) => (
                                     <FormItem className="space-y-2">
                                       <FormLabel className="text-sm font-semibold text-neutral-700">
-                                        📊 Quantidade de Parcelas
+                                        <span className="flex items-center gap-2"><BarChart3 className="h-4 w-4" /> Quantidade de Parcelas</span>
                                       </FormLabel>
                                       <FormControl>
                                         <Select 
@@ -1605,7 +1622,7 @@ const Entradas = () => {
                                 render={({ field }) => (
                                   <FormItem className="space-y-2">
                                     <FormLabel className="text-sm font-semibold text-neutral-700">
-                                      🏭 Data de Fabricação
+                                      <span className="flex items-center gap-2"><Factory className="h-4 w-4" /> Data de Fabricação</span>
                                     </FormLabel>
                                     <FormControl>
                                       <Input
@@ -1626,7 +1643,7 @@ const Entradas = () => {
                                 render={({ field }) => (
                                   <FormItem className="space-y-2">
                                     <FormLabel className="text-sm font-semibold text-neutral-700">
-                                      ⏰ Data de Validade
+                                      <span className="flex items-center gap-2"><Clock className="h-4 w-4" /> Data de Validade</span>
                                     </FormLabel>
                                     <FormControl>
                                       <Input
@@ -1665,7 +1682,7 @@ const Entradas = () => {
                                       : `Faltam ${humanizeDaysDiff(diffDays)}`;
                                   return (
                                     <div className={`inline-flex items-center px-3 py-2 rounded-lg border text-sm font-medium ${badgeClass}`}>
-                                      {isExpired ? '❌' : isToday ? '⚠️' : '⏳'}
+                                      {isExpired ? <X className="h-4 w-4 text-red-600" /> : isToday ? <AlertTriangle className="h-4 w-4 text-yellow-600" /> : <Clock className="h-4 w-4 text-blue-600" />}
                                       <span className="ml-2">{label}</span>
                                     </div>
                                   );
@@ -1680,7 +1697,7 @@ const Entradas = () => {
                               render={({ field }) => (
                                 <FormItem className="space-y-2">
                                   <FormLabel className="text-sm font-semibold text-neutral-700">
-                                    📈 Markup (%) - Percentual para calcular preço de venda
+                                    <span className="flex items-center gap-2"><TrendingUp className="h-4 w-4" /> Markup (%) - Percentual para calcular preço de venda</span>
                                   </FormLabel>
                                   <FormControl>
                                     <Input
@@ -1708,7 +1725,7 @@ const Entradas = () => {
                                   {form.watch('unitCost') > 0 && form.watch('markup') > 0 && (
                                     <div className="mt-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
                                       <p className="text-sm font-semibold text-emerald-700">
-                                        💰 Preço de Venda Calculado: R$ {(form.watch('unitCost') * (1 + (form.watch('markup') || 0) / 100)).toFixed(2)}
+                                        <span className="flex items-center gap-2"><Coins className="h-4 w-4" /> Preço de Venda Calculado: R$ {(form.watch('unitCost') * (1 + (form.watch('markup') || 0) / 100)).toFixed(2)}</span>
                                       </p>
                                       <p className="text-xs text-emerald-600 mt-1">
                                         Custo: R$ {form.watch('unitCost').toFixed(2)} + {form.watch('markup')}% = R$ {(form.watch('unitCost') * (1 + (form.watch('markup') || 0) / 100)).toFixed(2)}
@@ -1722,14 +1739,14 @@ const Entradas = () => {
                             {form.watch('quantity') > 0 && form.watch('unitCost') > 0 && (
                               <div className="pt-3 border-t border-indigo-200 space-y-2">
                                 <div className="flex items-center justify-between">
-                                  <span className="text-sm font-medium text-gray-900">💰 Valor Total:</span>
+                                  <span className="text-sm font-medium text-gray-900 flex items-center gap-2"><Coins className="h-4 w-4" /> Valor Total:</span>
                                   <span className="text-lg font-bold text-emerald-600">
                                     R$ {(form.watch('quantity') * form.watch('unitCost')).toFixed(2)}
                                   </span>
                                 </div>
                                 {form.watch('markup') > 0 && (
                                   <div className="flex items-center justify-between">
-                                    <span className="text-sm font-medium text-gray-900">💰 Preço de Venda Unitário:</span>
+                                    <span className="text-sm font-medium text-gray-900 flex items-center gap-2"><Coins className="h-4 w-4" /> Preço de Venda Unitário:</span>
                                     <span className="text-base font-bold text-indigo-600">
                                       R$ {(form.watch('unitCost') * (1 + form.watch('markup') / 100)).toFixed(2)}
                                     </span>
@@ -1778,7 +1795,7 @@ const Entradas = () => {
                                     <div className="space-y-2">
                                       <div className="flex items-center justify-between gap-2 h-7">
                                         <Label htmlFor={`batch-${index}`} className="text-sm font-medium">
-                                          📦 Número do Lote
+                                          <span className="flex items-center gap-2"><Package className="h-4 w-4" /> Número do Lote</span>
                                         </Label>
                                         <span className="h-7" />
                                       </div>
@@ -1866,7 +1883,7 @@ const Entradas = () => {
                                             });
                                             
                                             toast({
-                                              title: "✅ Lote mesclado",
+                                              title: "Lote mesclado",
                                               description: `A quantidade foi somada ao lote "${newBatchNumber}" existente. Total: ${totalQuantity} unidades.`,
                                               duration: 3000,
                                             });
@@ -1913,7 +1930,7 @@ const Entradas = () => {
                                                     ...prev,
                                                     [index]: {
                                                       found: true,
-                                                      message: `✅ Lote localizado, adicionar no lote selecionado (Quantidade atual: ${existingBatch.quantity})`
+                                                      message: `Lote localizado, adicionar no lote selecionado (Quantidade atual: ${existingBatch.quantity})`
                                                     }
                                                   }));
                                                 } else {
@@ -1922,7 +1939,7 @@ const Entradas = () => {
                                                     ...prev,
                                                     [index]: {
                                                       found: true,
-                                                      message: `✅ Lote localizado, adicionar no lote selecionado`
+                                                      message: `Lote localizado, adicionar no lote selecionado`
                                                     }
                                                   }));
                                                 }
@@ -1937,7 +1954,7 @@ const Entradas = () => {
                                                   ...prev,
                                                   [index]: {
                                                     found: false,
-                                                    message: `⚠️ Lote não encontrado. Novo lote será criado.`
+                                                    message: `Lote não encontrado. Novo lote será criado.`
                                                   }
                                                 }));
                                               }
@@ -1977,7 +1994,7 @@ const Entradas = () => {
                                         </p>
                                       ) : (
                                         <p className="text-xs text-gray-500">
-                                          💡 Informe o número do lote. O sistema verificará se já existe.
+                                          <span className="flex items-center gap-2"><Info className="h-4 w-4" /> Informe o número do lote. O sistema verificará se já existe.</span>
                                         </p>
                                       )}
                                     </div>
@@ -1985,7 +2002,7 @@ const Entradas = () => {
                                     <div className="space-y-2">
                                       <div className="flex items-center justify-between gap-2 h-7">
                                         <Label htmlFor={`quantity-${index}`} className="text-sm font-medium">
-                                          🔢 Quantidade
+                                          <span className="flex items-center gap-2"><Hash className="h-4 w-4" /> Quantidade</span>
                                         </Label>
                                         <span className="h-7" />
                                       </div>
@@ -2034,10 +2051,10 @@ const Entradas = () => {
                                             if (intValue > MAX_SAFE_QUANTITY) {
                                               setQuantityErrors(prev => ({
                                                 ...prev,
-                                                [index]: `❌ Quantidade não permitida! O valor máximo permitido é ${MAX_SAFE_QUANTITY.toLocaleString('pt-BR')} unidades.`
+                                                [index]: `Quantidade não permitida! O valor máximo permitido é ${MAX_SAFE_QUANTITY.toLocaleString('pt-BR')} unidades.`
                                               }));
                                               toast({
-                                                title: "⚠️ Quantidade Inválida",
+                                                title: "Quantidade Inválida",
                                                 description: `A quantidade ${intValue.toLocaleString('pt-BR')} excede o limite máximo permitido de ${MAX_SAFE_QUANTITY.toLocaleString('pt-BR')} unidades.`,
                                                 variant: "destructive",
                                                 duration: 3000,
@@ -2051,10 +2068,10 @@ const Entradas = () => {
                                               if (totalQuantity > maxStock) {
                                                 setQuantityErrors(prev => ({
                                                   ...prev,
-                                                  [index]: `❌ Quantidade não permitida! O total de ${totalQuantity.toLocaleString('pt-BR')} unidades excede o estoque máximo de ${maxStock.toLocaleString('pt-BR')} unidades para este produto.`
+                                                  [index]: `Quantidade não permitida! O total de ${totalQuantity.toLocaleString('pt-BR')} unidades excede o estoque máximo de ${maxStock.toLocaleString('pt-BR')} unidades para este produto.`
                                                 }));
                                                 toast({
-                                                  title: "⚠️ Quantidade Excede Limite",
+                                                  title: "Quantidade Excede Limite",
                                                   description: `O total de ${totalQuantity.toLocaleString('pt-BR')} unidades excede o estoque máximo de ${maxStock.toLocaleString('pt-BR')} unidades para este produto.`,
                                                   variant: "destructive",
                                                   duration: 3000,
@@ -2074,7 +2091,7 @@ const Entradas = () => {
                                         </p>
                                       ) : (
                                         <p className="text-xs text-gray-500">
-                                          💡 Informe a quantidade de unidades
+                                          <span className="flex items-center gap-2"><Info className="h-4 w-4" /> Informe a quantidade de unidades</span>
                                         </p>
                                       )}
                                     </div>
@@ -2085,7 +2102,7 @@ const Entradas = () => {
                                     {/* Custo Unitário */}
                                     <div className="space-y-2">
                                       <Label htmlFor={`unitCost-${index}`} className="text-sm font-medium">
-                                        💰 Custo Unitário (R$)
+                                        <span className="flex items-center gap-2"><Coins className="h-4 w-4" /> Custo Unitário (R$)</span>
                                       </Label>
                                       <Input
                                         type="number"
@@ -2119,7 +2136,7 @@ const Entradas = () => {
                                     {/* Data de Fabricação */}
                                     <div className="space-y-2">
                                       <Label htmlFor={`manufacture-${index}`} className="text-sm font-medium">
-                                        🏭 Data de Fabricação
+                                        <span className="flex items-center gap-2"><Factory className="h-4 w-4" /> Data de Fabricação</span>
                                       </Label>
                                       <Input
                                         id={`manufacture-${index}`}
@@ -2169,14 +2186,14 @@ const Entradas = () => {
                                         maxLength={10}
                                       />
                                       <p className="text-xs text-gray-500">
-                                        {existingBatch ? '✅ Data do lote existente' : '💡 DD/MM/AAAA'}
+                                        {existingBatch ? <span className="flex items-center gap-2"><CheckCircle className="h-4 w-4 text-green-600" /> Data do lote existente</span> : <span className="flex items-center gap-2"><Info className="h-4 w-4" /> DD/MM/AAAA</span>}
                                       </p>
                                     </div>
 
                                     {/* Data de Validade */}
                                     <div className="space-y-2">
                                       <Label htmlFor={`expiry-${index}`} className="text-sm font-medium">
-                                        ⏰ Data de Validade
+                                        <span className="flex items-center gap-2"><Clock className="h-4 w-4" /> Data de Validade</span>
                                       </Label>
                                       <Input
                                         id={`expiry-${index}`}
@@ -2233,7 +2250,7 @@ const Entradas = () => {
                                         maxLength={10}
                                       />
                                       <p className="text-xs text-gray-500">
-                                        {existingBatch ? '✅ Data do lote existente' : '💡 DD/MM/AAAA'}
+                                        {existingBatch ? <span className="flex items-center gap-2"><CheckCircle className="h-4 w-4 text-green-600" /> Data do lote existente</span> : <span className="flex items-center gap-2"><Info className="h-4 w-4" /> DD/MM/AAAA</span>}
                                       </p>
                                     </div>
                                   </div>
@@ -2259,7 +2276,7 @@ const Entradas = () => {
                               <CardContent className="p-4 space-y-2">
                                 <div className="flex items-center justify-between">
                                   <span className="text-sm font-medium text-gray-900">
-                                    📊 Total a Entrar:
+                                    <span className="flex items-center gap-2"><BarChart3 className="h-4 w-4" /> Total a Entrar:</span>
                                   </span>
                                   <span className="text-lg font-bold text-indigo-600">
                                     {getTotalBatchQuantity()} unidades
@@ -2267,7 +2284,7 @@ const Entradas = () => {
                                 </div>
                                 <div className="flex items-center justify-between pt-2 border-t border-indigo-200">
                                   <span className="text-sm font-medium text-gray-900">
-                                    💰 Valor Total:
+                                    <span className="flex items-center gap-2"><Coins className="h-4 w-4" /> Valor Total:</span>
                                   </span>
                                   <span className="text-lg font-bold text-emerald-600">
                                     R$ {selectedBatches.reduce((total, batch) => total + (batch.quantity * (batch.unitCost || 0)), 0).toFixed(2)}
@@ -2285,7 +2302,7 @@ const Entradas = () => {
                                       {markup > 0 && averageCost > 0 && (
                                         <div className="flex items-center justify-between pt-2 border-t border-indigo-200">
                                           <span className="text-sm font-medium text-gray-900">
-                                            💰 Custo Médio Unitário:
+                                            <span className="flex items-center gap-2"><Coins className="h-4 w-4" /> Custo Médio Unitário:</span>
                                           </span>
                                           <span className="text-base font-semibold text-indigo-600">
                                             R$ {averageCost.toFixed(2)}
@@ -2295,7 +2312,7 @@ const Entradas = () => {
                                       {salePrice > 0 && (
                                         <div className="flex items-center justify-between pt-2 border-t border-indigo-200">
                                           <span className="text-sm font-medium text-gray-900">
-                                            💰 Preço de Venda Unitário:
+                                            <span className="flex items-center gap-2"><Coins className="h-4 w-4" /> Preço de Venda Unitário:</span>
                                           </span>
                                           <span className="text-base font-bold text-emerald-600">
                                             R$ {salePrice.toFixed(2)}
@@ -2312,7 +2329,7 @@ const Entradas = () => {
                             <Card className="border-2 border-indigo-200">
                               <CardHeader className="pb-3">
                                 <CardTitle className="text-base font-semibold text-gray-900">
-                                  📈 Configuração de Preço de Venda
+                                  <span className="flex items-center gap-2"><TrendingUp className="h-4 w-4" /> Configuração de Preço de Venda</span>
                                 </CardTitle>
                               </CardHeader>
                               <CardContent>
@@ -2322,7 +2339,7 @@ const Entradas = () => {
                                   render={({ field }) => (
                                     <FormItem className="space-y-2">
                                       <FormLabel className="text-sm font-semibold text-neutral-700">
-                                        📈 Markup (%) - Percentual para calcular preço de venda
+                                        <span className="flex items-center gap-2"><TrendingUp className="h-4 w-4" /> Markup (%) - Percentual para calcular preço de venda</span>
                                       </FormLabel>
                                       <FormControl>
                                         <Input
@@ -2357,7 +2374,7 @@ const Entradas = () => {
                                         return (
                                           markup > 0 && averageCost > 0 && (
                                             <p className="text-xs text-emerald-600 font-medium mt-2">
-                                              💰 Preço de Venda Calculado: R$ {salePrice.toFixed(2)} (Custo médio: R$ {averageCost.toFixed(2)} + {markup}%)
+                                              <span className="flex items-center gap-2"><Coins className="h-4 w-4" /> Preço de Venda Calculado: R$ {salePrice.toFixed(2)} (Custo médio: R$ {averageCost.toFixed(2)} + {markup}%)</span>
                                             </p>
                                           )
                                         );
@@ -2386,14 +2403,14 @@ const Entradas = () => {
                                         <SelectValue placeholder="Selecione a forma de pagamento" />
                                       </SelectTrigger>
                                       <SelectContent>
-                                        <SelectItem value="avista">💵 À vista</SelectItem>
-                                        <SelectItem value="pix">📱 PIX</SelectItem>
-                                        <SelectItem value="debito">💳 Débito</SelectItem>
-                                        <SelectItem value="credito">💳 Crédito</SelectItem>
-                                        <SelectItem value="boleto">📄 Boleto</SelectItem>
-                                        <SelectItem value="cheque">📝 Cheque</SelectItem>
-                                        <SelectItem value="transferencia">🏦 Transferência</SelectItem>
-                                        <SelectItem value="parcelado">📊 Parcelado</SelectItem>
+                                        <SelectItem value="avista"><span className="flex items-center gap-2"><DollarSign className="h-4 w-4" /> À vista</span></SelectItem>
+                                        <SelectItem value="pix"><span className="flex items-center gap-2"><Smartphone className="h-4 w-4" /> PIX</span></SelectItem>
+                                        <SelectItem value="debito"><span className="flex items-center gap-2"><CreditCard className="h-4 w-4" /> Débito</span></SelectItem>
+                                        <SelectItem value="credito"><span className="flex items-center gap-2"><CreditCard className="h-4 w-4" /> Crédito</span></SelectItem>
+                                        <SelectItem value="boleto"><span className="flex items-center gap-2"><FileText className="h-4 w-4" /> Boleto</span></SelectItem>
+                                        <SelectItem value="cheque"><span className="flex items-center gap-2"><FileText className="h-4 w-4" /> Cheque</span></SelectItem>
+                                        <SelectItem value="transferencia"><span className="flex items-center gap-2"><Upload className="h-4 w-4" /> Transferência</span></SelectItem>
+                                        <SelectItem value="parcelado"><span className="flex items-center gap-2"><BarChart3 className="h-4 w-4" /> Parcelado</span></SelectItem>
                                       </SelectContent>
                                     </Select>
                                   </FormControl>
@@ -2408,7 +2425,7 @@ const Entradas = () => {
                                 render={({ field }) => (
                                   <FormItem className="space-y-2">
                                     <FormLabel className="text-sm font-semibold text-neutral-700">
-                                      📊 Quantidade de Parcelas
+                                      <span className="flex items-center gap-2"><BarChart3 className="h-4 w-4" /> Quantidade de Parcelas</span>
                                     </FormLabel>
                                     <FormControl>
                                       <Select 
@@ -2446,7 +2463,7 @@ const Entradas = () => {
                     render={({ field }) => (
                       <FormItem className="space-y-3">
                         <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
-                          📅 Data da Compra
+                          <span className="flex items-center gap-2"><Calendar className="h-4 w-4" /> Data da Compra</span>
                         </FormLabel>
                         <FormControl>
                           <Input 
@@ -2469,7 +2486,7 @@ const Entradas = () => {
                     render={({ field }) => (
                       <FormItem className="space-y-3">
                         <FormLabel className="text-sm font-semibold text-neutral-700">
-                          📝 Observações
+                          <span className="flex items-center gap-2"><FileText className="h-4 w-4" /> Observações</span>
                         </FormLabel>
                         <FormControl>
                           <Textarea 
@@ -2497,7 +2514,7 @@ const Entradas = () => {
                       }}
                       className="!flex !w-full sm:!w-auto border-2 border-neutral-300 text-neutral-700 hover:bg-neutral-50 h-9 text-xs sm:text-sm !flex-shrink-0 whitespace-nowrap min-w-[90px] !items-center !justify-center"
                     >
-                      ❌ Cancelar
+                      <span className="flex items-center gap-2"><X className="h-4 w-4" /> Cancelar</span>
                     </Button>
                     
                     {/* Botão Registrar Compra - Sempre visível */}
@@ -2505,7 +2522,7 @@ const Entradas = () => {
                       type="submit"
                       className="!flex !w-full sm:!w-auto px-3 sm:px-4 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white shadow-lg hover:shadow-xl transition-all duration-200 h-9 text-xs sm:text-sm !flex-shrink-0 whitespace-nowrap min-w-[140px] !items-center !justify-center"
                     >
-                      ✨ Registrar Compra
+                      <span className="flex items-center gap-2"><Sparkles className="h-4 w-4" /> Registrar Compra</span>
                     </Button>
                   </div>
                 </form>
@@ -2527,7 +2544,7 @@ const Entradas = () => {
               <div className="text-xs sm:text-sm opacity-90">Total</div>
             </div>
           </div>
-          <h3 className="text-base sm:text-lg font-semibold mb-2">📈 Total de Compras</h3>
+          <h3 className="text-base sm:text-lg font-semibold mb-2 flex items-center gap-2"><TrendingUp className="h-4 w-4" /> Total de Compras</h3>
           <p className="text-xs sm:text-sm opacity-80">Registros no sistema</p>
         </div>
         
@@ -2541,7 +2558,7 @@ const Entradas = () => {
               <div className="text-xs sm:text-sm opacity-90">Valor</div>
             </div>
           </div>
-          <h3 className="text-base sm:text-lg font-semibold mb-2">💰 Valor Total</h3>
+          <h3 className="text-base sm:text-lg font-semibold mb-2 flex items-center gap-2"><Coins className="h-4 w-4" /> Valor Total</h3>
           <p className="text-xs sm:text-sm opacity-80">Investimento total</p>
         </div>
         
@@ -2555,7 +2572,7 @@ const Entradas = () => {
               <div className="text-xs sm:text-sm opacity-90">Mês</div>
             </div>
           </div>
-          <h3 className="text-base sm:text-lg font-semibold mb-2">📅 Este Mês</h3>
+          <h3 className="text-base sm:text-lg font-semibold mb-2 flex items-center gap-2"><Calendar className="h-4 w-4" /> Este Mês</h3>
           <p className="text-xs sm:text-sm opacity-80">Compras do período</p>
         </div>
       </div>
@@ -2597,14 +2614,20 @@ const Entradas = () => {
       </Card>
 
       {/* Tabela de Entradas com Design Elegante */}
-      <Card className="bg-white border-0 shadow-xl rounded-3xl overflow-hidden">
-        <CardHeader className="bg-gradient-to-r from-neutral-50 to-neutral-100 border-b border-neutral-200">
-          <CardTitle className="text-2xl font-bold text-neutral-900">
-            📋 Lista de Compras
-          </CardTitle>
+      <Card className="shadow-lg">
+        <CardHeader className="bg-gradient-to-r from-indigo-50 to-purple-50">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-blue-600" />
+                Lista de Compras
+              </CardTitle>
+              <CardDescription>Gerencie suas compras cadastradas</CardDescription>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-hidden">
+          <div className="overflow-x-auto">
             <Table className="w-full">
               <TableHeader className="bg-neutral-50">
                 <TableRow className="border-neutral-200 hover:bg-neutral-100">
@@ -2726,9 +2749,9 @@ const Entradas = () => {
                           }
                           className="font-medium px-2 sm:px-4 py-1 sm:py-2 rounded-full text-xs sm:text-sm"
                         >
-                          {entry.status === "aprovado" && "✅ Aprovado"}
-                          {entry.status === "pendente" && "⏳ Pendente"}
-                          {entry.status === "cancelado" && "❌ Cancelado"}
+                          {entry.status === "aprovado" && <span className="flex items-center gap-1"><CheckCircle className="h-4 w-4 text-green-600" /> Aprovado</span>}
+                          {entry.status === "pendente" && <span className="flex items-center gap-1"><Clock className="h-4 w-4 text-yellow-600" /> Pendente</span>}
+                          {entry.status === "cancelado" && <span className="flex items-center gap-1"><X className="h-4 w-4 text-red-600" /> Cancelado</span>}
                         </Badge>
                       </TableCell>
                       <TableCell className="py-4 sm:py-6 px-2 sm:px-4 text-right">
@@ -2784,7 +2807,7 @@ const Entradas = () => {
                   <p><strong>Fornecedor:</strong> {entryToDelete.supplier}</p>
                   <p><strong>Custo Total:</strong> R$ {entryToDelete.totalCost.toFixed(2)}</p>
                   <p className="text-xs text-red-700 mt-2">
-                    ⚠️ O estoque será <strong>reduzido</strong> em {entryToDelete.quantity} unidades
+                    <span className="flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> O estoque será <strong>reduzido</strong> em {entryToDelete.quantity} unidades</span>
                   </p>
                 </div>
               </div>
@@ -2834,7 +2857,7 @@ const Entradas = () => {
         <DialogContent className="max-w-2xl sm:max-w-3xl bg-white rounded-xl shadow-lg border border-gray-200">
           <DialogHeader className="space-y-2 pb-4 sm:pb-6">
             <DialogTitle className="text-base sm:text-2xl font-bold text-neutral-900">
-              ✏️ Editar Compra
+              <span className="flex items-center gap-2"><Edit className="h-4 w-4" /> Editar Compra</span>
             </DialogTitle>
             <DialogDescription className="text-sm sm:text-base text-neutral-600">
               Atualize as informações da compra de estoque selecionada
@@ -2851,7 +2874,7 @@ const Entradas = () => {
                   render={({ field }) => (
                     <FormItem className="space-y-3">
                       <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
-                        🏷️ Produto
+                        <span className="flex items-center gap-2"><Tag className="h-4 w-4" /> Produto</span>
                       </FormLabel>
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
@@ -2878,7 +2901,7 @@ const Entradas = () => {
                   render={({ field }) => (
                     <FormItem className="space-y-3">
                       <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
-                        🏢 Fornecedor
+                        <span className="flex items-center gap-2"><Building2 className="h-4 w-4" /> Fornecedor</span>
                       </FormLabel>
                       <FormControl>
                         <div className="relative" ref={supplierInputRef}>
@@ -2968,7 +2991,7 @@ const Entradas = () => {
                     return (
                       <FormItem className="space-y-3">
                         <FormLabel className="text-sm font-semibold text-neutral-700">
-                          📊 Quantidade
+                          <span className="flex items-center gap-2"><BarChart3 className="h-4 w-4" /> Quantidade</span>
                         </FormLabel>
                         <FormControl>
                           <Input 
@@ -3024,7 +3047,7 @@ const Entradas = () => {
                     return (
                       <FormItem className="space-y-3">
                         <FormLabel className="text-sm font-semibold text-neutral-700">
-                          💰 Custo Unitário
+                          <span className="flex items-center gap-2"><Coins className="h-4 w-4" /> Custo Unitário</span>
                         </FormLabel>
                         <FormControl>
                           <Input 
@@ -3091,7 +3114,7 @@ const Entradas = () => {
                   render={({ field }) => (
                     <FormItem className="space-y-3">
                       <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
-                        📅 Data da Compra
+                        <span className="flex items-center gap-2"><Calendar className="h-4 w-4" /> Data da Compra</span>
                       </FormLabel>
                       <FormControl>
                         <Input 
@@ -3113,7 +3136,7 @@ const Entradas = () => {
                   render={({ field }) => (
                     <FormItem className="space-y-3">
                       <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
-                        🎯 Status
+                        <span className="flex items-center gap-2"><Target className="h-4 w-4" /> Status</span>
                       </FormLabel>
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
@@ -3122,9 +3145,9 @@ const Entradas = () => {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="pendente">⏳ Pendente</SelectItem>
-                          <SelectItem value="aprovado">✅ Aprovado</SelectItem>
-                          <SelectItem value="cancelado">❌ Cancelado</SelectItem>
+                          <SelectItem value="pendente"><span className="flex items-center gap-2"><Clock className="h-4 w-4" /> Pendente</span></SelectItem>
+                          <SelectItem value="aprovado"><span className="flex items-center gap-2"><CheckCircle className="h-4 w-4 text-green-600" /> Aprovado</span></SelectItem>
+                          <SelectItem value="cancelado"><span className="flex items-center gap-2"><X className="h-4 w-4 text-red-600" /> Cancelado</span></SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -3140,7 +3163,7 @@ const Entradas = () => {
                 render={({ field }) => (
                   <FormItem className="space-y-2">
                     <FormLabel className="text-sm font-semibold text-neutral-700">
-                      📝 Observações
+                      <span className="flex items-center gap-2"><FileText className="h-4 w-4" /> Observações</span>
                     </FormLabel>
                     <FormControl>
                       <Input 

@@ -17,7 +17,8 @@ import {
   User as User2,
   UserCircle,
   Search,
-  Download
+  Download,
+  FileText
 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
@@ -596,7 +597,10 @@ const Clientes = () => {
         <CardHeader className="bg-gradient-to-r from-indigo-50 to-purple-50">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <div>
-              <CardTitle>Lista de Clientes</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-blue-600" />
+                Lista de Clientes
+              </CardTitle>
               <CardDescription>Gerencie seus clientes cadastrados</CardDescription>
             </div>
             <Button

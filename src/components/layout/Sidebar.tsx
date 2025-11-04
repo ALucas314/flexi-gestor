@@ -212,15 +212,17 @@ export const Sidebar = ({ className, variant = 'overlay', onNavigate }: SidebarP
                   : "text-gray-800 font-semibold hover:text-indigo-700 hover:bg-indigo-50 hover:shadow-md"
               )}
             >
-              <div className={cn(
-                "flex items-center justify-center rounded-lg transition-all duration-200",
-                isMobile ? "w-7 h-7" : "w-8 h-8",
-                isActive
-                  ? "bg-white/20 text-white"
-                  : "bg-indigo-100 text-indigo-700 group-hover:bg-indigo-200 group-hover:text-indigo-800"
-              )}>
-                <item.icon className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'} stroke-[2.5] relative -top-0.5`} />
-              </div>
+              {item.icon && (
+                <div className={cn(
+                  "flex items-center justify-center rounded-lg transition-all duration-200",
+                  isMobile ? "w-7 h-7" : "w-8 h-8",
+                  isActive
+                    ? "bg-white/20 text-white"
+                    : "bg-indigo-100 text-indigo-700 group-hover:bg-indigo-200 group-hover:text-indigo-800"
+                )}>
+                  <item.icon className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'} stroke-[2.5] relative -top-0.5`} />
+                </div>
+              )}
               
               <div className="flex-1 min-w-0">
                 <div className={`${isMobile ? 'text-sm' : 'font-medium'}`}>{item.label}</div>

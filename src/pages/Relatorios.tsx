@@ -16,7 +16,8 @@ import {
   AlertTriangle,
   FileText,
   PieChart,
-  Activity
+  Activity,
+  CheckCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,7 +36,7 @@ const Relatorios = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  // 📊 Filtrar movimentações por período
+  // Filtrar movimentações por período
   const getMovementsByPeriod = () => {
     const now = new Date();
     if (period === "todos") return movements;
@@ -60,7 +61,7 @@ const Relatorios = () => {
 
   const periodMovements = getMovementsByPeriod();
   
-  // 📈 Cálculos de KPIs
+  // Cálculos de KPIs
   const totalProducts = products.length;
   const totalStockValue = products.reduce((sum, p) => sum + (p.price * p.stock), 0);
   const lowStockProducts = products.filter(p => p.stock <= p.minStock);
@@ -79,7 +80,7 @@ const Relatorios = () => {
     return `${day}/${month}/${year}`;
   };
 
-  // 📤 Exportar para CSV/Excel EM FORMATO DE TABELA PROFISSIONAL
+  // Exportar para CSV/Excel EM FORMATO DE TABELA PROFISSIONAL
   const exportToCSV = () => {
     const currentDate = new Date();
     const periodText = period === 'todos' ? 'TODOS OS PERIODOS' : 
@@ -117,7 +118,7 @@ const Relatorios = () => {
       ['ID', 'Tipo', 'Data', 'Produto', 'Quantidade', 'Preco Unit.', 'Valor Total', 'Descricao']
     ];
 
-    // 📝 Adicionar detalhes das movimentações com formatação de tabela
+    // Adicionar detalhes das movimentações com formatação de tabela
     periodMovements.forEach((movement, index) => {
       const product = products.find(p => p.id === movement.productId);
       const formattedDate = formatDateForExcel(movement.date);
@@ -151,8 +152,8 @@ const Relatorios = () => {
       ]);
     });
 
-    // 🏆 TOP PRODUTOS MAIS VALIOSOS EM TABELA
-    csvRows.push([''], ['🏆 TOP 5 PRODUTOS MAIS VALIOSOS', '', '', '', '', '', '']);
+    // TOP PRODUTOS MAIS VALIOSOS EM TABELA
+    csvRows.push([''], ['TOP 5 PRODUTOS MAIS VALIOSOS', '', '', '', '', '', '']);
     csvRows.push(['Posição', 'Nome do Produto', 'Categoria', 'Estoque Atual', 'Preço Unit. (R$)', 'Valor Total (R$)', 'Participação', 'Status']);
     
     const sortedProducts = products.sort((a, b) => (b.price * b.stock) - (a.price * a.stock));
@@ -170,12 +171,12 @@ const Relatorios = () => {
         `R$ ${p.price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
         `R$ ${productValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
         `${participation}%`,
-        p.stock > p.minStock ? '✅ OK' : '⚠️ Baixo'
+        p.stock > p.minStock ? 'OK' : 'Baixo'
       ]);
     });
 
-    // 📊 ANÁLISE COMPARATIVA EM TABELA
-    csvRows.push([''], ['📊 ANÁLISE COMPARATIVA - ENTRADAS VS SAÍDAS', '', '', '', '', '', '']);
+    // ANÁLISE COMPARATIVA EM TABELA
+    csvRows.push([''], ['ANÁLISE COMPARATIVA - ENTRADAS VS SAÍDAS', '', '', '', '', '', '']);
     csvRows.push(['Métrica', 'Entradas', 'Saídas', 'Diferença', 'Percentual Entradas', 'Percentual Saídas', 'Status']);
     csvRows.push([
       'Quantidade de Movimentações',
@@ -184,7 +185,7 @@ const Relatorios = () => {
       (entradaMovements.length - saidaMovements.length).toString(),
       `${entradaMovements.length > 0 ? ((entradaMovements.length / (entradaMovements.length + saidaMovements.length)) * 100).toFixed(1) : '0,0'}%`,
       `${saidaMovements.length > 0 ? ((saidaMovements.length / (entradaMovements.length + saidaMovements.length)) * 100).toFixed(1) : '0,0'}%`,
-      entradaMovements.length > saidaMovements.length ? '📈 Mais Entradas' : saidaMovements.length > entradaMovements.length ? '📉 Mais Saídas' : '⚖️ Equilibrado'
+      entradaMovements.length > saidaMovements.length ? 'Mais Entradas' : saidaMovements.length > entradaMovements.length ? 'Mais Saídas' : 'Equilibrado'
     ]);
     csvRows.push([
       'Valor Total (R$)',
@@ -193,11 +194,11 @@ const Relatorios = () => {
       `R$ ${(totalEntradas - totalSaidas).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
       `${totalEntradas > 0 ? ((totalEntradas / (totalEntradas + totalSaidas)) * 100).toFixed(1) : '0,0'}%`,
       `${totalSaidas > 0 ? ((totalSaidas / (totalEntradas + totalSaidas)) * 100).toFixed(1) : '0,0'}%`,
-      totalEntradas > totalSaidas ? '📈 Mais Investimento' : totalSaidas > totalEntradas ? '📉 Mais Vendas' : '⚖️ Equilibrado'
+      totalEntradas > totalSaidas ? 'Mais Investimento' : totalSaidas > totalEntradas ? 'Mais Vendas' : 'Equilibrado'
     ]);
 
-    // 🎯 RODAPÉ CORPORATIVO EM TABELA
-    csvRows.push([''], ['🎯 INFORMAÇÕES DO SISTEMA', '', '', '', '', '', '']);
+    // RODAPÉ CORPORATIVO EM TABELA
+    csvRows.push([''], ['INFORMAÇÕES DO SISTEMA', '', '', '', '', '', '']);
     csvRows.push(['Campo', 'Valor', '', '', '', '', '']);
     csvRows.push(['Sistema', 'Flexi Gestor v1.0 - Business Intelligence', '', '', '', '', '']);
     csvRows.push(['Tecnologia', 'React + Prisma + SQLite + Express', '', '', '', '', '']);
@@ -205,11 +206,11 @@ const Relatorios = () => {
     csvRows.push(['Exportado em', currentDate.toLocaleString('pt-BR'), '', '', '', '', '']);
     csvRows.push(['Formato', 'CSV/Excel Compatível', '', '', '', '', '']);
     csvRows.push(['Codificação', 'UTF-8 com BOM', '', '', '', '', '']);
-    csvRows.push([''], ['✅ RELATÓRIO GERADO AUTOMATICAMENTE PELO SISTEMA FLEXI GESTOR', '', '', '', '', '', '']);
-    csvRows.push(['📧 Para suporte técnico: contato@flexigestor.com', '', '', '', '', '', '']);
-    csvRows.push(['🌐 Sistema desenvolvido com tecnologia React + Prisma', '', '', '', '', '', '']);
+    csvRows.push([''], ['RELATÓRIO GERADO AUTOMATICAMENTE PELO SISTEMA FLEXI GESTOR', '', '', '', '', '', '']);
+    csvRows.push(['Para suporte técnico: contato@flexigestor.com', '', '', '', '', '', '']);
+    csvRows.push(['Sistema desenvolvido com tecnologia React + Prisma', '', '', '', '', '', '']);
 
-    // 🎨 Formatação final com separadores visuais para tabelas
+    // Formatação final com separadores visuais para tabelas
     const csvContent = '\ufeff' + csvRows.map((row, index) => {
       // Adicionar separadores visuais para seções importantes
       if (index === 0) {
@@ -247,7 +248,7 @@ const Relatorios = () => {
         // Tratar campos especiais e formatação
         if (typeof field === 'string') {
           // Sempre envolver em aspas para garantir formatação correta
-          if (field.includes(',') || field.includes(';') || field.includes('\n') || field.includes('"') || field.includes('R$') || field.includes('📊') || field.includes('💰')) {
+          if (field.includes(',') || field.includes(';') || field.includes('\n') || field.includes('"') || field.includes('R$')) {
             return `"${field.replace(/"/g, '""')}"`; // Escapar aspas duplas
           }
           // Se o campo está vazio, retornar espaço
@@ -274,7 +275,7 @@ const Relatorios = () => {
           <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
             <BarChart3 className="w-8 h-8 text-white" />
           </div>
-          <h3 className="text-lg font-semibold">📊 Carregando Relatórios...</h3>
+          <h3 className="text-lg font-semibold flex items-center gap-2"><BarChart3 className="h-5 w-5" /> Carregando Relatórios...</h3>
         </div>
       </main>
     );
@@ -311,10 +312,10 @@ const Relatorios = () => {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="todos">📊 Todos</SelectItem>
-                <SelectItem value="mes">📅 Este Mês</SelectItem>
-                <SelectItem value="trimestre">📈 Trimestre</SelectItem>
-                <SelectItem value="ano">📊 Este Ano</SelectItem>
+                <SelectItem value="todos"><span className="flex items-center gap-2"><BarChart3 className="h-4 w-4" /> Todos</span></SelectItem>
+                <SelectItem value="mes"><span className="flex items-center gap-2"><Calendar className="h-4 w-4" /> Este Mês</span></SelectItem>
+                <SelectItem value="trimestre"><span className="flex items-center gap-2"><TrendingUp className="h-4 w-4" /> Trimestre</span></SelectItem>
+                <SelectItem value="ano"><span className="flex items-center gap-2"><BarChart3 className="h-4 w-4" /> Este Ano</span></SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -334,7 +335,7 @@ const Relatorios = () => {
               <div className="text-xs sm:text-sm opacity-90">Total</div>
             </div>
           </div>
-          <h3 className="text-base sm:text-lg font-semibold mb-2">📦 Total Produtos</h3>
+          <h3 className="text-base sm:text-lg font-semibold mb-2 flex items-center gap-2"><Package className="h-4 w-4" /> Total Produtos</h3>
           <p className="text-xs sm:text-sm opacity-80">Produtos cadastrados</p>
         </div>
 
@@ -349,7 +350,7 @@ const Relatorios = () => {
               <div className="text-xs sm:text-sm opacity-90">Investido</div>
             </div>
           </div>
-          <h3 className="text-base sm:text-lg font-semibold mb-2">💰 Valor Estoque</h3>
+          <h3 className="text-base sm:text-lg font-semibold mb-2 flex items-center gap-2"><DollarSign className="h-4 w-4" /> Valor Estoque</h3>
           <p className="text-xs sm:text-sm opacity-80">Valor total investido</p>
         </div>
 
@@ -364,7 +365,7 @@ const Relatorios = () => {
               <div className="text-xs sm:text-sm opacity-90">Total</div>
             </div>
           </div>
-          <h3 className="text-base sm:text-lg font-semibold mb-2">📥 Entradas</h3>
+          <h3 className="text-base sm:text-lg font-semibold mb-2 flex items-center gap-2"><ArrowDown className="h-4 w-4" /> Entradas</h3>
           <p className="text-xs sm:text-sm opacity-80">{entradaMovements.length} movimentações</p>
         </div>
 
@@ -379,7 +380,7 @@ const Relatorios = () => {
               <div className="text-xs sm:text-sm opacity-90">Total</div>
             </div>
           </div>
-          <h3 className="text-base sm:text-lg font-semibold mb-2">📤 Saídas</h3>
+          <h3 className="text-base sm:text-lg font-semibold mb-2 flex items-center gap-2"><ArrowUp className="h-4 w-4" /> Saídas</h3>
           <p className="text-xs sm:text-sm opacity-80">{saidaMovements.length} movimentações</p>
         </div>
       </div>
@@ -394,7 +395,7 @@ const Relatorios = () => {
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-600">
-                  {lucroEstimado >= 0 ? '💰 Lucro Estimado' : '📉 Prejuízo Estimado'}
+                  {lucroEstimado >= 0 ? <span className="flex items-center gap-2"><DollarSign className="h-4 w-4" /> Lucro Estimado</span> : <span className="flex items-center gap-2"><TrendingDown className="h-4 w-4" /> Prejuízo Estimado</span>}
                 </p>
                 <p className="text-xs text-gray-500">Saídas - Entradas</p>
               </div>
@@ -411,7 +412,7 @@ const Relatorios = () => {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileText className="w-5 h-5 text-blue-600" />
-            📋 Movimentações Recentes
+            Movimentações Recentes
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -443,7 +444,7 @@ const Relatorios = () => {
                             variant={m.type === 'entrada' ? 'default' : 'secondary'}
                             className={m.type === 'entrada' ? 'bg-green-100 text-green-800 border-green-300' : 'bg-orange-100 text-orange-800 border-orange-300'}
                           >
-                            {m.type === 'entrada' ? '📥 Entrada' : '📤 Saída'}
+                            {m.type === 'entrada' ? <span className="flex items-center gap-1"><ArrowDown className="h-4 w-4" /> Entrada</span> : <span className="flex items-center gap-1"><ArrowUp className="h-4 w-4" /> Saída</span>}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-sm">
@@ -479,14 +480,14 @@ const Relatorios = () => {
           <CardHeader className="bg-gradient-to-r from-orange-50 to-red-50">
             <CardTitle className="flex items-center gap-2 text-orange-800">
               <AlertTriangle className="w-5 h-5" />
-              ⚠️ Estoque Baixo ({lowStockProducts.length})
+              Estoque Baixo ({lowStockProducts.length})
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-6">
             {lowStockProducts.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 <Package className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                <p>✅ Todos os produtos com estoque adequado!</p>
+                <p className="flex items-center gap-2"><CheckCircle className="h-4 w-4 text-green-600" /> Todos os produtos com estoque adequado!</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -519,7 +520,7 @@ const Relatorios = () => {
           <CardHeader className="bg-gradient-to-r from-green-50 to-emerald-50">
             <CardTitle className="flex items-center gap-2 text-green-800">
               <TrendingUp className="w-5 h-5" />
-              💎 Top 5 Mais Valiosos
+              Top 5 Mais Valiosos
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-6">
@@ -563,7 +564,7 @@ const Relatorios = () => {
         <CardHeader className="bg-gradient-to-r from-blue-50 to-purple-50">
           <CardTitle className="flex items-center gap-2">
             <PieChart className="w-5 h-5 text-blue-600" />
-            📊 Análise Comparativa - Entradas vs Saídas
+            Análise Comparativa - Entradas vs Saídas
           </CardTitle>
         </CardHeader>
         <CardContent className="pt-6">
@@ -572,7 +573,7 @@ const Relatorios = () => {
             <div className="space-y-3">
               <div className="flex items-center gap-2 mb-4">
                 <div className="w-4 h-4 bg-green-500 rounded"></div>
-                <h3 className="font-bold text-lg">📥 Entradas</h3>
+                <h3 className="font-bold text-lg flex items-center gap-2"><ArrowDown className="h-4 w-4" /> Entradas</h3>
               </div>
               <div className="space-y-2">
                 <div className="flex justify-between p-2 bg-green-50 rounded">
@@ -596,7 +597,7 @@ const Relatorios = () => {
             <div className="space-y-3">
               <div className="flex items-center gap-2 mb-4">
                 <div className="w-4 h-4 bg-orange-500 rounded"></div>
-                <h3 className="font-bold text-lg">📤 Saídas</h3>
+                <h3 className="font-bold text-lg flex items-center gap-2"><ArrowUp className="h-4 w-4" /> Saídas</h3>
               </div>
               <div className="space-y-2">
                 <div className="flex justify-between p-2 bg-orange-50 rounded">

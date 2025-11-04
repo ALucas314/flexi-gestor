@@ -1,4 +1,4 @@
-// 💰 Página de Controle Financeiro
+// Página de Controle Financeiro
 // Gerenciamento de receitas, despesas, fluxo de caixa e movimentações de estoque
 
 import { useState, useEffect } from "react";
@@ -30,7 +30,14 @@ import {
   CheckCircle,
   Printer,
   Share2,
-  FileText as FileSpreadsheet
+  FileText as FileSpreadsheet,
+  AlertTriangle,
+  Hash,
+  BarChart3,
+  Settings,
+  Tag,
+  ShoppingCart,
+  FileText
 } from "lucide-react";
 import { useData } from "@/contexts/DataContext";
 import { useResponsive } from "@/hooks/use-responsive";
@@ -242,7 +249,7 @@ const Financeiro = () => {
   const downloadReceipt = (movement: any) => {
     const receiptText = `
 ━━━━━━━━━━━━━━━━━━━━━━━━━
-📄 RECEITA
+RECEITA
 Flexi Gestor - Sistema de Gestão
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 ${movement.receiptNumber ? `\nNº Receita: ${movement.receiptNumber}\n` : ''}
@@ -309,7 +316,7 @@ ${movement.description}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 Compra registrada com sucesso!
-📦 Flexi Gestor - Controle de Estoque
+Flexi Gestor - Controle de Estoque
 ━━━━━━━━━━━━━━━━━━━━━━━━━
     `.trim();
 
@@ -341,7 +348,7 @@ Compra registrada com sucesso!
             <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
               <DollarSign className="w-8 h-8 text-white" />
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">💰 Carregando Financeiro...</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2 flex items-center gap-2"><DollarSign className="h-5 w-5" /> Carregando Financeiro...</h3>
             <p className="text-gray-600">Preparando dados financeiros e movimentações</p>
           </div>
         </div>
@@ -403,7 +410,7 @@ Compra registrada com sucesso!
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="flex items-center justify-between p-4 bg-white/60 rounded-xl border border-blue-200">
                   <div>
-                    <p className="text-sm text-gray-600 mb-1">💵 Entradas (Custos)</p>
+                    <p className="text-sm text-gray-600 mb-1 flex items-center gap-2"><DollarSign className="h-4 w-4" /> Entradas (Custos)</p>
                     <p className="text-2xl font-bold text-blue-600">R$ {totalEntradas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                     <p className="text-xs text-gray-500 mt-1">{entradas.length} registros</p>
                   </div>
@@ -411,7 +418,7 @@ Compra registrada com sucesso!
                 
                 <div className="flex items-center justify-between p-4 bg-white/60 rounded-xl border border-orange-200">
                   <div>
-                    <p className="text-sm text-gray-600 mb-1">💸 Saídas (Receitas)</p>
+                    <p className="text-sm text-gray-600 mb-1 flex items-center gap-2"><TrendingDown className="h-4 w-4" /> Saídas (Receitas)</p>
                     <p className="text-2xl font-bold text-orange-600">R$ {totalSaidas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                     <p className="text-xs text-gray-500 mt-1">{saidas.length} registros</p>
                   </div>
@@ -419,12 +426,12 @@ Compra registrada com sucesso!
                 
                 <div className={`flex items-center justify-between p-4 bg-white/60 rounded-xl border-2 ${saldo >= 0 ? 'border-green-500' : 'border-red-500'}`}>
                   <div className="flex-1">
-                    <p className="text-sm text-gray-600 mb-1">💰 Saldo Final</p>
+                    <p className="text-sm text-gray-600 mb-1 flex items-center gap-2"><DollarSign className="h-4 w-4" /> Saldo Final</p>
                     <p className={`text-2xl font-bold ${saldo >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                       {saldo >= 0 ? '+' : ''}R$ {saldo.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </p>
                     <p className={`text-xs ${saldo >= 0 ? 'text-green-600' : 'text-red-600'} mt-1 font-semibold`}>
-                      {saldo >= 0 ? '✅ LUCRO' : '⚠️ PREJUÍZO'}
+                      <span className="flex items-center gap-2">{saldo >= 0 ? <><CheckCircle className="h-4 w-4 text-green-600" /> LUCRO</> : <><AlertTriangle className="h-4 w-4 text-red-600" /> PREJUÍZO</>}</span>
                     </p>
                   </div>
                 </div>
@@ -443,12 +450,12 @@ Compra registrada com sucesso!
             <CardContent>
               <div className="flex items-center justify-between p-6 bg-white/60 rounded-xl border-2 border-green-300">
                 <div>
-                  <p className="text-sm text-gray-600 mb-2">💰 Lucro Total de Todos os Produtos</p>
+                  <p className="text-sm text-gray-600 mb-2 flex items-center gap-2"><DollarSign className="h-4 w-4" /> Lucro Total de Todos os Produtos</p>
                   <p className={`text-4xl font-bold ${lucroTotal >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                     {lucroTotal >= 0 ? '+' : ''}R$ {lucroTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </p>
                   <p className={`text-xs ${lucroTotal >= 0 ? 'text-green-600' : 'text-red-600'} mt-2 font-semibold`}>
-                    {lucroTotal >= 0 ? '✅ Lucro positivo' : '⚠️ Prejuízo'}
+                    <span className="flex items-center gap-2">{lucroTotal >= 0 ? <><CheckCircle className="h-4 w-4 text-green-600" /> Lucro positivo</> : <><AlertTriangle className="h-4 w-4 text-red-600" /> Prejuízo</>}</span>
                   </p>
                 </div>
                 <div className={`w-20 h-20 ${lucroTotal >= 0 ? 'bg-green-300/50' : 'bg-red-300/50'} rounded-full flex items-center justify-center backdrop-blur-sm`}>
@@ -459,28 +466,33 @@ Compra registrada com sucesso!
           </Card>
 
           {/* Lucro por Produto */}
-          <Card className="bg-white border-slate-200 shadow-sm">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-slate-800">
-                <Package className="w-5 h-5 text-slate-600" />
-                📊 Lucro por Produto
-              </CardTitle>
-              <CardDescription className="text-slate-600">
-                Margem de contribuição em porcentagem (%) = (Lucro / Total de Venda) × 100
-              </CardDescription>
+          <Card className="shadow-lg">
+            <CardHeader className="bg-gradient-to-r from-indigo-50 to-purple-50">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-blue-600" />
+                    Lucro por Produto
+                  </CardTitle>
+                  <CardDescription>
+                    Margem de contribuição em porcentagem (%) = (Lucro / Total de Venda) × 100
+                  </CardDescription>
+                </div>
+              </div>
             </CardHeader>
-            <CardContent>
-              <div className="rounded-md border border-slate-200 overflow-hidden">
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <div className="rounded-md border border-slate-200 overflow-hidden">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-slate-50 hover:bg-slate-100">
-                      <TableHead className="font-semibold text-slate-700">📦 Produto</TableHead>
+                      <TableHead className="font-semibold text-slate-700"><div className="flex items-center gap-2"><Package className="h-4 w-4" /> Produto</div></TableHead>
                       <TableHead className="font-semibold text-slate-700 hidden md:table-cell">SKU</TableHead>
-                      <TableHead className="font-semibold text-slate-700">💵 Total Compra</TableHead>
-                      <TableHead className="font-semibold text-slate-700">💸 Total Venda</TableHead>
-                      <TableHead className="font-semibold text-slate-700">💰 Lucro</TableHead>
-                      <TableHead className="font-semibold text-slate-700">📊 Margem</TableHead>
-                      <TableHead className="font-semibold text-slate-700 hidden lg:table-cell">🔢 Qtd Vendida</TableHead>
+                      <TableHead className="font-semibold text-slate-700"><div className="flex items-center gap-2"><DollarSign className="h-4 w-4" /> Total Compra</div></TableHead>
+                      <TableHead className="font-semibold text-slate-700"><div className="flex items-center gap-2"><TrendingDown className="h-4 w-4" /> Total Venda</div></TableHead>
+                      <TableHead className="font-semibold text-slate-700"><div className="flex items-center gap-2"><DollarSign className="h-4 w-4" /> Lucro</div></TableHead>
+                      <TableHead className="font-semibold text-slate-700"><div className="flex items-center gap-2"><BarChart3 className="h-4 w-4" /> Margem</div></TableHead>
+                      <TableHead className="font-semibold text-slate-700 hidden lg:table-cell"><div className="flex items-center gap-2"><Hash className="h-4 w-4" /> Qtd Vendida</div></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -542,6 +554,7 @@ Compra registrada com sucesso!
                     )}
                   </TableBody>
                 </Table>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -561,7 +574,7 @@ Compra registrada com sucesso!
                   <div className="text-xs sm:text-sm opacity-90">Total</div>
                 </div>
               </div>
-              <h3 className="text-base sm:text-lg font-semibold mb-2">📊 Total Movimentações</h3>
+              <h3 className="text-base sm:text-lg font-semibold mb-2 flex items-center gap-2"><BarChart3 className="h-4 w-4" /> Total Movimentações</h3>
               <p className="text-xs sm:text-sm opacity-80">Registros no sistema</p>
             </div>
 
@@ -577,7 +590,7 @@ Compra registrada com sucesso!
                   <div className="text-xs sm:text-sm opacity-90">{saldo >= 0 ? 'Lucro' : 'Prejuízo'}</div>
                 </div>
               </div>
-              <h3 className="text-base sm:text-lg font-semibold mb-2">💵 Saldo</h3>
+              <h3 className="text-base sm:text-lg font-semibold mb-2 flex items-center gap-2"><DollarSign className="h-4 w-4" /> Saldo</h3>
               <p className="text-xs sm:text-sm opacity-80">Posição financeira</p>
             </div>
 
@@ -591,7 +604,7 @@ Compra registrada com sucesso!
                   <div className="text-xs sm:text-sm opacity-90">Movimentações</div>
                 </div>
               </div>
-              <h3 className="text-base sm:text-lg font-semibold mb-2">📅 Este Mês</h3>
+              <h3 className="text-base sm:text-lg font-semibold mb-2 flex items-center gap-2"><Calendar className="h-4 w-4" /> Este Mês</h3>
               <p className="text-xs sm:text-sm opacity-80">Movimentações do período</p>
             </div>
 
@@ -605,7 +618,7 @@ Compra registrada com sucesso!
                   <div className="text-xs sm:text-sm opacity-90">Produtos</div>
                 </div>
               </div>
-              <h3 className="text-base sm:text-lg font-semibold mb-2">🔄 Produtos</h3>
+              <h3 className="text-base sm:text-lg font-semibold mb-2 flex items-center gap-2"><RotateCcw className="h-4 w-4" /> Produtos</h3>
               <p className="text-xs sm:text-sm opacity-80">Produtos movimentados</p>
             </div>
           </div>
@@ -637,10 +650,10 @@ Compra registrada com sucesso!
                     <SelectValue placeholder="Tipo de movimentação" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="todos">📊 Todos os tipos</SelectItem>
-                    <SelectItem value="entrada">📥 Entradas</SelectItem>
-                    <SelectItem value="saida">📤 Saídas</SelectItem>
-                    <SelectItem value="ajuste">⚙️ Ajustes</SelectItem>
+                    <SelectItem value="todos"><span className="flex items-center gap-2"><BarChart3 className="h-4 w-4" /> Todos os tipos</span></SelectItem>
+                    <SelectItem value="entrada"><span className="flex items-center gap-2"><ArrowDownCircle className="h-4 w-4" /> Entradas</span></SelectItem>
+                    <SelectItem value="saida"><span className="flex items-center gap-2"><ArrowUpCircle className="h-4 w-4" /> Saídas</span></SelectItem>
+                    <SelectItem value="ajuste"><span className="flex items-center gap-2"><Settings className="h-4 w-4" /> Ajustes</span></SelectItem>
                   </SelectContent>
                 </Select>
                 
@@ -650,7 +663,7 @@ Compra registrada com sucesso!
                     <SelectValue placeholder="Produto" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="todos">📦 Todos os produtos</SelectItem>
+                    <SelectItem value="todos"><span className="flex items-center gap-2"><Package className="h-4 w-4" /> Todos os produtos</span></SelectItem>
                     {products.map(product => (
                       <SelectItem key={product.id} value={product.id}>
                         {product.name}
@@ -663,26 +676,32 @@ Compra registrada com sucesso!
           </Card>
 
           {/* Tabela de Movimentações */}
-          <Card className="bg-white border-slate-200 shadow-sm">
-            <CardHeader className="pb-4">
-              <CardTitle className="flex items-center gap-2 text-slate-800">
-                <Package className="w-5 w-5 text-slate-600" />
-                📋 Histórico de Movimentações
-              </CardTitle>
+          <Card className="shadow-lg">
+            <CardHeader className="bg-gradient-to-r from-indigo-50 to-purple-50">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-blue-600" />
+                    Histórico de Movimentações
+                  </CardTitle>
+                  <CardDescription>Visualize todas as movimentações do período</CardDescription>
+                </div>
+              </div>
             </CardHeader>
-            <CardContent>
-              <div className="rounded-md border border-slate-200 overflow-hidden">
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <div className="rounded-md border border-slate-200 overflow-hidden">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-slate-50 hover:bg-slate-100">
-                      <TableHead className="font-semibold text-slate-700">📅 Data</TableHead>
-                      <TableHead className="font-semibold text-slate-700 hidden sm:table-cell">🏷️ Tipo</TableHead>
-                      <TableHead className="font-semibold text-slate-700">📦 Produto</TableHead>
-                      <TableHead className="font-semibold text-slate-700 hidden lg:table-cell">📝 Descrição</TableHead>
-                      <TableHead className="font-semibold text-slate-700 hidden md:table-cell">💳 Pagamento</TableHead>
-                      <TableHead className="font-semibold text-slate-700 hidden sm:table-cell">🔢 Qtd</TableHead>
-                      <TableHead className="font-semibold text-slate-700">💰 Valor</TableHead>
-                      <TableHead className="font-semibold text-slate-700">📄 Doc</TableHead>
+                      <TableHead className="font-semibold text-slate-700"><div className="flex items-center gap-2"><Calendar className="h-4 w-4" /> Data</div></TableHead>
+                      <TableHead className="font-semibold text-slate-700 hidden sm:table-cell"><div className="flex items-center gap-2"><Tag className="h-4 w-4" /> Tipo</div></TableHead>
+                      <TableHead className="font-semibold text-slate-700">Produto</TableHead>
+                      <TableHead className="font-semibold text-slate-700 hidden lg:table-cell"><div className="flex items-center gap-2"><FileText className="h-4 w-4" /> Descrição</div></TableHead>
+                      <TableHead className="font-semibold text-slate-700 hidden md:table-cell"><div className="flex items-center gap-2"><Wallet className="h-4 w-4" /> Pagamento</div></TableHead>
+                      <TableHead className="font-semibold text-slate-700 hidden sm:table-cell"><div className="flex items-center gap-2"><Hash className="h-4 w-4" /> Qtd</div></TableHead>
+                      <TableHead className="font-semibold text-slate-700"><div className="flex items-center gap-2"><DollarSign className="h-4 w-4" /> Valor</div></TableHead>
+                      <TableHead className="font-semibold text-slate-700"><div className="flex items-center gap-2"><FileText className="h-4 w-4" /> Doc</div></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -717,8 +736,8 @@ Compra registrada com sucesso!
                                 movement.type === "saida" ? "bg-orange-100 text-orange-800 border-orange-300" : 
                                 "bg-slate-100 text-slate-800 border-slate-300"}
                             `}>
-                              {movement.type === "entrada" ? "📥 Entrada" : 
-                               movement.type === "saida" ? "📤 Saída" : "⚙️ Ajuste"}
+                              {movement.type === "entrada" ? <span className="flex items-center gap-1"><ArrowDownCircle className="h-4 w-4" /> Entrada</span> : 
+                               movement.type === "saida" ? <span className="flex items-center gap-1"><ArrowUpCircle className="h-4 w-4" /> Saída</span> : <span className="flex items-center gap-1"><Settings className="h-4 w-4" /> Ajuste</span>}
                             </Badge>
                           </TableCell>
                           
@@ -757,18 +776,18 @@ Compra registrada com sucesso!
                                 className="bg-blue-100 text-blue-800 hover:bg-blue-200 border-blue-300 cursor-pointer transition-all hover:scale-105 text-xs"
                                 onClick={() => openReceipt(movement)}
                               >
-                                <Receipt className="w-3 h-3 mr-1" />
+                                <Receipt className="w-3 h-3 mr-1 hidden sm:inline" />
                                 <span className="hidden sm:inline">Receita</span>
-                                <span className="sm:hidden">📄</span>
+                                <FileText className="w-3 h-3 sm:hidden" />
                               </Badge>
                             ) : movement.type === 'entrada' ? (
                               <Badge 
                                 className="bg-green-100 text-green-800 hover:bg-green-200 border-green-300 cursor-pointer transition-all hover:scale-105 text-xs"
                                 onClick={() => openPurchase(movement)}
                               >
-                                <Receipt className="w-3 h-3 mr-1" />
+                                <Receipt className="w-3 h-3 mr-1 hidden sm:inline" />
                                 <span className="hidden sm:inline">Compra</span>
-                                <span className="sm:hidden">🛒</span>
+                                <ShoppingCart className="w-3 h-3 sm:hidden" />
                               </Badge>
                             ) : (
                               <span className="text-slate-400 text-sm">—</span>
@@ -779,11 +798,12 @@ Compra registrada com sucesso!
                     )}
                   </TableBody>
                 </Table>
+                </div>
               </div>
               
               {/* Botão para mostrar todas as movimentações */}
               {filteredMovements.length > 4 && (
-                <div className="mt-6 flex justify-center">
+                <div className="mt-6 p-4 flex justify-center">
                   <Button
                     onClick={() => setShowAllMovements(!showAllMovements)}
                     variant="outline"
@@ -824,7 +844,7 @@ Compra registrada com sucesso!
               {/* Cabeçalho da Receita */}
               <div className="border-b pb-4">
                 <div className="text-center mb-3">
-                  <h2 className="text-2xl font-bold text-gray-900">📄 RECEITA</h2>
+                  <h2 className="text-2xl font-bold text-gray-900">RECEITA</h2>
                   <p className="text-sm text-gray-600">Flexi Gestor - Sistema de Gestão</p>
                 </div>
                 
@@ -1044,7 +1064,7 @@ Compra registrada com sucesso!
               {/* Rodapé */}
               <div className="text-center text-xs text-gray-500 pt-2 border-t">
                 <p>Compra registrada com sucesso!</p>
-                <p className="mt-1">📦 Flexi Gestor - Controle de Estoque</p>
+                <p className="mt-1">Flexi Gestor - Controle de Estoque</p>
               </div>
             </div>
             )}

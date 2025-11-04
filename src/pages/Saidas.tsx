@@ -15,11 +15,23 @@ import {
   Printer,
   Share2,
   Edit,
-  X
+  X,
+  Tag,
+  User,
+  Hash,
+  BarChart3,
+  Coins,
+  Upload,
+  AlertTriangle,
+  Clock,
+  FileText,
+  Settings,
+  TrendingDown as TrendingDownIcon,
+  Calculator
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -530,7 +542,7 @@ const Saidas = () => {
       
       // Toast com informações agregadas
       toast({ 
-        title: '✅ Venda Registrada!', 
+        title: 'Venda Registrada!', 
         description: `${totalProducts} produto(s) totalizando ${totalQuantity} unidades por R$ ${totalGeral.toFixed(2).replace('.', ',')}. Recibo: ${receiptNumber}`,
         variant: 'default'
       });
@@ -635,7 +647,7 @@ const Saidas = () => {
         if (!product) continue;
         const quantity = item.quantity;
         if (quantity <= 0 || (product.stock || 0) < quantity) {
-          toast({ title: "⚠️ Verifique o carrinho", description: `${product?.name || 'Produto'} com quantidade inválida ou estoque insuficiente.`, variant: "destructive" });
+          toast({ title: "Verifique o carrinho", description: `${product?.name || 'Produto'} com quantidade inválida ou estoque insuficiente.`, variant: "destructive" });
           return;
         }
         let unitPrice = getProductPrice(item.productId);
@@ -689,7 +701,7 @@ const Saidas = () => {
       setSelectedProductId("");
       setCartItems([]);
       form.reset();
-      toast({ title: "✅ Venda Registrada!", description: `${cartItems.length} item(ns) processado(s).`, variant: "default" });
+      toast({ title: "Venda Registrada!", description: `${cartItems.length} item(ns) processado(s).`, variant: "default" });
       addNotification('🛒 Nova Venda', `${cartItems.length} item(ns) registrado(s) no pedido.`, 'success');
       return;
     }
@@ -697,7 +709,7 @@ const Saidas = () => {
     const product = products.find(p => p.id === data.productId);
     if (!product) {
       toast({
-        title: "❌ Erro!",
+        title: "Erro!",
         description: "Produto não encontrado.",
         variant: "destructive",
       });
@@ -744,7 +756,7 @@ const Saidas = () => {
       // Validar se há lotes selecionados
       if (totalQuantity === 0) {
         toast({
-          title: "⚠️ Quantidade Inválida!",
+          title: "Quantidade Inválida!",
           description: "Selecione ao menos um lote com quantidade.",
           variant: "destructive",
         });
@@ -757,7 +769,7 @@ const Saidas = () => {
           const batch = availableBatches.find(b => b.id === selectedBatch.batchId);
           if (batch && selectedBatch.quantity > batch.quantity) {
             toast({
-              title: "❌ Estoque Insuficiente no Lote!",
+              title: "Estoque Insuficiente no Lote!",
               description: `Lote ${batch.batchNumber} tem apenas ${batch.quantity} unidades disponíveis`,
               variant: "destructive",
             });
@@ -765,7 +777,7 @@ const Saidas = () => {
           }
           if (selectedBatch.quantity <= 0) {
             toast({
-              title: "❌ Quantidade Inválida!",
+              title: "Quantidade Inválida!",
               description: "A quantidade deve ser maior que zero",
               variant: "destructive",
             });
@@ -781,7 +793,7 @@ const Saidas = () => {
       // Validar quantidade
       if (totalQuantity <= 0) {
         toast({
-          title: "⚠️ Quantidade Inválida!",
+          title: "Quantidade Inválida!",
           description: "Informe uma quantidade maior que zero.",
           variant: "destructive",
         });
@@ -820,7 +832,7 @@ const Saidas = () => {
     // Verificar se há estoque suficiente
     if (product.stock < totalQuantity) {
       toast({
-        title: "⚠️ Estoque Insuficiente!",
+        title: "Estoque Insuficiente!",
         description: `Estoque disponível: ${product.stock} unidades`,
         variant: "destructive",
       });
@@ -858,7 +870,7 @@ const Saidas = () => {
       } catch (error) {
         console.error('Erro ao atualizar lotes:', error);
         toast({
-          title: "⚠️ Aviso",
+          title: "Aviso",
           description: "Saída registrada, mas houve erro ao atualizar lotes.",
           variant: "destructive",
         });
@@ -891,7 +903,7 @@ const Saidas = () => {
     form.reset();
 
     toast({
-      title: "✅ Saída Registrada!",
+      title: "Saída Registrada!",
       description: `${totalQuantity} unidades de ${product.name} foram vendidas.`,
       variant: "default",
     });
@@ -918,7 +930,7 @@ const Saidas = () => {
       await deleteMovement(exitToDelete.id);
       
       toast({
-        title: "✅ Saída Removida!",
+        title: "Saída Removida!",
         description: `Saída de ${exitToDelete.quantity} unidades foi removida e o estoque foi ajustado.`,
         variant: "default",
       });
@@ -928,7 +940,7 @@ const Saidas = () => {
       setExitToDelete(null);
     } catch (error: any) {
       toast({
-        title: "❌ Erro ao Remover",
+        title: "Erro ao Remover",
         description: error.message || "Não foi possível remover a saída.",
         variant: "destructive",
       });
@@ -958,7 +970,7 @@ const Saidas = () => {
       if (newStatus === "cancelado" && exitToEdit.status !== "cancelado") {
         if (!user?.id) {
           toast({
-            title: "❌ Erro",
+            title: "Erro",
             description: "Usuário não autenticado",
             variant: "destructive",
           });
@@ -991,7 +1003,7 @@ const Saidas = () => {
         }
 
         toast({
-          title: "✅ Venda Cancelada!",
+          title: "Venda Cancelada!",
           description: "As unidades foram devolvidas aos lotes correspondentes.",
           variant: "default",
         });
@@ -1001,7 +1013,7 @@ const Saidas = () => {
       if (exitToEdit.status === "cancelado" && newStatus !== "cancelado") {
         if (!user?.id) {
           toast({
-            title: "❌ Erro",
+            title: "Erro",
             description: "Usuário não autenticado",
             variant: "destructive",
           });
@@ -1030,7 +1042,7 @@ const Saidas = () => {
         await refreshMovements();
 
         toast({
-          title: "✅ Status Atualizado!",
+          title: "Status Atualizado!",
           description: `Status alterado para ${newStatus === "confirmado" ? "Confirmado" : newStatus === "cancelado" ? "Cancelado" : "Pendente"}.`,
           variant: "default",
         });
@@ -1040,7 +1052,7 @@ const Saidas = () => {
         setExitToEdit(null);
     } catch (error: any) {
       toast({
-        title: "❌ Erro ao Atualizar",
+        title: "Erro ao Atualizar",
         description: error.message || "Não foi possível atualizar o status.",
         variant: "destructive",
       });
@@ -1213,8 +1225,8 @@ const Saidas = () => {
 
                               return (
                                 <FormItem className="space-y-3">
-                                  <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
-                                    🏷️ Produto
+                                  <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700 flex items-center gap-2">
+                                    <Tag className="h-4 w-4" /> Produto
                                   </FormLabel>
                                   <div className="relative">
                                     {selectedProduct ? (
@@ -1321,8 +1333,8 @@ const Saidas = () => {
 
                               return (
                                 <FormItem className="space-y-3">
-                                  <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
-                                    👤 Cliente
+                                  <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700 flex items-center gap-2">
+                                    <User className="h-4 w-4" /> Cliente
                                   </FormLabel>
                                   <div className="relative">
                                     {selectedCustomer ? (
@@ -1435,7 +1447,7 @@ const Saidas = () => {
                                   render={({ field }) => (
                                     <FormItem className="space-y-2">
                                       <FormLabel className="text-sm font-semibold text-neutral-700">
-                                        🔢 Quantidade a Retirar *
+                                        <div className="flex items-center gap-2"><Hash className="h-4 w-4" /> Quantidade a Retirar *</div>
                                       </FormLabel>
                                       <FormControl>
                                         <Input
@@ -1455,7 +1467,7 @@ const Saidas = () => {
                                               const maxStock = selectedProduct?.stock || 0;
                                               if (intValue > maxStock) {
                                                 toast({
-                                                  title: "⚠️ Quantidade Maior que o Permitido!",
+                                                  title: "Quantidade Maior que o Permitido!",
                                                   description: `A quantidade máxima permitida é ${maxStock} unidades (estoque disponível).`,
                                                   variant: "destructive",
                                                 });
@@ -1542,39 +1554,39 @@ const Saidas = () => {
                                     <div className="p-4 space-y-2">
                                       {/* 1. Total a Sair */}
                                       <div className="flex items-center justify-between">
-                                        <span className="text-sm font-medium text-gray-900">📊 Total a Sair:</span>
+                                        <span className="text-sm font-medium text-gray-900 flex items-center gap-2"><BarChart3 className="h-4 w-4" /> Total a Sair:</span>
                                         <span className="text-lg font-bold text-red-600">{quantityToExit} unidades</span>
                                       </div>
                                       
                                       {/* 2. Preço Original de Aquisição */}
                                       {acquisitionCost > 0 && (
                                         <div className="flex items-center justify-between pt-2 border-t border-red-200">
-                                          <span className="text-sm font-medium text-gray-900">💵 Preço Original de Aquisição:</span>
+                                          <span className="text-sm font-medium text-gray-900 flex items-center gap-2"><DollarSign className="h-4 w-4" /> Preço Original de Aquisição:</span>
                                           <span className="text-sm font-semibold text-gray-700">R$ {acquisitionCost.toFixed(2).replace('.', ',')}</span>
                                         </div>
                                       )}
                                       
                                       {/* 3. Preço Unitário */}
                                       <div className="flex items-center justify-between pt-2 border-t border-red-200">
-                                        <span className="text-sm font-medium text-gray-900">💵 Preço Unitário {discount > 0 ? '(Base)' : ''}:</span>
+                                        <span className="text-sm font-medium text-gray-900 flex items-center gap-2"><DollarSign className="h-4 w-4" /> Preço Unitário {discount > 0 ? '(Base)' : ''}:</span>
                                         <span className="text-sm font-semibold text-gray-700">R$ {baseUnitPrice.toFixed(2).replace('.', ',')}</span>
                                       </div>
                                       {discount > 0 && (
                                         <div className="flex items-center justify-between pt-2 border-t border-red-200">
-                                          <span className="text-sm font-medium text-gray-900">💵 Preço Unitário (com desconto):</span>
+                                          <span className="text-sm font-medium text-gray-900 flex items-center gap-2"><DollarSign className="h-4 w-4" /> Preço Unitário (com desconto):</span>
                                           <span className="text-sm font-bold text-red-600">R$ {unitPriceWithDiscount.toFixed(2).replace('.', ',')}</span>
                                         </div>
                                       )}
                                       
                                       {/* 4. Valor Total */}
                                       <div className="flex items-center justify-between pt-2 border-t border-red-200">
-                                        <span className="text-sm font-medium text-gray-900">💰 Valor Total:</span>
+                                        <span className="text-sm font-medium text-gray-900 flex items-center gap-2"><Coins className="h-4 w-4" /> Valor Total:</span>
                                         <span className="text-lg font-bold text-blue-600">R$ {totalPrice.toFixed(2).replace('.', ',')}</span>
                                       </div>
                                       
                                       {/* 5. Estoque Restante */}
                                       <div className="flex items-center justify-between pt-2 border-t border-red-200">
-                                        <span className="text-sm font-medium text-gray-900">📦 Estoque Restante:</span>
+                                        <span className="text-sm font-medium text-gray-900 flex items-center gap-2"><Package className="h-4 w-4" /> Estoque Restante:</span>
                                         <span className={`text-lg font-bold ${remaining < 0 ? 'text-red-600' : remaining < (currentStock * 0.2) && currentStock > 0 ? 'text-yellow-600' : 'text-green-600'}`}>
                                           {Math.max(0, remaining)} unidades
                                         </span>
@@ -1583,7 +1595,7 @@ const Saidas = () => {
                                       {/* 6. Lucro */}
                                       {acquisitionCost > 0 && (
                                         <div className="flex items-center justify-between pt-2 border-t border-red-200">
-                                          <span className="text-sm font-medium text-gray-900">💰 Lucro:</span>
+                                          <span className="text-sm font-medium text-gray-900 flex items-center gap-2"><Coins className="h-4 w-4" /> Lucro:</span>
                                           <span className={`text-sm font-bold ${profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                                             R$ {profit.toFixed(2).replace('.', ',')}
                                           </span>
@@ -1593,7 +1605,7 @@ const Saidas = () => {
                                       {/* 7. Margem de Contribuição */}
                                       {acquisitionCost > 0 && (
                                         <div className="flex items-center justify-between pt-2 border-t border-red-200">
-                                          <span className="text-sm font-medium text-gray-900">📊 Margem de Contribuição:</span>
+                                          <span className="text-sm font-medium text-gray-900 flex items-center gap-2"><BarChart3 className="h-4 w-4" /> Margem de Contribuição:</span>
                                           <span className={`text-sm font-bold ${contributionMarginPercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                                             {contributionMarginPercent.toFixed(2).replace('.', ',')}%
                                           </span>
@@ -1628,7 +1640,7 @@ const Saidas = () => {
                               {availableBatches.length === 0 ? (
                                 <div className="text-center py-8">
                                   <Package className="h-12 w-12 mx-auto mb-3 text-gray-400" />
-                                  <p className="text-gray-600">⚠️ Nenhum lote com estoque disponível</p>
+                                  <p className="text-gray-600 flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Nenhum lote com estoque disponível</p>
                                   <p className="text-sm text-gray-500 mt-1">Todos os lotes deste produto estão sem estoque</p>
                                 </div>
                               ) : selectedBatches.length === 0 ? (
@@ -1652,7 +1664,7 @@ const Saidas = () => {
                                             {/* Campo Lote */}
                                             <div className="space-y-2">
                                               <Label htmlFor={`batch-${index}`} className="text-sm font-medium">
-                                                📦 Selecione o Lote
+                                                <div className="flex items-center gap-2"><Package className="h-4 w-4" /> Selecione o Lote</div>
                                               </Label>
                                               <Input
                                                 id={`batch-${index}`}
@@ -1667,16 +1679,16 @@ const Saidas = () => {
                                               />
                                               {batch ? (
                                                 <p className="text-xs text-gray-500">
-                                                  ✅ Lote encontrado: {batch.quantity} unidades disponíveis
+                                                  <span className="flex items-center gap-2"><CheckCircle className="h-4 w-4 text-green-600" /> Lote encontrado: {batch.quantity} unidades disponíveis</span>
                                                   {batch.expiryDate && ` • Validade: ${new Date(batch.expiryDate).toLocaleDateString('pt-BR')}`}
                                                 </p>
                                               ) : selectedBatch.batchNumber ? (
                                                 <p className="text-xs text-yellow-600">
-                                                  ⚠️ Lote não encontrado. Verifique o número digitado.
+                                                  <span className="flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-yellow-600" /> Lote não encontrado. Verifique o número digitado.</span>
                                                 </p>
                                               ) : (
                                                 <p className="text-xs text-gray-500">
-                                                  💡 Digite o número do lote ou use "Usar Existente"
+                                                  <span className="flex items-center gap-2"><FileText className="h-4 w-4" /> Digite o número do lote ou use "Usar Existente"</span>
                                                 </p>
                                               )}
                                             </div>
@@ -1684,7 +1696,7 @@ const Saidas = () => {
                                             <div className="space-y-2">
                                               <div className="flex items-center justify-between gap-2 h-7">
                                                 <Label htmlFor={`quantity-${index}`} className="text-sm font-medium">
-                                                  🔢 Quantidade a Retirar
+                                                  <div className="flex items-center gap-2"><Hash className="h-4 w-4" /> Quantidade a Retirar</div>
                                                 </Label>
                                                 <span className="h-7" />
                                               </div>
@@ -1717,7 +1729,7 @@ const Saidas = () => {
                                                       updateSelectedBatch(index, selectedBatch.batchId, intValue, selectedBatch.batchNumber);
                                                     } else {
                                                       toast({
-                                                        title: "⚠️ Quantidade Maior que o Permitido!",
+                                                        title: "Quantidade Maior que o Permitido!",
                                                         description: `A quantidade máxima permitida para o lote ${selectedBatch.batchNumber || ''} é ${available} unidades.`,
                                                         variant: "destructive",
                                                       });
@@ -1730,11 +1742,11 @@ const Saidas = () => {
                                               {selectedBatch.batchId && (
                                                 <p className={`text-xs ${exceeds ? 'text-red-600 bg-red-50 p-2 rounded-md border border-red-200' : selectedBatch.quantity === available ? 'text-green-600 bg-green-50 p-2 rounded-md border border-green-200' : 'text-gray-500'}`}>
                                                   {exceeds ? (
-                                                    <>❌ Excede disponível! Disponível: <strong>{available} un.</strong></>
+                                                    <><span className="flex items-center gap-1"><X className="h-4 w-4 text-red-600" /> Excede disponível!</span> Disponível: <strong>{available} un.</strong></>
                                                   ) : selectedBatch.quantity === available ? (
-                                                    <>✅ Usando todo o estoque disponível: <strong>{available} un.</strong></>
+                                                    <><span className="flex items-center gap-1"><CheckCircle className="h-4 w-4 text-green-600" /> Usando todo o estoque disponível:</span> <strong>{available} un.</strong></>
                                                   ) : (
-                                                    <>✅ Disponível: <strong>{available} un.</strong></>
+                                                    <><span className="flex items-center gap-1"><CheckCircle className="h-4 w-4 text-green-600" /> Disponível:</span> <strong>{available} un.</strong></>
                                                   )}
                                                 </p>
                                               )}
@@ -1762,7 +1774,7 @@ const Saidas = () => {
                                     <CardContent className="p-4 space-y-2">
                                       <div className="flex items-center justify-between">
                                         <span className="text-sm font-medium text-gray-900">
-                                          📊 Total a Sair:
+                                          <span className="flex items-center gap-2"><BarChart3 className="h-4 w-4" /> Total a Sair:</span>
                                         </span>
                                         <span className="text-lg font-bold text-red-600">
                                           {getTotalSelectedQuantity()} unidades
@@ -1805,7 +1817,7 @@ const Saidas = () => {
                                           remaining = Math.max(0, totalStock - totalToExit);
                                           
                                           // Debug temporário para verificar cálculo
-                                          console.log('🔍 DEBUG LOTE RESTANTE:', {
+                                          console.log('DEBUG LOTE RESTANTE:', {
                                             managedByBatch,
                                             totalStock,
                                             totalToExit,
@@ -1897,7 +1909,7 @@ const Saidas = () => {
                                               unitPriceCalculated: productEntries[0].unitPrice || (productEntries[0].total / productEntries[0].quantity)
                                             });
                                           } else {
-                                            console.log('⚠️ NENHUMA ENTRADA ENCONTRADA!');
+                                            console.log('NENHUMA ENTRADA ENCONTRADA!');
                                             console.log('Tipos de movimentações encontradas:', [...new Set(allMovementsForProduct.map(m => m.type))]);
                                           }
                                           console.log('Preço unitário final calculado:', unitPrice);
@@ -1941,8 +1953,8 @@ const Saidas = () => {
                                                 {/* 2. Preço Original de Aquisição */}
                                                 {acquisitionCost > 0 && (
                                                   <div className="flex items-center justify-between pt-2 border-t border-red-200">
-                                                    <span className="text-sm font-medium text-gray-900">
-                                                      💵 Preço Original de Aquisição:
+                                                    <span className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                                                      <DollarSign className="h-4 w-4" /> Preço Original de Aquisição:
                                                     </span>
                                                     <span className="text-sm font-semibold text-gray-700">
                                                       R$ {acquisitionCost.toFixed(2).replace('.', ',')}
@@ -1952,8 +1964,8 @@ const Saidas = () => {
                                                 
                                                 {/* 3. Preço Unitário */}
                                                 <div className="flex items-center justify-between pt-2 border-t border-red-200">
-                                                  <span className="text-sm font-medium text-gray-900">
-                                                    💵 Preço Unitário {discount > 0 ? '(Base)' : ''}:
+                                                  <span className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                                                    <DollarSign className="h-4 w-4" /> Preço Unitário {discount > 0 ? '(Base)' : ''}:
                                                   </span>
                                                   <span className="text-sm font-semibold text-gray-700">
                                                     {baseUnitPrice > 0 ? `R$ ${baseUnitPrice.toFixed(2).replace('.', ',')}` : 'Não encontrado'}
@@ -1961,8 +1973,8 @@ const Saidas = () => {
                                                 </div>
                                                 {discount > 0 && baseUnitPrice > 0 && (
                                                   <div className="flex items-center justify-between pt-2 border-t border-red-200">
-                                                    <span className="text-sm font-medium text-gray-900">
-                                                      💵 Preço Unitário (com desconto):
+                                                    <span className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                                                      <DollarSign className="h-4 w-4" /> Preço Unitário (com desconto):
                                                     </span>
                                                     <span className="text-sm font-bold text-red-600">
                                                       R$ {unitPrice.toFixed(2).replace('.', ',')}
@@ -1972,8 +1984,8 @@ const Saidas = () => {
                                                 
                                                 {/* 4. Valor Total */}
                                                 <div className="flex items-center justify-between pt-2 border-t border-red-200">
-                                                  <span className="text-sm font-medium text-gray-900">
-                                                    💰 Valor Total:
+                                                  <span className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                                                    <Coins className="h-4 w-4" /> Valor Total:
                                                   </span>
                                                   <span className="text-lg font-bold text-blue-600">
                                                     R$ {totalPrice.toFixed(2).replace('.', ',')}
@@ -1982,8 +1994,8 @@ const Saidas = () => {
                                                 
                                                 {/* 5. Lote Restante */}
                                                 <div className="flex items-center justify-between pt-2 border-t border-red-200">
-                                                  <span className="text-sm font-medium text-gray-900">
-                                                    {hasSelectedBatches ? '📦 Lote Restante:' : '📦 Estoque Restante:'}
+                                                  <span className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                                                    <Package className="h-4 w-4" /> {hasSelectedBatches ? 'Lote Restante:' : 'Estoque Restante:'}
                                                   </span>
                                                   <span className={`text-lg font-bold ${remaining < 0 ? 'text-red-600' : remaining < (totalStock * 0.2) && totalStock > 0 ? 'text-yellow-600' : 'text-green-600'}`}>
                                                     {Math.max(0, remaining)} unidades
@@ -1993,8 +2005,8 @@ const Saidas = () => {
                                                 {/* 6. Lucro */}
                                                 {acquisitionCost > 0 && (
                                                   <div className="flex items-center justify-between pt-2 border-t border-red-200">
-                                                    <span className="text-sm font-medium text-gray-900">
-                                                      💰 Lucro:
+                                                    <span className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                                                      <Coins className="h-4 w-4" /> Lucro:
                                                     </span>
                                                     <span className={`text-sm font-bold ${profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                                                       R$ {profit.toFixed(2).replace('.', ',')}
@@ -2005,8 +2017,8 @@ const Saidas = () => {
                                                 {/* 7. Margem de Contribuição */}
                                                 {acquisitionCost > 0 && (
                                                   <div className="flex items-center justify-between pt-2 border-t border-red-200">
-                                                    <span className="text-sm font-medium text-gray-900">
-                                                      📊 Margem de Contribuição:
+                                                    <span className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                                                      <BarChart3 className="h-4 w-4" /> Margem de Contribuição:
                                                     </span>
                                                     <span className={`text-sm font-bold ${contributionMarginPercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                                                       {contributionMarginPercent.toFixed(2).replace('.', ',')}%
@@ -2016,7 +2028,7 @@ const Saidas = () => {
                                                 
                                                 {unitPrice === 0 && productEntries.length === 0 && (
                                                   <div className="pt-2 text-xs text-orange-600 bg-orange-50 p-2 rounded border border-orange-200">
-                                                    ⚠️ Este produto não possui entradas registradas. O preço será R$ 0,00. Por favor, cadastre uma entrada no módulo "Entradas".
+                                                    <span className="flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Este produto não possui entradas registradas. O preço será R$ 0,00. Por favor, cadastre uma entrada no módulo "Entradas".</span>
                                                   </div>
                                                 )}
                                               </>
@@ -2038,7 +2050,7 @@ const Saidas = () => {
                           <Card className="border-2 border-red-200">
                             <CardHeader className="pb-3">
                               <CardTitle className="text-base font-semibold text-gray-900">
-                                📉 Configuração de Desconto
+                                <div className="flex items-center gap-2"><TrendingDownIcon className="h-4 w-4" /> Configuração de Desconto</div>
                               </CardTitle>
                             </CardHeader>
                             <CardContent>
@@ -2048,7 +2060,7 @@ const Saidas = () => {
                                 render={({ field }) => (
                                   <FormItem className="space-y-2">
                                     <FormLabel className="text-sm font-semibold text-neutral-700">
-                                      📉 Desconto (%) - Percentual para aplicar no preço de venda
+                                      <div className="flex items-center gap-2"><TrendingDownIcon className="h-4 w-4" /> Desconto (%) - Percentual para aplicar no preço de venda</div>
                                     </FormLabel>
                                     <FormControl>
                                       <Input
@@ -2088,7 +2100,7 @@ const Saidas = () => {
                                         discount > 0 && basePrice > 0 && (
                                           <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-lg">
                                             <p className="text-sm font-semibold text-red-700">
-                                              💰 Preço Final com Desconto: R$ {priceWithDiscount.toFixed(2)}
+                                              <span className="flex items-center gap-2"><Coins className="h-4 w-4" /> Preço Final com Desconto: R$ {priceWithDiscount.toFixed(2)}</span>
                                             </p>
                                             <p className="text-xs text-red-600 mt-1">
                                               Preço base: R$ {basePrice.toFixed(2)} - {discount}% = R$ {priceWithDiscount.toFixed(2)}
@@ -2139,7 +2151,7 @@ const Saidas = () => {
                             render={({ field }) => (
                               <FormItem className="space-y-3">
                                 <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
-                                  📅 Data da Venda
+                                  <div className="flex items-center gap-2"><Calendar className="h-4 w-4" /> Data da Venda</div>
                                 </FormLabel>
                                 <FormControl>
                                   <Input 
@@ -2197,7 +2209,7 @@ const Saidas = () => {
                               render={({ field }) => (
                                 <FormItem className="space-y-3">
                                   <FormLabel className="text-base sm:text-sm font-semibold text-neutral-700">
-                                    📊 Parcelas
+                                    <div className="flex items-center gap-2"><BarChart3 className="h-4 w-4" /> Parcelas</div>
                                   </FormLabel>
                                   <Select 
                                     value={String(field.value || 1)} 
@@ -2230,7 +2242,7 @@ const Saidas = () => {
                           render={({ field }) => (
                             <FormItem className="space-y-3">
                               <FormLabel className="text-sm font-semibold text-neutral-700">
-                                📝 Observações
+                                <div className="flex items-center gap-2"><FileText className="h-4 w-4" /> Observações</div>
                               </FormLabel>
                               <FormControl>
                                 <Textarea 
@@ -2275,7 +2287,7 @@ const Saidas = () => {
                             }}
                             className="!flex !w-full md:!w-auto border-2 border-neutral-300 text-neutral-700 hover:bg-neutral-50 h-9 text-xs md:text-sm !flex-shrink-0 whitespace-nowrap min-w-[90px] !items-center !justify-center"
                           >
-                            ❌ Cancelar
+                            <span className="flex items-center gap-2"><X className="h-4 w-4" /> Cancelar</span>
                           </Button>
                           
                           {/* Botão Adicionar - Sempre visível */}
@@ -2294,7 +2306,7 @@ const Saidas = () => {
                               return (form.getValues('quantity') || 0) <= 0;
                             })()}
                           >
-                            ➕ Adicionar
+                            <span className="flex items-center gap-2"><Plus className="h-4 w-4" /> Adicionar</span>
                           </Button>
                           
                           {/* Botão Registrar - Sempre visível */}
@@ -2320,7 +2332,7 @@ const Saidas = () => {
                               return (form.getValues('quantity') || 0) <= 0;
                             })()}
                           >
-                            📤 Registrar
+                            <span className="flex items-center gap-2"><Upload className="h-4 w-4" /> Registrar</span>
                           </Button>
                         </div>
                     </form>
@@ -2359,7 +2371,7 @@ const Saidas = () => {
                     <div className="text-xs sm:text-sm opacity-90">Valor</div>
                   </div>
                 </div>
-                <h3 className="text-base sm:text-lg font-semibold mb-2">💰 Valor Total</h3>
+                <h3 className="text-base sm:text-lg font-semibold mb-2 flex items-center gap-2"><Coins className="h-4 w-4" /> Valor Total</h3>
                 <p className="text-xs sm:text-sm opacity-80">Valor total das vendas</p>
               </div>
 
@@ -2374,7 +2386,7 @@ const Saidas = () => {
                     <div className="text-xs sm:text-sm opacity-90">Mês</div>
                   </div>
                 </div>
-                <h3 className="text-base sm:text-lg font-semibold mb-2">📅 Este Mês</h3>
+                <h3 className="text-base sm:text-lg font-semibold mb-2 flex items-center gap-2"><Calendar className="h-4 w-4" /> Este Mês</h3>
                 <p className="text-xs sm:text-sm opacity-80">Vendas do mês atual</p>
               </div>
 
@@ -2424,27 +2436,33 @@ const Saidas = () => {
             </Card>
 
             {/* Tabela de Vendas */}
-            <Card className="bg-white border-slate-200 shadow-sm">
-              <CardHeader className="pb-4">
-                <CardTitle className="flex items-center gap-2 text-slate-800">
-                  <Package className="w-5 h-5 text-slate-600" />
-                  📋 Lista de Vendas
-                </CardTitle>
+            <Card className="shadow-lg">
+              <CardHeader className="bg-gradient-to-r from-indigo-50 to-purple-50">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <FileText className="w-5 h-5 text-blue-600" />
+                      Lista de Vendas
+                    </CardTitle>
+                    <CardDescription>Gerencie suas vendas cadastradas</CardDescription>
+                  </div>
+                </div>
               </CardHeader>
-              <CardContent>
-                <div className="rounded-md border border-slate-200 overflow-hidden">
-                  <Table>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <div className="rounded-md border border-slate-200 overflow-hidden">
+                    <Table>
                     <TableHeader>
                       <TableRow className="bg-slate-50 hover:bg-slate-100">
-                        <TableHead className="font-semibold text-slate-700">📦 Produto</TableHead>
-                        <TableHead className="font-semibold text-slate-700">👤 Cliente</TableHead>
-                        <TableHead className="font-semibold text-slate-700">🔢 Quantidade</TableHead>
-                        <TableHead className="font-semibold text-slate-700">💰 Preço Unit.</TableHead>
-                        <TableHead className="font-semibold text-slate-700">💵 Total</TableHead>
-                        <TableHead className="font-semibold text-slate-700">📅 Data</TableHead>
-                        <TableHead className="font-semibold text-slate-700">🏷️ Status</TableHead>
-                        <TableHead className="font-semibold text-slate-700">📄 Receita</TableHead>
-                        <TableHead className="text-right font-semibold text-slate-700">⚙️ Ações</TableHead>
+                        <TableHead className="font-semibold text-slate-700"><span className="flex items-center gap-1"><Package className="h-4 w-4" /> Produto</span></TableHead>
+                        <TableHead className="font-semibold text-slate-700"><span className="flex items-center gap-1"><User className="h-4 w-4" /> Cliente</span></TableHead>
+                        <TableHead className="font-semibold text-slate-700"><span className="flex items-center gap-1"><Hash className="h-4 w-4" /> Quantidade</span></TableHead>
+                        <TableHead className="font-semibold text-slate-700"><span className="flex items-center gap-1"><Coins className="h-4 w-4" /> Preço Unit.</span></TableHead>
+                        <TableHead className="font-semibold text-slate-700"><span className="flex items-center gap-1"><DollarSign className="h-4 w-4" /> Total</span></TableHead>
+                        <TableHead className="font-semibold text-slate-700"><span className="flex items-center gap-1"><Calendar className="h-4 w-4" /> Data</span></TableHead>
+                        <TableHead className="font-semibold text-slate-700"><span className="flex items-center gap-1"><Tag className="h-4 w-4" /> Status</span></TableHead>
+                        <TableHead className="font-semibold text-slate-700"><span className="flex items-center gap-1"><FileText className="h-4 w-4" /> Receita</span></TableHead>
+                        <TableHead className="text-right font-semibold text-slate-700"><span className="flex items-center gap-1 justify-end"><Settings className="h-4 w-4" /> Ações</span></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -2477,7 +2495,7 @@ const Saidas = () => {
                             <TableCell>
                               <div className="flex items-center gap-2">
                                 <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
-                                  <span className="text-xs font-medium text-blue-600">👤</span>
+                                  <User className="h-3 w-3 text-blue-600" />
                                 </div>
                                 <span className="font-medium text-slate-700">{exit.customer}</span>
                               </div>
@@ -2510,8 +2528,8 @@ const Saidas = () => {
                                 exit.status === "confirmado" ? "default" : 
                                 exit.status === "pendente" ? "secondary" : "destructive"
                               } className="capitalize">
-                                {exit.status === "confirmado" ? "✅ Confirmado" : 
-                                 exit.status === "pendente" ? "⏳ Pendente" : "❌ Cancelado"}
+                                {exit.status === "confirmado" ? <span className="flex items-center gap-1"><CheckCircle className="h-4 w-4 text-green-600" /> Confirmado</span> : 
+                                 exit.status === "pendente" ? <span className="flex items-center gap-1"><Clock className="h-4 w-4 text-yellow-600" /> Pendente</span> : <span className="flex items-center gap-1"><X className="h-4 w-4 text-red-600" /> Cancelado</span>}
                               </Badge>
                             </TableCell>
                             <TableCell>
@@ -2541,6 +2559,7 @@ const Saidas = () => {
                       )}
                     </TableBody>
                   </Table>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -2568,7 +2587,7 @@ const Saidas = () => {
                   <p><strong>Cliente:</strong> {exitToDelete.customer}</p>
                   <p><strong>Total:</strong> R$ {exitToDelete.totalPrice.toFixed(2)}</p>
                   <p className="text-xs text-red-700 mt-2">
-                    ⚠️ O estoque será <strong>aumentado</strong> em {exitToDelete.quantity} unidades
+                    <span className="flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> O estoque será <strong>aumentado</strong> em {exitToDelete.quantity} unidades</span>
                   </p>
                 </div>
               </div>
@@ -2634,7 +2653,7 @@ const Saidas = () => {
                   <p><strong>Total:</strong> R$ {exitToEdit.totalPrice.toFixed(2)}</p>
                   <p className="text-xs text-blue-700 mt-2">
                     Status Atual: <Badge variant={exitToEdit.status === "confirmado" ? "default" : exitToEdit.status === "pendente" ? "secondary" : "destructive"}>
-                      {exitToEdit.status === "confirmado" ? "✅ Confirmado" : exitToEdit.status === "pendente" ? "⏳ Pendente" : "❌ Cancelado"}
+                      {exitToEdit.status === "confirmado" ? <span className="flex items-center gap-1"><CheckCircle className="h-4 w-4 text-green-600" /> Confirmado</span> : exitToEdit.status === "pendente" ? <span className="flex items-center gap-1"><Clock className="h-4 w-4 text-yellow-600" /> Pendente</span> : <span className="flex items-center gap-1"><X className="h-4 w-4 text-red-600" /> Cancelado</span>}
                     </Badge>
                   </p>
                 </div>
@@ -2643,7 +2662,7 @@ const Saidas = () => {
               {/* Seletor de Status */}
               <div>
                 <Label htmlFor="newStatus" className="text-sm font-semibold">
-                  🏷️ Novo Status:
+                  <div className="flex items-center gap-2"><Tag className="h-4 w-4" /> Novo Status:</div>
                 </Label>
                 <Select
                   defaultValue={exitToEdit.status}
@@ -2658,13 +2677,13 @@ const Saidas = () => {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="pendente">
-                      ⏳ Pendente
+                      <span className="flex items-center gap-2"><Clock className="h-4 w-4" /> Pendente</span>
                     </SelectItem>
                     <SelectItem value="confirmado">
-                      ✅ Confirmado
+                      <span className="flex items-center gap-2"><CheckCircle className="h-4 w-4" /> Confirmado</span>
                     </SelectItem>
                     <SelectItem value="cancelado">
-                      ❌ Cancelado
+                      <span className="flex items-center gap-2"><X className="h-4 w-4" /> Cancelado</span>
                     </SelectItem>
                   </SelectContent>
                 </Select>
@@ -2674,7 +2693,7 @@ const Saidas = () => {
               {exitToEdit.status !== "cancelado" && (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
                   <p className="text-xs text-yellow-800">
-                    <strong>⚠️ Atenção:</strong> Ao cancelar, as {exitToEdit.quantity} unidades serão devolvidas aos lotes do produto.
+                    <strong className="flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Atenção:</strong> Ao cancelar, as {exitToEdit.quantity} unidades serão devolvidas aos lotes do produto.
                   </p>
                 </div>
               )}
@@ -2721,7 +2740,7 @@ const Saidas = () => {
               {/* Cabeçalho da Receita */}
               <div className="border-b pb-4">
                 <div className="text-center mb-3">
-                  <h2 className="text-2xl font-bold text-gray-900">📄 RECEITA</h2>
+                  <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2"><FileText className="h-6 w-6" /> RECEITA</h2>
                   <p className="text-sm text-gray-600">Flexi Gestor - Sistema de Gestão</p>
                 </div>
                 
@@ -2748,8 +2767,8 @@ const Saidas = () => {
                       selectedExit.status === "confirmado" ? "default" : 
                       selectedExit.status === "pendente" ? "secondary" : "destructive"
                     } className="capitalize">
-                      {selectedExit.status === "confirmado" ? "✅ Confirmado" : 
-                       selectedExit.status === "pendente" ? "⏳ Pendente" : "❌ Cancelado"}
+                      {selectedExit.status === "confirmado" ? <span className="flex items-center gap-1"><CheckCircle className="h-4 w-4 text-green-600" /> Confirmado</span> : 
+                       selectedExit.status === "pendente" ? <span className="flex items-center gap-1"><Clock className="h-4 w-4 text-yellow-600" /> Pendente</span> : <span className="flex items-center gap-1"><X className="h-4 w-4 text-red-600" /> Cancelado</span>}
                     </Badge>
                   </div>
                 </div>

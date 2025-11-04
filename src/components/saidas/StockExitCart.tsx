@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Trash2, ShoppingCart, Plus, Minus } from "lucide-react";
+import { Trash2, ShoppingCart, Plus, Minus, Coins, Upload } from "lucide-react";
 
 interface CartBatchItem { batchId?: string; batchNumber?: string; quantity: number }
 interface CartItem { productId: string; productName: string; productSku: string; managedByBatch: boolean; quantity: number; unitPrice: number; batches?: CartBatchItem[] }
@@ -232,7 +232,7 @@ export function StockExitCart({
             {onDiscountChange && (
               <div className="space-y-2 pb-3 border-b">
                 <Label htmlFor="discount" className="text-sm font-medium text-neutral-700">
-                  💰 Desconto (R$)
+                  <span className="flex items-center gap-2"><Coins className="h-4 w-4" /> Desconto (R$)</span>
                 </Label>
                 <Input
                   id="discount"
@@ -282,7 +282,7 @@ export function StockExitCart({
                     <span className="text-neutral-600">R$ {costTotal.toFixed(2).replace(".", ",")}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-emerald-600 font-medium">💰 Margem de Lucro:</span>
+                    <span className="text-emerald-600 font-medium flex items-center gap-2"><Coins className="h-4 w-4" /> Margem de Lucro:</span>
                     <span className={`font-bold ${profitMargin >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
                       R$ {profitMargin.toFixed(2).replace(".", ",")}
                     </span>
@@ -308,7 +308,7 @@ export function StockExitCart({
                 className="w-full border-red-300 text-red-700 hover:bg-red-50 rounded-xl"
                 data-testid="cart-clear-button"
               >
-                🗑️ Esvaziar
+                <span className="flex items-center gap-2"><Trash2 className="h-4 w-4" /> Esvaziar</span>
               </Button>
               <Button
                 type="button"
@@ -316,7 +316,7 @@ export function StockExitCart({
                 disabled={items.length === 0}
                 className="w-full bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white shadow-lg hover:shadow-xl transition-all duration-200 h-10 text-sm rounded-xl"
               >
-                📤 Registrar Saída
+                <span className="flex items-center gap-2"><Upload className="h-4 w-4" /> Registrar Saída</span>
               </Button>
             </div>
           </div>
@@ -325,5 +325,3 @@ export function StockExitCart({
     </Card>
   );
 }
-
-
