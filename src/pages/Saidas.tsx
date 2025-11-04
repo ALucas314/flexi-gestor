@@ -1860,6 +1860,71 @@ const Saidas = () => {
                                                     R$ {totalPrice.toFixed(2).replace('.', ',')}
                                                   </span>
                                                 </div>
+                                                
+                                                {(() => {
+                                                  // Calcular custo de aquisição (preço original antes do markup)
+                                                  // Usar o custo unitário da última entrada (mais recente)
+                                                  let acquisitionCost = 0;
+                                                  if (productEntries.length > 0) {
+                                                    // Pegar a última entrada (mais recente) - já está ordenado por data descendente
+                                                    const latestEntry = productEntries[0];
+                                                    
+                                                    // O unitPrice na entrada é o custo de compra original (antes do markup)
+                                                    if (latestEntry.unitPrice && latestEntry.unitPrice > 0) {
+                                                      acquisitionCost = latestEntry.unitPrice;
+                                                    } else if (latestEntry.total && latestEntry.quantity && latestEntry.quantity > 0) {
+                                                      // Se não tiver unitPrice, calcular a partir do total e quantidade
+                                                      acquisitionCost = latestEntry.total / latestEntry.quantity;
+                                                    }
+                                                  }
+                                                  
+                                                  // Calcular lucro e margem de contribuição
+                                                  // Lucro = (Preço de venda com desconto - Custo médio de aquisição) * Quantidade
+                                                  // Usar unitPrice (preço de venda com desconto) se houver desconto, senão usar baseUnitPrice
+                                                  const sellingPrice = unitPrice > 0 ? unitPrice : baseUnitPrice;
+                                                  const profit = totalToExit > 0 && acquisitionCost > 0 
+                                                    ? (sellingPrice - acquisitionCost) * totalToExit 
+                                                    : 0;
+                                                  
+                                                  // Margem de Contribuição (%) = (Lucro / Total de venda) * 100
+                                                  const contributionMarginPercent = totalPrice > 0 && profit !== 0
+                                                    ? (profit / totalPrice) * 100
+                                                    : 0;
+                                                  
+                                                  return (
+                                                    <>
+                                                      {acquisitionCost > 0 && (
+                                                        <>
+                                                          <div className="flex items-center justify-between pt-2 border-t border-red-200">
+                                                            <span className="text-sm font-medium text-gray-900">
+                                                              💵 Preço Original de Aquisição:
+                                                            </span>
+                                                            <span className="text-sm font-semibold text-gray-700">
+                                                              R$ {acquisitionCost.toFixed(2).replace('.', ',')}
+                                                            </span>
+                                                          </div>
+                                                          <div className="flex items-center justify-between pt-2 border-t border-red-200">
+                                                            <span className="text-sm font-medium text-gray-900">
+                                                              💰 Lucro:
+                                                            </span>
+                                                            <span className={`text-sm font-bold ${profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                              R$ {profit.toFixed(2).replace('.', ',')}
+                                                            </span>
+                                                          </div>
+                                                          <div className="flex items-center justify-between pt-2 border-t border-red-200">
+                                                            <span className="text-sm font-medium text-gray-900">
+                                                              📊 Margem de Contribuição:
+                                                            </span>
+                                                            <span className={`text-sm font-bold ${contributionMarginPercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                              {contributionMarginPercent.toFixed(2).replace('.', ',')}%
+                                                            </span>
+                                                          </div>
+                                                        </>
+                                                      )}
+                                                    </>
+                                                  );
+                                                })()}
+                                                
                                                 {unitPrice === 0 && productEntries.length === 0 && (
                                                   <div className="pt-2 text-xs text-orange-600 bg-orange-50 p-2 rounded border border-orange-200">
                                                     ⚠️ Este produto não possui entradas registradas. O preço será R$ 0,00. Por favor, cadastre uma entrada no módulo "Entradas".
