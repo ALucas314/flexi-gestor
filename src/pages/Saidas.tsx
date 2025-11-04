@@ -1486,45 +1486,120 @@ const Saidas = () => {
                                   const unitPriceWithDiscount = discount > 0 && baseUnitPrice > 0 
                                     ? baseUnitPrice * (1 - discount / 100) 
                                     : baseUnitPrice;
-                                  const totalPrice = form.watch('quantity') * unitPriceWithDiscount;
+                                  const quantityToExit = form.watch('quantity');
+                                  const totalPrice = quantityToExit * unitPriceWithDiscount;
+                                  const currentStock = selectedProduct?.stock || 0;
+                                  const remaining = currentStock - quantityToExit;
+                                  
+                                  // Buscar entradas do produto para calcular preço original de aquisição
+                                  const normalizeId = (id: any): string => {
+                                    if (!id) return '';
+                                    return String(id).trim().toLowerCase();
+                                  };
+                                  
+                                  const allMovementsForProduct = movements.filter(m => {
+                                    const mProductId = normalizeId(m.productId);
+                                    const selectedId = normalizeId(selectedProduct.id);
+                                    return mProductId === selectedId;
+                                  });
+                                  
+                                  // Buscar entradas (type pode estar em diferentes formatos)
+                                  const productEntries = allMovementsForProduct
+                                    .filter(m => {
+                                      const typeStr = String(m.type || '').toLowerCase().trim();
+                                      return typeStr === 'entrada';
+                                    })
+                                    .sort((a, b) => {
+                                      const dateA = a.date instanceof Date ? a.date : new Date(a.date);
+                                      const dateB = b.date instanceof Date ? b.date : new Date(b.date);
+                                      return dateB.getTime() - dateA.getTime(); // Mais recente primeiro
+                                    });
+                                  
+                                  // Calcular custo de aquisição (preço original antes do markup)
+                                  // Usar o custo unitário da última entrada (mais recente)
+                                  let acquisitionCost = 0;
+                                  if (productEntries.length > 0) {
+                                    const latestEntry = productEntries[0];
+                                    if (latestEntry.unitPrice && latestEntry.unitPrice > 0) {
+                                      acquisitionCost = latestEntry.unitPrice;
+                                    } else if (latestEntry.total && latestEntry.quantity && latestEntry.quantity > 0) {
+                                      acquisitionCost = latestEntry.total / latestEntry.quantity;
+                                    }
+                                  }
+                                  
+                                  // Calcular lucro e margem de contribuição
+                                  const sellingPrice = unitPriceWithDiscount > 0 ? unitPriceWithDiscount : baseUnitPrice;
+                                  const profit = quantityToExit > 0 && acquisitionCost > 0 
+                                    ? (sellingPrice - acquisitionCost) * quantityToExit 
+                                    : 0;
+                                  
+                                  // Margem de Contribuição (%) = (Lucro / Total de venda) * 100
+                                  const contributionMarginPercent = totalPrice > 0 && profit !== 0
+                                    ? (profit / totalPrice) * 100
+                                    : 0;
+                                  
                                   return (
-                                    <div className="pt-3 border-t border-red-200 space-y-2">
+                                    <div className="p-4 space-y-2">
+                                      {/* 1. Total a Sair */}
                                       <div className="flex items-center justify-between">
-                                        <span className="text-sm font-medium text-gray-900">💰 Preço Unitário (Base):</span>
-                                        <span className="text-sm font-semibold text-gray-700">
-                                          R$ {baseUnitPrice.toFixed(2)}
-                                        </span>
+                                        <span className="text-sm font-medium text-gray-900">📊 Total a Sair:</span>
+                                        <span className="text-lg font-bold text-red-600">{quantityToExit} unidades</span>
+                                      </div>
+                                      
+                                      {/* 2. Preço Original de Aquisição */}
+                                      {acquisitionCost > 0 && (
+                                        <div className="flex items-center justify-between pt-2 border-t border-red-200">
+                                          <span className="text-sm font-medium text-gray-900">💵 Preço Original de Aquisição:</span>
+                                          <span className="text-sm font-semibold text-gray-700">R$ {acquisitionCost.toFixed(2).replace('.', ',')}</span>
+                                        </div>
+                                      )}
+                                      
+                                      {/* 3. Preço Unitário */}
+                                      <div className="flex items-center justify-between pt-2 border-t border-red-200">
+                                        <span className="text-sm font-medium text-gray-900">💵 Preço Unitário {discount > 0 ? '(Base)' : ''}:</span>
+                                        <span className="text-sm font-semibold text-gray-700">R$ {baseUnitPrice.toFixed(2).replace('.', ',')}</span>
                                       </div>
                                       {discount > 0 && (
-                                        <div className="flex items-center justify-between">
-                                          <span className="text-sm font-medium text-gray-900">💰 Preço Unitário (com desconto):</span>
-                                          <span className="text-sm font-bold text-red-600">
-                                            R$ {unitPriceWithDiscount.toFixed(2)}
+                                        <div className="flex items-center justify-between pt-2 border-t border-red-200">
+                                          <span className="text-sm font-medium text-gray-900">💵 Preço Unitário (com desconto):</span>
+                                          <span className="text-sm font-bold text-red-600">R$ {unitPriceWithDiscount.toFixed(2).replace('.', ',')}</span>
+                                        </div>
+                                      )}
+                                      
+                                      {/* 4. Valor Total */}
+                                      <div className="flex items-center justify-between pt-2 border-t border-red-200">
+                                        <span className="text-sm font-medium text-gray-900">💰 Valor Total:</span>
+                                        <span className="text-lg font-bold text-blue-600">R$ {totalPrice.toFixed(2).replace('.', ',')}</span>
+                                      </div>
+                                      
+                                      {/* 5. Estoque Restante */}
+                                      <div className="flex items-center justify-between pt-2 border-t border-red-200">
+                                        <span className="text-sm font-medium text-gray-900">📦 Estoque Restante:</span>
+                                        <span className={`text-lg font-bold ${remaining < 0 ? 'text-red-600' : remaining < (currentStock * 0.2) && currentStock > 0 ? 'text-yellow-600' : 'text-green-600'}`}>
+                                          {Math.max(0, remaining)} unidades
+                                        </span>
+                                      </div>
+                                      
+                                      {/* 6. Lucro */}
+                                      {acquisitionCost > 0 && (
+                                        <div className="flex items-center justify-between pt-2 border-t border-red-200">
+                                          <span className="text-sm font-medium text-gray-900">💰 Lucro:</span>
+                                          <span className={`text-sm font-bold ${profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                            R$ {profit.toFixed(2).replace('.', ',')}
                                           </span>
                                         </div>
                                       )}
-                                      <div className="flex items-center justify-between">
-                                        <span className="text-sm font-medium text-gray-900">💰 Valor Total:</span>
-                                        <span className="text-lg font-bold text-green-600">
-                                          R$ {totalPrice.toFixed(2)}
-                                        </span>
-                                      </div>
-                                    {(() => {
-                                      const quantityToExit = form.watch('quantity');
-                                      const currentStock = selectedProduct?.stock || 0;
-                                      const remaining = currentStock - quantityToExit;
-                                      return (
+                                      
+                                      {/* 7. Margem de Contribuição */}
+                                      {acquisitionCost > 0 && (
                                         <div className="flex items-center justify-between pt-2 border-t border-red-200">
-                                          <span className="text-sm font-medium text-gray-900">
-                                            📦 Estoque Restante:
-                                          </span>
-                                          <span className={`text-lg font-bold ${remaining < 0 ? 'text-red-600' : remaining < (currentStock * 0.2) ? 'text-yellow-600' : 'text-green-600'}`}>
-                                            {Math.max(0, remaining)} unidades
+                                          <span className="text-sm font-medium text-gray-900">📊 Margem de Contribuição:</span>
+                                          <span className={`text-sm font-bold ${contributionMarginPercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                            {contributionMarginPercent.toFixed(2).replace('.', ',')}%
                                           </span>
                                         </div>
-                                      );
-                                    })()}
-                                  </div>
+                                      )}
+                                    </div>
                                   );
                                 })()}
                               </CardContent>
