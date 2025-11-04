@@ -94,9 +94,13 @@ const Saidas = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [productSearchTerm, setProductSearchTerm] = useState("");
   const [productSearchOpen, setProductSearchOpen] = useState(false);
+  const [productSearchFocused, setProductSearchFocused] = useState(false);
+  const [productSearchUserClicked, setProductSearchUserClicked] = useState(false);
   const [isCartPanelOpen, setIsCartPanelOpen] = useState(false);
   const cartToggleRef = React.useRef<HTMLButtonElement | null>(null);
   const [customerSearchTerm, setCustomerSearchTerm] = useState("");
+  const [customerSearchFocused, setCustomerSearchFocused] = useState(false);
+  const [customerSearchUserClicked, setCustomerSearchUserClicked] = useState(false);
   const [customers, setCustomers] = useState<Array<{id: string, code: string, name: string}>>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
 
@@ -945,14 +949,14 @@ const Saidas = () => {
     form.reset();
 
     toast({
-      title: "Saída Registrada!",
+      title: "Venda Registrada!",
       description: `${totalQuantity} unidades de ${product.name} foram vendidas.`,
       variant: "default",
     });
 
     // Adicionar notificação
     addNotification(
-      '🛒 Nova Saída Registrada',
+      '🛒 Nova Venda Registrada',
       `Produto: ${product.name}\nQuantidade: ${totalQuantity} unidades\nCliente: ${data.customer}\nPreço: R$ ${unitPrice.toFixed(2)}\nTotal: R$ ${totalPrice.toFixed(2)}`,
       'success'
     );
@@ -972,8 +976,8 @@ const Saidas = () => {
       await deleteMovement(exitToDelete.id);
       
       toast({
-        title: "Saída Removida!",
-        description: `Saída de ${exitToDelete.quantity} unidades foi removida e o estoque foi ajustado.`,
+        title: "Venda Removida!",
+        description: `Venda de ${exitToDelete.quantity} unidades foi removida e o estoque foi ajustado.`,
         variant: "default",
       });
 
@@ -983,7 +987,7 @@ const Saidas = () => {
     } catch (error: any) {
       toast({
         title: "Erro ao Remover",
-        description: error.message || "Não foi possível remover a saída.",
+        description: error.message || "Não foi possível remover a venda.",
         variant: "destructive",
       });
     } finally {
@@ -1201,6 +1205,11 @@ const Saidas = () => {
       <div className="relative flex items-center gap-4 flex-wrap">
         <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
           setIsAddDialogOpen(open);
+          // Resetar estados de focus quando dialog abrir ou fechar
+          setProductSearchFocused(false);
+          setCustomerSearchFocused(false);
+          setProductSearchUserClicked(false);
+          setCustomerSearchUserClicked(false);
           if (!open) {
             // Limpar estados ao fechar
             setSelectedProductId("");
@@ -1224,7 +1233,7 @@ const Saidas = () => {
           <DialogTrigger asChild>
             <Button className="w-full sm:w-auto bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-xl sm:rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-200 transform hover:scale-105">
               <Plus className="w-5 h-5 sm:w-6 sm:h-6 mr-2 sm:mr-3" />
-              Nova Saída
+              Nova Venda
             </Button>
           </DialogTrigger>
                 <DialogContent
@@ -1315,28 +1324,57 @@ const Saidas = () => {
                                                 setSelectedBatches([]);
                                               }
                                             }}
+                                            onMouseDown={() => {
+                                              // Marcar que o usuário clicou quando pressionar o mouse
+                                              setProductSearchUserClicked(true);
+                                              setProductSearchFocused(true);
+                                            }}
+                                            onFocus={() => {
+                                              // Só mostrar lista se o usuário já clicou explicitamente
+                                              if (productSearchUserClicked) {
+                                                setProductSearchFocused(true);
+                                              }
+                                            }}
+                                            onBlur={() => {
+                                              // Delay para permitir clique no item
+                                              setTimeout(() => {
+                                                setProductSearchFocused(false);
+                                                setProductSearchUserClicked(false);
+                                              }, 200);
+                                            }}
                                             onKeyDown={(e) => {
                                               if (e.key === 'Enter' && filteredProducts.length === 1) {
                                                 field.onChange(filteredProducts[0].id);
                                                 loadBatchesForProduct(filteredProducts[0].id);
                                                 setProductSearchTerm("");
+                                                setProductSearchFocused(false);
+                                                setProductSearchUserClicked(false);
                                               } else if (e.key === 'Escape') {
                                                 setProductSearchTerm("");
+                                                setProductSearchFocused(false);
+                                                setProductSearchUserClicked(false);
                                               }
                                             }}
                                             className="h-11 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 pl-10"
-                                            autoFocus={productSearchTerm !== ''}
                                           />
                                         </div>
                                         
-                                        {productSearchTerm.trim() !== '' && (
-                                          <div className="absolute z-50 w-full mt-1 bg-white border-2 border-neutral-200 rounded-xl shadow-lg max-h-[300px] overflow-y-auto">
-                                            {filteredProducts.length === 0 ? (
-                                              <div className="p-4 text-center text-sm text-muted-foreground">
-                                                Nenhum produto encontrado
-                                              </div>
-                                            ) : (
-                                              filteredProducts.slice(0, 2).map(product => (
+                                        {((productSearchFocused && productSearchUserClicked) || productSearchTerm.trim() !== '') && (
+                                          <div className="absolute z-50 w-full mt-1 bg-white border-2 border-neutral-200 rounded-xl shadow-lg" style={{ maxHeight: '240px', overflowY: 'auto' }}>
+                                            {(() => {
+                                              const productsToShow = productSearchTerm.trim() !== '' 
+                                                ? filteredProducts 
+                                                : products.slice(0, 50); // Mostrar até 50 produtos quando não há busca
+                                              
+                                              if (productsToShow.length === 0) {
+                                                return (
+                                                  <div className="p-4 text-center text-sm text-muted-foreground">
+                                                    Nenhum produto encontrado
+                                                  </div>
+                                                );
+                                              }
+                                              
+                                              return productsToShow.slice(0, 50).map((product, index) => (
                                                 <button
                                                   key={product.id}
                                                   type="button"
@@ -1345,13 +1383,15 @@ const Saidas = () => {
                                                     field.onChange(product.id);
                                                     loadBatchesForProduct(product.id);
                                                     setProductSearchTerm("");
+                                                    setProductSearchFocused(false);
+                                                    setProductSearchUserClicked(false);
                                                   }}
                                                 >
                                                   <div className="font-medium">{product.name}</div>
-                                                  <div className="text-xs text-muted-foreground">Código: {product.sku} (Estoque: {product.stock})</div>
+                                                  <div className="text-xs text-muted-foreground">Código: {product.sku} {product.stock !== undefined ? `(Estoque: ${product.stock})` : ''}</div>
                                                 </button>
-                                              ))
-                                            )}
+                                              ));
+                                            })()}
                                           </div>
                                         )}
                                       </>
@@ -1419,27 +1459,57 @@ const Saidas = () => {
                                                 field.onChange("");
                                               }
                                             }}
+                                            onMouseDown={() => {
+                                              // Marcar que o usuário clicou quando pressionar o mouse
+                                              setCustomerSearchUserClicked(true);
+                                              setCustomerSearchFocused(true);
+                                            }}
+                                            onFocus={() => {
+                                              // Só mostrar lista se o usuário já clicou explicitamente
+                                              if (customerSearchUserClicked) {
+                                                setCustomerSearchFocused(true);
+                                              }
+                                            }}
+                                            onBlur={() => {
+                                              // Delay para permitir clique no item
+                                              setTimeout(() => {
+                                                setCustomerSearchFocused(false);
+                                                setCustomerSearchUserClicked(false);
+                                              }, 200);
+                                            }}
                                             onKeyDown={(e) => {
                                               if (e.key === 'Enter' && filteredCustomers.length === 1) {
                                                 setSelectedCustomerId(filteredCustomers[0].id);
                                                 field.onChange(filteredCustomers[0].name);
                                                 setCustomerSearchTerm("");
+                                                setCustomerSearchFocused(false);
+                                                setCustomerSearchUserClicked(false);
                                               } else if (e.key === 'Escape') {
                                                 setCustomerSearchTerm("");
+                                                setCustomerSearchFocused(false);
+                                                setCustomerSearchUserClicked(false);
                                               }
                                             }}
                                             className="h-12 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 pl-10 text-base sm:text-sm"
                                           />
                                         </div>
                                         
-                                        {customerSearchTerm.trim() !== '' && (
-                                          <div className="absolute z-50 w-full mt-1 bg-white border-2 border-neutral-200 rounded-xl shadow-lg max-h-[300px] overflow-y-auto">
-                                            {filteredCustomers.length === 0 ? (
-                                              <div className="p-4 text-center text-sm text-muted-foreground">
-                                                Nenhum cliente encontrado
-                                              </div>
-                                            ) : (
-                                              filteredCustomers.slice(0, 5).map(customer => (
+                                        {((customerSearchFocused && customerSearchUserClicked) || customerSearchTerm.trim() !== '') && (
+                                          <div className="absolute z-50 w-full mt-1 bg-white border-2 border-neutral-200 rounded-xl shadow-lg" style={{ maxHeight: '240px', overflowY: 'auto' }}>
+                                            {(() => {
+                                              const customersToShow = customerSearchTerm.trim() !== '' 
+                                                ? filteredCustomers 
+                                                : customers.slice(0, 50); // Mostrar até 50 clientes quando não há busca
+                                              
+                                              if (customersToShow.length === 0) {
+                                                return (
+                                                  <div className="p-4 text-center text-sm text-muted-foreground">
+                                                    Nenhum cliente encontrado
+                                                  </div>
+                                                );
+                                              }
+                                              
+                                              return customersToShow.slice(0, 50).map(customer => (
                                                 <button
                                                   key={customer.id}
                                                   type="button"
@@ -1448,13 +1518,15 @@ const Saidas = () => {
                                                     setSelectedCustomerId(customer.id);
                                                     field.onChange(customer.name);
                                                     setCustomerSearchTerm("");
+                                                    setCustomerSearchFocused(false);
+                                                    setCustomerSearchUserClicked(false);
                                                   }}
                                                 >
                                                   <div className="font-medium">{customer.name}</div>
                                                   <div className="text-xs text-muted-foreground">Código: {customer.code}</div>
                                                 </button>
-                                              ))
-                                            )}
+                                              ));
+                                            })()}
                                           </div>
                                         )}
                                       </>
@@ -2699,7 +2771,7 @@ const Saidas = () => {
                                   size="sm"
                                   onClick={() => handleDeleteExit(exit)}
                                   className="text-red-600 hover:text-red-700 hover:bg-red-50 transition-colors rounded-md h-8 w-8 sm:h-9 sm:w-9 p-0"
-                                  title="Excluir saída"
+                                  title="Excluir venda"
                                 >
                                   <Trash2 className="h-4 w-4 text-red-600" />
                                 </Button>
@@ -2779,7 +2851,7 @@ const Saidas = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Modal de Edição de Saída */}
+      {/* Modal de Edição de Venda */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="max-w-md sm:max-w-lg">
           <DialogHeader>

@@ -125,7 +125,11 @@ const Entradas = () => {
   const [nextBatchNumberSuggestion, setNextBatchNumberSuggestion] = useState<string>("1");
   const [productSearchOpen, setProductSearchOpen] = useState(false);
   const [productSearchTerm, setProductSearchTerm] = useState("");
+  const [productSearchFocused, setProductSearchFocused] = useState(false);
+  const [productSearchUserClicked, setProductSearchUserClicked] = useState(false);
   const [supplierSearchTerm, setSupplierSearchTerm] = useState("");
+  const [supplierSearchFocused, setSupplierSearchFocused] = useState(false);
+  const [supplierSearchUserClicked, setSupplierSearchUserClicked] = useState(false);
   const [supplierResults, setSupplierResults] = useState<Array<{ id?: string; nome: string; codigo: string }>>([]);
   // Estado para armazenar valores parciais de datas enquanto digita
   const [dateTextValues, setDateTextValues] = useState<{[key: string]: string}>({});
@@ -1639,6 +1643,11 @@ const Entradas = () => {
           {/* Botão de Nova Entrada com Design Sofisticado */}
           <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
             setIsAddDialogOpen(open);
+            // Resetar estados de focus quando dialog abrir ou fechar
+            setProductSearchFocused(false);
+            setSupplierSearchFocused(false);
+            setProductSearchUserClicked(false);
+            setSupplierSearchUserClicked(false);
             if (open) {
               setShowSupplierDropdown(false);
             }
@@ -1734,28 +1743,55 @@ const Entradas = () => {
                                           setSelectedBatches([]);
                                         }
                                       }}
+                                      onMouseDown={() => {
+                                        // Marcar que o usuário clicou quando pressionar o mouse
+                                        setProductSearchUserClicked(true);
+                                        setProductSearchFocused(true);
+                                      }}
+                                      onFocus={() => {
+                                        // Só mostrar lista se o usuário já clicou explicitamente
+                                        if (productSearchUserClicked) {
+                                          setProductSearchFocused(true);
+                                        }
+                                      }}
+                                      onBlur={() => {
+                                        // Delay para permitir clique no item
+                                        setTimeout(() => {
+                                          setProductSearchFocused(false);
+                                          setProductSearchUserClicked(false);
+                                        }, 200);
+                                      }}
                                       onKeyDown={(e) => {
                                         if (e.key === 'Enter' && filteredProducts.length === 1) {
                                           field.onChange(filteredProducts[0].id);
                                           loadBatchesForProduct(filteredProducts[0].id);
                                           setProductSearchTerm("");
+                                          setProductSearchFocused(false);
                                         } else if (e.key === 'Escape') {
                                           setProductSearchTerm("");
+                                          setProductSearchFocused(false);
                                         }
                                       }}
                                       className="h-11 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 pl-10"
-                                      autoFocus={productSearchTerm !== ''}
                                     />
                                   </div>
                                   
-                                  {productSearchTerm.trim() !== '' && (
-                                    <div className="absolute z-50 w-full mt-1 bg-white border-2 border-neutral-200 rounded-xl shadow-lg max-h-[300px] overflow-y-auto">
-                                      {filteredProducts.length === 0 ? (
-                                        <div className="p-4 text-center text-sm text-muted-foreground">
-                                          Nenhum produto encontrado
-                                        </div>
-                                      ) : (
-                                        filteredProducts.slice(0, 2).map(product => (
+                                  {((productSearchFocused && productSearchUserClicked) || productSearchTerm.trim() !== '') && (
+                                    <div className="absolute z-50 w-full mt-1 bg-white border-2 border-neutral-200 rounded-xl shadow-lg" style={{ maxHeight: '240px', overflowY: 'auto' }}>
+                                      {(() => {
+                                        const productsToShow = productSearchTerm.trim() !== '' 
+                                          ? filteredProducts 
+                                          : products.slice(0, 50); // Mostrar até 50 produtos quando não há busca
+                                        
+                                        if (productsToShow.length === 0) {
+                                          return (
+                                            <div className="p-4 text-center text-sm text-muted-foreground">
+                                              Nenhum produto encontrado
+                                            </div>
+                                          );
+                                        }
+                                        
+                                        return productsToShow.slice(0, 50).map(product => (
                                           <button
                                             key={product.id}
                                             type="button"
@@ -1764,13 +1800,14 @@ const Entradas = () => {
                                               field.onChange(product.id);
                                               loadBatchesForProduct(product.id);
                                               setProductSearchTerm("");
+                                              setProductSearchFocused(false);
                                             }}
                                           >
                                             <div className="font-medium">{product.name}</div>
                                             <div className="text-xs text-muted-foreground">Código: {product.sku}</div>
                                           </button>
-                                        ))
-                                      )}
+                                        ));
+                                      })()}
                                     </div>
                                   )}
                                 </>
@@ -1799,20 +1836,36 @@ const Entradas = () => {
                                   const value = e.target.value;
                                   field.onChange(value);
                                   setSupplierSearchTerm(value);
-                                  // Só mostrar dropdown se houver texto digitado
+                                  // Mostrar dropdown quando houver texto digitado
                                   if (value.trim().length > 0) {
                                     setShowSupplierDropdown(true);
-                                  } else {
-                                    setShowSupplierDropdown(false);
                                   }
                                   setSupplierSuggestion(null);
                                 }}
-                                onFocus={() => {
-                                  // Só mostrar dropdown se houver texto digitado
+                                onMouseDown={() => {
+                                  // Marcar que o usuário clicou quando pressionar o mouse
+                                  setSupplierSearchUserClicked(true);
+                                  setSupplierSearchFocused(true);
+                                  setShowSupplierDropdown(true);
                                   if (field.value && field.value.trim().length > 0) {
-                                    setShowSupplierDropdown(true);
                                     setSupplierSearchTerm(field.value);
                                   }
+                                }}
+                                onFocus={() => {
+                                  // Mostrar lista quando focar
+                                  setSupplierSearchFocused(true);
+                                  setShowSupplierDropdown(true);
+                                  if (field.value && field.value.trim().length > 0) {
+                                    setSupplierSearchTerm(field.value);
+                                  }
+                                }}
+                                onBlur={() => {
+                                  // Delay para permitir clique no item
+                                  setTimeout(() => {
+                                    setSupplierSearchFocused(false);
+                                    setSupplierSearchUserClicked(false);
+                                    setShowSupplierDropdown(false);
+                                  }, 200);
                                 }}
                                 onKeyDown={(e) => {
                                   // Permitir navegação com teclado
@@ -1823,11 +1876,26 @@ const Entradas = () => {
                                 className="h-11 sm:h-10 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-base sm:text-sm"
                                 autoComplete="off"
                               />
-                              {showSupplierDropdown && !isLoadingSuppliers && (
+                              {(supplierSearchFocused || showSupplierDropdown) && !isLoadingSuppliers && (
                                 <>
-                                  {filteredSuppliers.length > 0 ? (
-                                    <div className="absolute z-50 mt-1 w-full bg-white border border-neutral-200 rounded-lg shadow-lg overflow-hidden max-h-60 overflow-y-auto">
-                                      {filteredSuppliers.map((supplier) => (
+                                  {(() => {
+                                    const suppliersToShow = supplierSearchTerm.trim() !== '' 
+                                      ? filteredSuppliers 
+                                      : allSuppliers.slice(0, 50); // Mostrar até 50 fornecedores quando não há busca
+                                    
+                                    if (suppliersToShow.length === 0) {
+                                      return (
+                                        <div className="absolute z-50 mt-1 w-full bg-white border border-neutral-200 rounded-lg shadow-lg overflow-hidden">
+                                          <div className="p-4 text-center text-sm text-muted-foreground">
+                                            {allSuppliers.length === 0 ? 'Nenhum fornecedor cadastrado' : 'Nenhum fornecedor encontrado'}
+                                          </div>
+                                        </div>
+                                      );
+                                    }
+                                    
+                                    return (
+                                      <div className="absolute z-50 mt-1 w-full bg-white border border-neutral-200 rounded-lg shadow-lg overflow-hidden" style={{ maxHeight: '240px', overflowY: 'auto' }}>
+                                        {suppliersToShow.slice(0, 50).map((supplier) => (
                                         <button
                                           key={supplier.id}
                                           type="button"
@@ -1836,6 +1904,7 @@ const Entradas = () => {
                                             field.onChange(supplier.nome);
                                             setSupplierSearchTerm('');
                                             setShowSupplierDropdown(false);
+                                            setSupplierSearchFocused(false);
                                             setSupplierSuggestion(null);
                                           }}
                                         >
@@ -1845,19 +1914,14 @@ const Entradas = () => {
                                           </div>
                                         </button>
                                       ))}
-                                      {filteredSuppliers.length === 10 && allSuppliers.length > 10 && (
-                                        <div className="px-4 py-2 text-xs text-neutral-500 bg-neutral-50 text-center">
-                                          Mostrando 10 de {allSuppliers.length} fornecedores
+                                      {suppliersToShow.length > 4 && (
+                                        <div className="px-4 py-2 text-xs text-neutral-500 bg-neutral-50 text-center border-t">
+                                          Mostrando {Math.min(50, suppliersToShow.length)} de {allSuppliers.length} fornecedores
                                         </div>
                                       )}
                                     </div>
-                                  ) : (
-                                    <div className="absolute z-50 mt-1 w-full bg-white border border-neutral-200 rounded-lg shadow-lg p-3">
-                                      <div className="text-sm text-neutral-500 text-center">
-                                        {allSuppliers.length === 0 ? 'Nenhum fornecedor cadastrado' : 'Nenhum fornecedor encontrado'}
-                                      </div>
-                                    </div>
-                                  )}
+                                    );
+                                  })()}
                                 </>
                               )}
                             </div>
@@ -3393,36 +3457,71 @@ const Entradas = () => {
                                 setShowSupplierDropdown(false);
                               }
                             }}
-                            onFocus={() => {
-                              // Só mostrar dropdown se houver texto digitado
+                            onMouseDown={() => {
+                              // Marcar que o usuário clicou quando pressionar o mouse
+                              setSupplierSearchUserClicked(true);
+                              setSupplierSearchFocused(true);
+                              setShowSupplierDropdown(true);
                               if (field.value && field.value.trim().length > 0) {
-                                setShowSupplierDropdown(true);
                                 setSupplierSearchTerm(field.value);
                               }
+                            }}
+                            onFocus={() => {
+                              // Mostrar lista quando focar
+                              setSupplierSearchFocused(true);
+                              setShowSupplierDropdown(true);
+                              if (field.value && field.value.trim().length > 0) {
+                                setSupplierSearchTerm(field.value);
+                              }
+                            }}
+                            onBlur={() => {
+                              // Delay para permitir clique no item
+                              setTimeout(() => {
+                                setSupplierSearchFocused(false);
+                                setSupplierSearchUserClicked(false);
+                                setShowSupplierDropdown(false);
+                              }, 200);
                             }}
                             onKeyDown={(e) => {
                               // Permitir navegação com teclado
                               if (e.key === 'Escape') {
                                 setShowSupplierDropdown(false);
+                                setSupplierSearchFocused(false);
                               }
                             }}
                             className="h-12 border-2 border-neutral-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-base sm:text-sm"
                             autoComplete="off"
                           />
-                          {showSupplierDropdown && !isLoadingSuppliers && (
+                          {(supplierSearchFocused || showSupplierDropdown) && !isLoadingSuppliers && (
                             <>
-                              {filteredSuppliers.length > 0 ? (
-                                <div className="absolute z-50 mt-1 w-full bg-white border border-neutral-200 rounded-lg shadow-lg overflow-hidden max-h-60 overflow-y-auto">
-                                  {filteredSuppliers.map((supplier) => (
-                                    <button
-                                      key={`edit-${supplier.id}`}
-                                      type="button"
-                                      className="w-full px-4 py-3 text-left hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus:outline-none border-b last:border-b-0 transition-colors"
-                                      onClick={() => {
-                                        field.onChange(supplier.nome);
-                                        setSupplierSearchTerm('');
-                                        setShowSupplierDropdown(false);
-                                      }}
+                              {(() => {
+                                const suppliersToShow = supplierSearchTerm.trim() !== '' 
+                                  ? filteredSuppliers 
+                                  : allSuppliers.slice(0, 50); // Mostrar até 50 fornecedores quando não há busca
+                                
+                                if (suppliersToShow.length === 0) {
+                                  return (
+                                    <div className="absolute z-50 mt-1 w-full bg-white border border-neutral-200 rounded-lg shadow-lg overflow-hidden">
+                                      <div className="p-4 text-center text-sm text-muted-foreground">
+                                        {allSuppliers.length === 0 ? 'Nenhum fornecedor cadastrado' : 'Nenhum fornecedor encontrado'}
+                                      </div>
+                                    </div>
+                                  );
+                                }
+                                
+                                return (
+                                  <div className="absolute z-50 mt-1 w-full bg-white border border-neutral-200 rounded-lg shadow-lg overflow-hidden" style={{ maxHeight: '240px', overflowY: 'auto' }}>
+                                    {suppliersToShow.slice(0, 50).map((supplier) => (
+                                      <button
+                                        key={`edit-${supplier.id}`}
+                                        type="button"
+                                        className="w-full px-4 py-3 text-left hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus:outline-none border-b last:border-b-0 transition-colors"
+                                        onClick={() => {
+                                          field.onChange(supplier.nome);
+                                          setSupplierSearchTerm('');
+                                          setShowSupplierDropdown(false);
+                                          setSupplierSearchFocused(false);
+                                        }}
                                     >
                                       <div className="font-medium">{supplier.nome}</div>
                                       <div className="text-xs text-muted-foreground">
@@ -3430,19 +3529,14 @@ const Entradas = () => {
                                       </div>
                                     </button>
                                   ))}
-                                  {filteredSuppliers.length === 10 && allSuppliers.length > 10 && (
-                                    <div className="px-4 py-2 text-xs text-neutral-500 bg-neutral-50 text-center">
-                                      Mostrando 10 de {allSuppliers.length} fornecedores
+                                  {suppliersToShow.length > 4 && (
+                                    <div className="px-4 py-2 text-xs text-neutral-500 bg-neutral-50 text-center border-t">
+                                      Mostrando {Math.min(50, suppliersToShow.length)} de {allSuppliers.length} fornecedores
                                     </div>
                                   )}
-                                </div>
-                              ) : (
-                                <div className="absolute z-50 mt-1 w-full bg-white border border-neutral-200 rounded-lg shadow-lg p-3">
-                                  <div className="text-sm text-neutral-500 text-center">
-                                    {allSuppliers.length === 0 ? 'Nenhum fornecedor cadastrado' : 'Nenhum fornecedor encontrado'}
                                   </div>
-                                </div>
-                              )}
+                                );
+                              })()}
                             </>
                           )}
                         </div>
@@ -3709,3 +3803,4 @@ const Entradas = () => {
 };
 
 export default Entradas;
+
