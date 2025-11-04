@@ -17,13 +17,15 @@ import {
   Trash2,
   Edit
 } from 'lucide-react';
-import { getBatchesByProduct, createBatch, deleteBatch, checkBatchNumberExists, generateNextAvailableBatchNumber, findBatchByNumberAndProduct, findBatchByNumber, updateBatchQuantity } from '@/lib/batches';
+import { getBatchesByProduct, createBatch, deleteBatch, checkBatchNumberExists, generateNextAvailableBatchNumber, findBatchByNumberAndProduct, findBatchByNumber, updateBatchQuantity, syncProductStockFromBatches } from '@/lib/batches';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { useData } from '@/contexts/DataContext';
 import { useToast } from '@/hooks/use-toast';
 import { daysBetween } from '@/lib/utils';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { useConfirmDialog } from '@/hooks/use-confirm-dialog';
+import { supabase } from '@/lib/supabase';
 
 interface Batch {
   id: string;
@@ -56,6 +58,7 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
   const { toast } = useToast();
   const { user } = useAuth();
   const { workspaceAtivo } = useWorkspace();
+  const { updateProduct, refreshProducts } = useData();
   const { confirm, dialogState, closeDialog, handleConfirm } = useConfirmDialog();
   const [batches, setBatches] = useState<Batch[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -66,7 +69,7 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
   });
 
   // Carregar lotes do produto
-  const loadBatches = async () => {
+  const loadBatches = async (syncStock = false) => {
     if (!user?.id) return;
     
     try {
@@ -80,6 +83,29 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
         expiryDate: b.expiryDate?.toISOString() || null,
         createdAt: b.createdAt.toISOString()
       })));
+      
+      // Sincronizar estoque automaticamente após carregar lotes (sempre sincronizar para produtos gerenciados por lote)
+      if (syncStock) {
+        const totalBatches = batchesData.reduce((sum, b) => sum + b.quantity, 0);
+        // Sempre sincronizar para garantir que o estoque está correto
+        // O estoque deve sempre ser igual à soma dos lotes para produtos gerenciados por lote
+        // Se não houver lotes, o estoque será 0
+        if (totalBatches !== productStock) {
+          console.log(`🔄 [BatchManager] Sincronizando estoque ao carregar: ${productStock} -> ${totalBatches}`);
+          await syncProductStockFromBatches(
+            productId,
+            user.id,
+            async (productId: string, stock: number) => {
+              await updateProduct(productId, { stock });
+            }
+          );
+          await refreshProducts();
+          // Notificar mudança para atualizar a prop productStock
+          if (onBatchesChange) {
+            onBatchesChange();
+          }
+        }
+      }
       
       // Gerar número do lote usando apenas o SKU do produto
       setFormData(prev => ({
@@ -95,10 +121,124 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
 
   useEffect(() => {
     if (user?.id && productId) {
-      loadBatches();
+      // Carregar lotes e sincronizar estoque automaticamente na primeira carga
+      loadBatches(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productId]);
+
+  // 📡 Realtime para atualizar lotes quando são modificados em tempo real
+  useEffect(() => {
+    if (!user?.id || !productId) return;
+
+    let lotesSubscription: any = null;
+    let lastSuccessfulConnection = Date.now();
+    let debounceTimer: NodeJS.Timeout | null = null;
+
+    // Função para reconfigurar subscription quando desconecta
+    const reconfigureSubscription = () => {
+      if (lotesSubscription) {
+        supabase.removeChannel(lotesSubscription);
+      }
+      
+      // Limpar timer de debounce anterior
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+        debounceTimer = null;
+      }
+
+      try {
+        lotesSubscription = supabase
+          .channel(`lotes-changes-${productId}-${user.id}-${Date.now()}`)
+          .on('postgres_changes', 
+            { 
+              event: '*', 
+              schema: 'public', 
+              table: 'lotes',
+              filter: `produto_id=eq.${productId}`
+            }, 
+            async (payload) => {
+              console.log('📡 Realtime: Lote alterado', payload.eventType, payload);
+              
+              // Limpar timer anterior se existir
+              if (debounceTimer) {
+                clearTimeout(debounceTimer);
+              }
+              
+              // Debounce para evitar muitas atualizações simultâneas
+              debounceTimer = setTimeout(async () => {
+                try {
+                  await loadBatches();
+                  
+                  // Sincronizar estoque automaticamente quando lotes mudarem via realtime
+                  await syncProductStockFromBatches(
+                    productId,
+                    user.id,
+                    async (productId: string, stock: number) => {
+                      await updateProduct(productId, { stock });
+                    }
+                  );
+                  await refreshProducts();
+                  
+                  if (onBatchesChange) {
+                    onBatchesChange();
+                  }
+                  lastSuccessfulConnection = Date.now();
+                  debounceTimer = null;
+                } catch (error) {
+                  console.error('❌ [BatchManager] Erro ao atualizar via subscription:', error);
+                  debounceTimer = null;
+                }
+              }, 300); // 300ms de debounce
+            }
+          )
+          .subscribe((status) => {
+            console.log(`📡 Realtime: Lotes (produto ${productId}) - Status: ${status}`);
+            if (status === 'SUBSCRIBED') {
+              lastSuccessfulConnection = Date.now();
+              console.log('✅ Realtime: Lotes conectado com sucesso');
+            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+              console.warn('⚠️ Realtime: Lotes desconectado, tentando reconectar...');
+              setTimeout(() => {
+                reconfigureSubscription();
+              }, 2000);
+            }
+          });
+
+        console.log('📡 [BatchManager] Subscription de lotes criada para produto:', productId);
+      } catch (error) {
+        console.error('❌ [BatchManager] Erro ao criar subscription:', error);
+      }
+    };
+
+    // Configurar subscription inicial
+    reconfigureSubscription();
+
+    // Health check que detecta desconexão e reconecta
+    const healthCheckInterval = setInterval(async () => {
+      const timeSinceLastConnection = Date.now() - lastSuccessfulConnection;
+      if (timeSinceLastConnection > 120000) { // 2 minutos
+        try {
+          reconfigureSubscription();
+          await loadBatches();
+          lastSuccessfulConnection = Date.now();
+        } catch (e) {
+          console.error('❌ [BatchManager] Erro no health check:', e);
+        }
+      }
+    }, 30000); // Verificar a cada 30 segundos
+
+    return () => {
+      clearInterval(healthCheckInterval);
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+      }
+      if (lotesSubscription) {
+        supabase.removeChannel(lotesSubscription);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, productId]);
 
   // Adicionar novo lote
   const handleAddBatch = async () => {
@@ -173,6 +313,17 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
         });
         
         await loadBatches();
+        
+        // Sincronizar estoque automaticamente após atualizar lote
+        await syncProductStockFromBatches(
+          productId,
+          user.id,
+          async (productId: string, stock: number) => {
+            await updateProduct(productId, { stock });
+          }
+        );
+        await refreshProducts();
+        
         setIsDialogOpen(false);
         onBatchesChange?.();
         return;
@@ -210,6 +361,17 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
 
       // Recarregar lotes
       await loadBatches();
+      
+      // Sincronizar estoque automaticamente após criar lote
+      await syncProductStockFromBatches(
+        productId,
+        user.id,
+        async (productId: string, stock: number) => {
+          await updateProduct(productId, { stock });
+        }
+      );
+      await refreshProducts();
+      
       setIsDialogOpen(false);
       
       // Notificar mudança
@@ -245,6 +407,17 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
           });
 
           await loadBatches();
+          
+          // Sincronizar estoque automaticamente após deletar lote
+          await syncProductStockFromBatches(
+            productId,
+            user.id,
+            async (productId: string, stock: number) => {
+              await updateProduct(productId, { stock });
+            }
+          );
+          await refreshProducts();
+          
           onBatchesChange?.();
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Não foi possível deletar o lote';
@@ -682,18 +855,57 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
             </div>
 
             {/* Alerta se houver divergência */}
-            {batches.reduce((sum, b) => sum + b.quantity, 0) > productStock && (
-              <div className="flex items-center space-x-2 bg-red-100 border border-red-300 rounded-lg p-3">
-                <AlertTriangle className="h-5 w-5 text-red-600 flex-shrink-0" />
-                <div className="text-sm">
-                  <p className="font-semibold text-red-900">⚠️ Atenção: Divergência Detectada!</p>
-                  <p className="text-red-700">
-                    A soma dos lotes ({batches.reduce((sum, b) => sum + b.quantity, 0)}) é maior que o estoque total ({productStock}). 
-                    Verifique as quantidades dos lotes ou ajuste o estoque do produto.
-                  </p>
+            {batches.reduce((sum, b) => sum + b.quantity, 0) > productStock && (() => {
+              const totalBatches = batches.reduce((sum, b) => sum + b.quantity, 0);
+              const handleSyncStock = async () => {
+                try {
+                  // Usar a função de sincronização que já calcula a soma dos lotes
+                  const syncedStock = await syncProductStockFromBatches(
+                    productId,
+                    user.id,
+                    async (productId: string, stock: number) => {
+                      await updateProduct(productId, { stock });
+                    }
+                  );
+                  await refreshProducts();
+                  if (onBatchesChange) onBatchesChange();
+                  toast({
+                    title: "✅ Estoque Sincronizado!",
+                    description: `O estoque foi atualizado para ${syncedStock || totalBatches} unidades (soma dos lotes).`,
+                    variant: "default",
+                  });
+                } catch (error: any) {
+                  toast({
+                    title: "❌ Erro ao Sincronizar",
+                    description: error.message || "Não foi possível sincronizar o estoque.",
+                    variant: "destructive",
+                  });
+                }
+              };
+              
+              return (
+                <div className="flex flex-col space-y-2 bg-red-100 border border-red-300 rounded-lg p-3">
+                  <div className="flex items-start space-x-2">
+                    <AlertTriangle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1 text-sm">
+                      <p className="font-semibold text-red-900">⚠️ Atenção: Divergência Detectada!</p>
+                      <p className="text-red-700 mt-1">
+                        A soma dos lotes ({totalBatches}) é maior que o estoque total ({productStock}). 
+                        Isso pode ocorrer após múltiplas entradas ou vendas que não foram sincronizadas corretamente.
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    onClick={handleSyncStock}
+                    className="w-full bg-red-600 hover:bg-red-700 text-white text-xs h-8"
+                    size="sm"
+                  >
+                    <CheckCircle className="h-3 w-3 mr-1.5" />
+                    Sincronizar Estoque (Ajustar para {totalBatches} unidades)
+                  </Button>
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
         </CardContent>
       </Card>

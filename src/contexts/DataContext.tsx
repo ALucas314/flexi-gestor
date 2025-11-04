@@ -10,6 +10,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from './AuthContext';
 import { useWorkspace } from './WorkspaceContext';
 import { checkSupabaseStorageCapacityOnce } from '@/lib/storageCapacity';
+import { syncProductStockFromBatches } from '@/lib/batches';
 
 // Interfaces dos dados
 interface Product {
@@ -845,16 +846,32 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       // Atualizar estoque do produto
       const product = products.find(p => p.id === movement.productId);
       if (product) {
-        let newStock = product.stock;
-        if (movement.type === 'entrada') {
-          newStock += movement.quantity;
-        } else if (movement.type === 'saida') {
-          newStock = Math.max(0, newStock - movement.quantity);
-        } else if (movement.type === 'ajuste') {
-          newStock = movement.quantity;
-        }
+        // Se o produto é gerenciado por lote, sincronizar estoque baseado nos lotes
+        const managedByBatch = (product as any)?.managedByBatch === true;
+        
+        if (managedByBatch) {
+          // Para produtos gerenciados por lote, o estoque deve ser sempre igual à soma dos lotes
+          // Sincronizar automaticamente após a movimentação
+          await syncProductStockFromBatches(
+            movement.productId,
+            user.id,
+            async (productId: string, stock: number) => {
+              await updateProduct(productId, { stock });
+            }
+          );
+        } else {
+          // Para produtos não gerenciados por lote, atualizar normalmente
+          let newStock = product.stock;
+          if (movement.type === 'entrada') {
+            newStock += movement.quantity;
+          } else if (movement.type === 'saida') {
+            newStock = Math.max(0, newStock - movement.quantity);
+          } else if (movement.type === 'ajuste') {
+            newStock = movement.quantity;
+          }
 
-        await updateProduct(movement.productId, { stock: newStock });
+          await updateProduct(movement.productId, { stock: newStock });
+        }
       }
 
       // Recarregar produtos e movimentações para atualizar o dashboard
@@ -899,18 +916,34 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       // Reverter o estoque do produto
       const product = products.find(p => p.id === movementToDelete.productId);
       if (product) {
-        let newStock = product.stock;
+        // Se o produto é gerenciado por lote, sincronizar estoque baseado nos lotes
+        const managedByBatch = (product as any)?.managedByBatch === true;
         
-        // Se foi entrada, diminuir do estoque
-        if (movementToDelete.type === 'entrada') {
-          newStock = Math.max(0, product.stock - movementToDelete.quantity);
-        }
-        // Se foi saída, devolver ao estoque
-        else if (movementToDelete.type === 'saida') {
-          newStock = product.stock + movementToDelete.quantity;
-        }
+        if (managedByBatch) {
+          // Para produtos gerenciados por lote, o estoque deve ser sempre igual à soma dos lotes
+          // Sincronizar automaticamente após deletar a movimentação
+          await syncProductStockFromBatches(
+            movementToDelete.productId,
+            user.id,
+            async (productId: string, stock: number) => {
+              await updateProduct(productId, { stock });
+            }
+          );
+        } else {
+          // Para produtos não gerenciados por lote, reverter normalmente
+          let newStock = product.stock;
+          
+          // Se foi entrada, diminuir do estoque
+          if (movementToDelete.type === 'entrada') {
+            newStock = Math.max(0, product.stock - movementToDelete.quantity);
+          }
+          // Se foi saída, devolver ao estoque
+          else if (movementToDelete.type === 'saida') {
+            newStock = product.stock + movementToDelete.quantity;
+          }
 
-        await updateProduct(movementToDelete.productId, { stock: newStock });
+          await updateProduct(movementToDelete.productId, { stock: newStock });
+        }
       }
 
       // Recarregar movimentações

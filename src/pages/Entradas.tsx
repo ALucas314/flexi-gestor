@@ -29,7 +29,8 @@ import {
   Sparkles,
   Info,
   Settings,
-  Target
+  Target,
+  ShoppingCart
 } from "lucide-react";
 import { BatchManager } from "@/components/BatchManager";
 
@@ -52,6 +53,7 @@ import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { supabase } from "@/lib/supabase";
 import { Label } from "@/components/ui/label";
 import { generateReceiptNumber } from "@/lib/utils";
+import { StockEntryCart } from "@/components/entradas/StockEntryCart";
 
 // Converte diferença em dias para string humanizada (anos, meses, semanas, dias)
 function humanizeDaysDiff(diffDays: number): string {
@@ -138,10 +140,26 @@ const Entradas = () => {
   const [isLoadingSuppliers, setIsLoadingSuppliers] = useState(false);
   const [showSupplierDropdown, setShowSupplierDropdown] = useState(false);
   const supplierInputRef = useRef<HTMLDivElement>(null);
+  
+  // Estados do carrinho
+  interface CartBatchItem { batchNumber?: string; quantity: number; unitCost?: number; manufactureDate?: Date; expiryDate?: Date }
+  interface CartItem { 
+    productId: string; 
+    productName: string; 
+    productSku: string; 
+    managedByBatch: boolean; 
+    quantity: number; 
+    unitCost: number; // Preço final com markup (para exibição)
+    originalUnitCost?: number; // Custo original sem markup (para processamento)
+    batches?: CartBatchItem[];
+    manufactureDate?: Date; // Data de fabricação (para produtos não gerenciados por lote)
+    expiryDate?: Date; // Data de validade (para produtos não gerenciados por lote)
+  }
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
 
   // Hooks
   const { toast } = useToast();
-  const { products, movements, addMovement, deleteMovement, addNotification, updateProduct } = useData();
+  const { products, movements, addMovement, deleteMovement, addNotification, updateProduct, refreshProducts } = useData();
   const { user } = useAuth();
   const { workspaceAtivo } = useWorkspace();
 
@@ -217,6 +235,371 @@ const Entradas = () => {
       installments: 1, // Número de parcelas padrão
     },
   });
+
+  // Funções do carrinho
+  const addCurrentSelectionToCart = () => {
+    const selectedProduct = products.find(p => p.id === selectedProductId);
+    if (!selectedProduct) {
+      toast({ title: 'Selecione um produto', variant: 'destructive' });
+      return;
+    }
+    const managedByBatch = (selectedProduct as any)?.managedByBatch === true;
+    const unitCost = form.getValues('unitCost') || 0;
+
+    if (managedByBatch) {
+      const totalQty = selectedBatches.reduce((s, b) => s + (b.quantity || 0), 0);
+      if (totalQty <= 0) {
+        toast({ title: 'Selecione lotes com quantidade', variant: 'destructive' });
+        return;
+      }
+      const batches: CartBatchItem[] = selectedBatches
+        .filter(b => (b.quantity || 0) > 0 && b.batchNumber)
+        .map(b => ({ 
+          batchNumber: b.batchNumber, 
+          quantity: b.quantity, 
+          unitCost: b.unitCost || unitCost,
+          manufactureDate: b.manufactureDate,
+          expiryDate: b.expiryDate
+        }));
+      if (batches.length === 0) {
+        toast({ title: 'Selecione lotes válidos', variant: 'destructive' });
+        return;
+      }
+      
+      // Calcular custo médio ponderado dos lotes
+      // Se algum lote tem unitCost específico, usar; senão usar o unitCost do formulário
+      let calculatedUnitCost = unitCost || 0;
+      const batchesWithCost = batches.filter(b => (b.unitCost || 0) > 0);
+      if (batchesWithCost.length > 0) {
+        // Calcular média ponderada: soma(custo * quantidade) / soma(quantidades)
+        const totalCost = batchesWithCost.reduce((sum, b) => sum + ((b.unitCost || 0) * (b.quantity || 0)), 0);
+        const totalQuantity = batchesWithCost.reduce((sum, b) => sum + (b.quantity || 0), 0);
+        if (totalQuantity > 0) {
+          calculatedUnitCost = totalCost / totalQuantity;
+        }
+      }
+      
+      // Se nenhum lote tem custo e o unitCost do formulário também é 0, usar o custo do primeiro lote que tiver
+      if (calculatedUnitCost === 0 && batches.length > 0) {
+        const firstBatchWithCost = batches.find(b => (b.unitCost || 0) > 0);
+        if (firstBatchWithCost && firstBatchWithCost.unitCost) {
+          calculatedUnitCost = firstBatchWithCost.unitCost;
+        }
+      }
+      
+      // Aplicar markup ao custo unitário se houver markup definido
+      const markup = form.getValues('markup') || 0;
+      const finalUnitCost = markup > 0 && calculatedUnitCost > 0 
+        ? calculatedUnitCost * (1 + markup / 100)
+        : calculatedUnitCost;
+      
+      setCartItems(prev => [...prev, {
+        productId: selectedProduct.id,
+        productName: selectedProduct.name,
+        productSku: selectedProduct.sku,
+        managedByBatch: true,
+        quantity: totalQty,
+        unitCost: finalUnitCost, // Preço final com markup (para exibição)
+        originalUnitCost: calculatedUnitCost, // Custo original sem markup (para processamento)
+        batches
+      }]);
+    } else {
+      const qty = form.getValues('quantity') || 0;
+      if (qty <= 0) {
+        toast({ title: 'Informe a quantidade', variant: 'destructive' });
+        return;
+      }
+      if (unitCost <= 0) {
+        toast({ title: 'Informe o custo unitário', variant: 'destructive' });
+        return;
+      }
+      
+      // Aplicar markup ao custo unitário se houver markup definido
+      const markup = form.getValues('markup') || 0;
+      const finalUnitCost = markup > 0 && unitCost > 0 
+        ? unitCost * (1 + markup / 100)
+        : unitCost;
+      
+      // Capturar datas de fabricação e validade do formulário
+      const manufactureDate = form.getValues('manufactureDate') as Date | undefined;
+      const expiryDate = form.getValues('expiryDate') as Date | undefined;
+      
+      setCartItems(prev => [...prev, {
+        productId: selectedProduct.id,
+        productName: selectedProduct.name,
+        productSku: selectedProduct.sku,
+        managedByBatch: false,
+        quantity: qty,
+        unitCost: finalUnitCost, // Preço final com markup (para exibição)
+        originalUnitCost: unitCost, // Custo original sem markup (para processamento)
+        manufactureDate: manufactureDate, // Data de fabricação
+        expiryDate: expiryDate // Data de validade
+      }]);
+    }
+    
+    // Limpar seleção após adicionar ao carrinho
+    setSelectedProductId("");
+    setSelectedBatches([]);
+    form.reset({
+      productId: "",
+      quantity: 0,
+      unitCost: 0,
+      supplier: form.getValues('supplier'),
+      entryDate: form.getValues('entryDate'),
+      notes: form.getValues('notes'),
+      paymentMethod: form.getValues('paymentMethod'),
+      installments: form.getValues('installments'),
+    });
+  };
+
+  const removeCartItem = (index: number) => {
+    setCartItems(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const updateCartItemQuantity = (index: number, newQuantity: number) => {
+    if (newQuantity <= 0) {
+      removeCartItem(index);
+      return;
+    }
+    setCartItems(prev => prev.map((item, i) => 
+      i === index ? { ...item, quantity: newQuantity } : item
+    ));
+  };
+
+  const clearCart = () => {
+    setCartItems([]);
+  };
+
+  const getCartTotal = () => {
+    return cartItems.reduce((sum, item) => sum + (item.quantity * item.unitCost), 0);
+  };
+
+  const processCartEntry = async () => {
+    // Se o carrinho estiver vazio, verificar se há uma seleção válida no formulário
+    let itemsToProcess = [...cartItems];
+    
+    if (itemsToProcess.length === 0) {
+      // Verificar se há uma seleção válida no formulário
+      const selectedProduct = products.find(p => p.id === selectedProductId);
+      if (!selectedProduct) {
+        toast({ title: 'Selecione um produto ou adicione ao carrinho', variant: 'destructive' });
+        return;
+      }
+      
+      const managedByBatch = (selectedProduct as any)?.managedByBatch === true;
+      const unitCost = form.getValues('unitCost') || 0;
+      
+      if (managedByBatch) {
+        const totalQty = selectedBatches.reduce((s, b) => s + (b.quantity || 0), 0);
+        if (totalQty <= 0) {
+          toast({ title: 'Selecione lotes com quantidade', variant: 'destructive' });
+          return;
+        }
+        const batches: CartBatchItem[] = selectedBatches
+          .filter(b => (b.quantity || 0) > 0 && b.batchNumber)
+          .map(b => ({ 
+            batchNumber: b.batchNumber, 
+            quantity: b.quantity, 
+            unitCost: b.unitCost || unitCost,
+            manufactureDate: b.manufactureDate,
+            expiryDate: b.expiryDate
+          }));
+        if (batches.length === 0) {
+          toast({ title: 'Selecione lotes válidos', variant: 'destructive' });
+          return;
+        }
+        
+        // Calcular custo médio ponderado dos lotes (sem markup)
+        let calculatedAverageCost = unitCost || 0;
+        const batchesWithCost = batches.filter(b => (b.unitCost || 0) > 0);
+        if (batchesWithCost.length > 0) {
+          const totalCost = batchesWithCost.reduce((sum, b) => sum + ((b.unitCost || 0) * (b.quantity || 0)), 0);
+          const totalQuantity = batchesWithCost.reduce((sum, b) => sum + (b.quantity || 0), 0);
+          if (totalQuantity > 0) {
+            calculatedAverageCost = totalCost / totalQuantity;
+          }
+        }
+        
+        // Se nenhum lote tem custo, usar o unitCost do formulário
+        if (calculatedAverageCost === 0 && batches.length > 0) {
+          const firstBatchWithCost = batches.find(b => (b.unitCost || 0) > 0);
+          if (firstBatchWithCost && firstBatchWithCost.unitCost) {
+            calculatedAverageCost = firstBatchWithCost.unitCost;
+          }
+        }
+        
+        itemsToProcess = [{
+          productId: selectedProduct.id,
+          productName: selectedProduct.name,
+          productSku: selectedProduct.sku,
+          managedByBatch: true,
+          quantity: totalQty,
+          unitCost: calculatedAverageCost, // Preço final com markup (para exibição)
+          originalUnitCost: calculatedAverageCost, // Custo original sem markup (para processamento)
+          batches
+        }];
+      } else {
+        const qty = form.getValues('quantity') || 0;
+        if (qty <= 0) {
+          toast({ title: 'Informe a quantidade', variant: 'destructive' });
+          return;
+        }
+        if (unitCost <= 0) {
+          toast({ title: 'Informe o custo unitário', variant: 'destructive' });
+          return;
+        }
+        itemsToProcess = [{
+          productId: selectedProduct.id,
+          productName: selectedProduct.name,
+          productSku: selectedProduct.sku,
+          managedByBatch: false,
+          quantity: qty,
+          unitCost: unitCost, // Preço final com markup (para exibição)
+          originalUnitCost: unitCost // Custo original sem markup (para processamento)
+        }];
+      }
+    }
+    
+    if (itemsToProcess.length === 0) {
+      toast({ title: 'Carrinho vazio', variant: 'destructive' });
+      return;
+    }
+    
+    try {
+      const formData = form.getValues();
+      const supplier = formData.supplier || 'Fornecedor Genérico';
+      const entryDate = formData.entryDate || new Date();
+      const paymentMethod = formData.paymentMethod || 'avista';
+      const installments = formData.installments || 1;
+      const notes = formData.notes || '';
+
+      for (const item of itemsToProcess) {
+        const product = products.find(p => p.id === item.productId);
+        if (!product) continue;
+
+        if (item.managedByBatch && item.batches && item.batches.length > 0) {
+          // Processar com lotes
+          // Usar originalUnitCost (sem markup) para processamento
+          const baseUnitCost = item.originalUnitCost ?? item.unitCost;
+          const totalCost = item.batches.reduce((sum, b) => sum + ((b.quantity || 0) * (b.unitCost || baseUnitCost)), 0);
+          const totalQuantity = item.batches.reduce((sum, b) => sum + (b.quantity || 0), 0);
+          const averageCost = totalQuantity > 0 ? totalCost / totalQuantity : baseUnitCost;
+
+          // Criar ou atualizar lotes
+          for (const batch of item.batches) {
+            if (!batch.batchNumber || !user?.id) continue;
+            
+            const existing = await findBatchByNumber(batch.batchNumber, user.id);
+            if (existing && existing.productId === item.productId) {
+              await updateBatchQuantity(
+                existing.id,
+                existing.quantity + (batch.quantity || 0),
+                user.id
+              );
+            } else {
+              // Usar originalUnitCost (sem markup) para criar o lote
+              const baseUnitCost = item.originalUnitCost ?? item.unitCost;
+              await createBatch(
+                item.productId,
+                batch.batchNumber,
+                batch.quantity || 0,
+                batch.unitCost || baseUnitCost,
+                user.id,
+                batch.manufactureDate,
+                batch.expiryDate
+              );
+            }
+          }
+
+          const minManu = item.batches
+            .map(b => b.manufactureDate)
+            .filter((d): d is Date => d !== undefined)
+            .sort((a, b) => a.getTime() - b.getTime())[0];
+          const minExpiry = item.batches
+            .map(b => b.expiryDate)
+            .filter((d): d is Date => d !== undefined)
+            .sort((a, b) => a.getTime() - b.getTime())[0];
+
+          await addMovement({
+            type: 'entrada',
+            productId: item.productId,
+            productName: item.productName,
+            quantity: totalQuantity,
+            unitPrice: averageCost,
+            description: `Entrada de ${totalQuantity} unidades em ${item.batches.length} lote(s) - ${supplier}` 
+              + (minManu ? ` | FAB:${minManu.toISOString().split('T')[0]}` : '')
+              + (minExpiry ? ` | EXP:${minExpiry.toISOString().split('T')[0]}` : ''),
+            date: entryDate,
+            paymentMethod: paymentMethod === "parcelado" ? `parcelado-${installments}x` : paymentMethod,
+          });
+        } else {
+          // Processar sem lotes
+          // Usar originalUnitCost (sem markup) para processamento
+          const baseUnitCost = item.originalUnitCost ?? item.unitCost;
+          
+          // Incluir datas de fabricação e validade na descrição se informadas
+          // Priorizar datas do item do carrinho, se não houver, usar do formulário
+          const manufactureDate = item.manufactureDate || formData.manufactureDate;
+          const expiryDate = item.expiryDate || formData.expiryDate;
+          
+          let description = `Entrada de ${item.quantity} unidades - ${supplier}`;
+          if (manufactureDate) {
+            const fabDate = manufactureDate instanceof Date ? manufactureDate.toISOString().split('T')[0] : manufactureDate;
+            description += ` | FAB:${fabDate}`;
+          }
+          if (expiryDate) {
+            const expDate = expiryDate instanceof Date ? expiryDate.toISOString().split('T')[0] : expiryDate;
+            description += ` | EXP:${expDate}`;
+          }
+          
+          await addMovement({
+            type: 'entrada',
+            productId: item.productId,
+            productName: item.productName,
+            quantity: item.quantity,
+            unitPrice: baseUnitCost,
+            description: description,
+            date: entryDate,
+            paymentMethod: paymentMethod === "parcelado" ? `parcelado-${installments}x` : paymentMethod,
+          });
+        }
+      }
+
+      // Salvar tamanho antes de limpar
+      const itemsCount = itemsToProcess.length;
+      
+      // Limpar carrinho, seleção e fechar modal
+      setCartItems([]);
+      setSelectedProductId("");
+      setSelectedBatches([]);
+      setIsAddDialogOpen(false);
+      form.reset();
+      
+      toast({
+        title: "Compra Registrada!",
+        description: `${itemsCount} item(ns) foram registrados com sucesso.`,
+        variant: "default",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro ao Registrar Compra",
+        description: error.message || "Não foi possível registrar a compra. Tente novamente.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const RenderCart = ({ compact = false }: { compact?: boolean }) => (
+    <StockEntryCart
+      items={cartItems}
+      total={getCartTotal()}
+      onRemove={removeCartItem}
+      onQuantityChange={updateCartItemQuantity}
+      onClear={clearCart}
+      onFinalize={processCartEntry}
+      compact={compact}
+    />
+  );
 
   // Carregar lotes quando selecionar um produto
   const loadBatchesForProduct = async (productId: string) => {
@@ -348,24 +731,30 @@ const Entradas = () => {
         nextBatchNumber = String(maxNum + 1);
       }
 
+      // Obter unitCost do formulário para aplicar ao novo lote
+      const formUnitCost = form.getValues('unitCost') || 0;
+      
       setSelectedBatches(prev => [
         ...prev,
         {
           batchNumber: nextBatchNumber,
           quantity: 0,
-          unitCost: 0,
+          unitCost: formUnitCost,
           manufactureDate: undefined,
           expiryDate: undefined,
         },
       ]);
     } catch (error) {
       // Em caso de erro, ainda adiciona o lote com número padrão
+      // Obter unitCost do formulário para aplicar ao novo lote
+      const formUnitCost = form.getValues('unitCost') || 0;
+      
       setSelectedBatches(prev => [
         ...prev,
         {
           batchNumber: String((prev.length || 0) + 1),
           quantity: 0,
-          unitCost: 0,
+          unitCost: formUnitCost,
           manufactureDate: undefined,
           expiryDate: undefined,
         },
@@ -2038,6 +2427,9 @@ const Entradas = () => {
                                             // Buscar o produto selecionado para validar
                                             const selectedProduct = products.find(p => p.id === selectedProductId);
                                             
+                                            // Em ENTRADAS, não há limite de quantidade - você está ADICIONANDO estoque ao lote
+                                            // A validação de limite de estoque só faz sentido em SAÍDAS (vendas)
+                                            
                                             // Calcular total que já está sendo adicionado (soma de todos os lotes exceto o atual)
                                             const totalOtherBatches = selectedBatches
                                               .filter((_, i) => i !== index)
@@ -2502,7 +2894,14 @@ const Entradas = () => {
                   />
                   </div>
                   
-                  {/* Footer do Modal - Sempre mostra os 2 botões: Cancelar e Registrar Compra */}
+                  {/* Carrinho dentro do Dialog */}
+                  {cartItems.length > 0 && (
+                    <div className="px-6 pt-2 pb-4">
+                      <RenderCart compact={true} />
+                    </div>
+                  )}
+                  
+                  {/* Footer do Modal - Botões: Cancelar, Adicionar ao Carrinho e Registrar */}
                   <div className="flex flex-col sm:flex-row justify-center items-stretch sm:items-center gap-2 px-3 sm:px-4 lg:px-6 py-3 border-t border-neutral-200 bg-white flex-shrink-0 min-h-[60px] overflow-visible w-full">
                     {/* Botão Cancelar - Sempre visível */}
                     <Button 
@@ -2511,19 +2910,58 @@ const Entradas = () => {
                       onClick={() => {
                         setIsAddDialogOpen(false);
                         setBatchNumberErrors({});
+                        setCartItems([]);
+                        setSelectedProductId("");
+                        setSelectedBatches([]);
+                        form.reset();
                       }}
                       className="!flex !w-full sm:!w-auto border-2 border-neutral-300 text-neutral-700 hover:bg-neutral-50 h-9 text-xs sm:text-sm !flex-shrink-0 whitespace-nowrap min-w-[90px] !items-center !justify-center"
                     >
                       <span className="flex items-center gap-2"><X className="h-4 w-4" /> Cancelar</span>
                     </Button>
                     
-                    {/* Botão Registrar Compra - Sempre visível */}
+                    {/* Botão Adicionar ao Carrinho - Sempre visível */}
                     <Button 
-                      type="submit"
+                      type="button"
+                      onClick={addCurrentSelectionToCart}
                       className="!flex !w-full sm:!w-auto px-3 sm:px-4 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white shadow-lg hover:shadow-xl transition-all duration-200 h-9 text-xs sm:text-sm !flex-shrink-0 whitespace-nowrap min-w-[140px] !items-center !justify-center"
+                      disabled={(() => {
+                        const selectedProduct = products.find(p => p.id === selectedProductId);
+                        if (!selectedProduct) return true;
+                        const managedByBatch = (selectedProduct as any)?.managedByBatch === true;
+                        if (managedByBatch) {
+                          const totalQty = selectedBatches.reduce((s, b) => s + (b.quantity || 0), 0);
+                          return totalQty <= 0;
+                        }
+                        return (form.getValues('quantity') || 0) <= 0 || (form.getValues('unitCost') || 0) <= 0;
+                      })()}
                     >
-                      <span className="flex items-center gap-2"><Sparkles className="h-4 w-4" /> Registrar Compra</span>
+                      <span className="flex items-center gap-2"><Plus className="h-4 w-4" /> Adicionar ao Carrinho</span>
                     </Button>
+                    
+                                          {/* Botão Registrar - Habilitado quando há itens no carrinho ou seleção válida */}
+                      <Button 
+                        type="button"
+                        onClick={processCartEntry}
+                        className="!flex !w-full sm:!w-auto px-3 sm:px-4 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white shadow-lg hover:shadow-xl transition-all duration-200 h-9 text-xs sm:text-sm !flex-shrink-0 whitespace-nowrap min-w-[140px] !items-center !justify-center"
+                        disabled={(() => {
+                          // Se há itens no carrinho, sempre habilitado
+                          if (cartItems.length > 0) return false;
+                          
+                          // Se não há itens no carrinho, verificar se há seleção válida
+                          const selectedProduct = products.find(p => p.id === selectedProductId);
+                          if (!selectedProduct) return true;
+                          
+                          const managedByBatch = (selectedProduct as any)?.managedByBatch === true;
+                          if (managedByBatch) {
+                            const totalQty = selectedBatches.reduce((s, b) => s + (b.quantity || 0), 0);
+                            return totalQty <= 0;
+                          }
+                          return (form.getValues('quantity') || 0) <= 0 || (form.getValues('unitCost') || 0) <= 0;
+                        })()}
+                      >
+                        <span className="flex items-center gap-2"><CheckCircle className="h-4 w-4" /> Registrar</span>
+                      </Button>
                   </div>
                 </form>
               </Form>
@@ -2681,9 +3119,31 @@ const Entradas = () => {
                       {(() => {
                         const rawExpiry = (entry as any).expiryDate as Date | string | undefined;
                         const rawManu = (entry as any).manufactureDate as Date | string | undefined;
-                        if (!rawExpiry) return <span className="text-neutral-400 text-sm">—</span>;
+                        
+                        // Se não há validade, mostrar data da compra como fallback
+                        if (!rawExpiry) {
+                          return (
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-neutral-500">
+                                {new Date(entry.entryDate).toLocaleDateString('pt-BR')}
+                              </span>
+                              <span className="text-xs text-neutral-400">(sem validade)</span>
+                            </div>
+                          );
+                        }
+                        
                         const expiryDate = rawExpiry instanceof Date ? rawExpiry : new Date(rawExpiry);
-                        if (isNaN(expiryDate.getTime())) return <span className="text-neutral-400 text-sm">—</span>;
+                        if (isNaN(expiryDate.getTime())) {
+                          // Se a data é inválida, mostrar data da compra
+                          return (
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-neutral-500">
+                                {new Date(entry.entryDate).toLocaleDateString('pt-BR')}
+                              </span>
+                              <span className="text-xs text-neutral-400">(sem validade)</span>
+                            </div>
+                          );
+                        }
                         const manuDate = rawManu ? (rawManu instanceof Date ? rawManu : new Date(rawManu)) : undefined;
 
                         // Se tiver FAB e EXP, exibir prazo total (EXP - FAB). Caso contrário, exibir restante até hoje
@@ -3211,7 +3671,19 @@ const Entradas = () => {
                 productStock={selectedProductForBatch.stock}
                 onBatchesChange={async () => {
                   // Atualizar estoque silenciosamente quando lotes mudarem
-                  // Aqui você pode adicionar lógica de atualização se necessário
+                  // Recarregar produtos para atualizar o estoque
+                  await refreshProducts();
+                  
+                  // Atualizar o produto selecionado com o estoque atualizado
+                  if (selectedProductForBatch) {
+                    const updatedProduct = products.find(p => p.id === selectedProductForBatch.id);
+                    if (updatedProduct) {
+                      setSelectedProductForBatch({
+                        ...selectedProductForBatch,
+                        stock: updatedProduct.stock || 0
+                      });
+                    }
+                  }
                 }}
               />
             )}

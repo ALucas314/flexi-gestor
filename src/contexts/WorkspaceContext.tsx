@@ -131,17 +131,82 @@ export const WorkspaceProvider = ({ children }: { children: ReactNode }) => {
     carregarWorkspaces();
   }, [carregarWorkspaces]);
 
-  // Atualizar workspaces a cada 30 segundos para verificar novos compartilhamentos
+  // 📡 Realtime para detectar novos compartilhamentos em tempo real
   useEffect(() => {
     if (!user) return;
 
-    const interval = setInterval(() => {
-      console.log('🔄 Atualizando workspaces...');
-      carregarWorkspaces();
-    }, 30000); // 30 segundos
+    let compartilhamentosSubscription: any = null;
+    let lastSuccessfulConnection = Date.now();
 
-    return () => clearInterval(interval);
-  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Função para reconfigurar subscription quando desconecta
+    const reconfigureSubscription = () => {
+      if (compartilhamentosSubscription) {
+        supabase.removeChannel(compartilhamentosSubscription);
+      }
+
+      try {
+        compartilhamentosSubscription = supabase
+          .channel(`compartilhamentos-changes-${user.id}-${Date.now()}`)
+          .on('postgres_changes', 
+            { 
+              event: '*', 
+              schema: 'public', 
+              table: 'compartilhamentos',
+              filter: `usuario_compartilhado_id=eq.${user.id}`
+            }, 
+            async (payload) => {
+              console.log('📡 Realtime: Compartilhamento alterado', payload.eventType);
+              try {
+                await carregarWorkspaces();
+                lastSuccessfulConnection = Date.now();
+              } catch (error) {
+                console.error('❌ [WorkspaceContext] Erro ao atualizar via subscription:', error);
+              }
+            }
+          )
+          .subscribe((status) => {
+            console.log(`📡 Realtime: Compartilhamentos - Status: ${status}`);
+            if (status === 'SUBSCRIBED') {
+              lastSuccessfulConnection = Date.now();
+              console.log('✅ Realtime: Compartilhamentos conectado com sucesso');
+            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+              console.warn('⚠️ Realtime: Compartilhamentos desconectado, tentando reconectar...');
+              setTimeout(() => {
+                reconfigureSubscription();
+              }, 2000);
+            }
+          });
+
+        console.log('📡 [WorkspaceContext] Subscription de compartilhamentos criada');
+      } catch (error) {
+        console.error('❌ [WorkspaceContext] Erro ao criar subscription:', error);
+      }
+    };
+
+    // Configurar subscription inicial
+    reconfigureSubscription();
+
+    // Health check que detecta desconexão e reconecta
+    const healthCheckInterval = setInterval(async () => {
+      const timeSinceLastConnection = Date.now() - lastSuccessfulConnection;
+      if (timeSinceLastConnection > 120000) { // 2 minutos
+        try {
+          reconfigureSubscription();
+          await carregarWorkspaces();
+          lastSuccessfulConnection = Date.now();
+        } catch (e) {
+          console.error('❌ [WorkspaceContext] Erro no health check:', e);
+        }
+      }
+    }, 30000); // Verificar a cada 30 segundos
+
+    return () => {
+      clearInterval(healthCheckInterval);
+      if (compartilhamentosSubscription) {
+        supabase.removeChannel(compartilhamentosSubscription);
+      }
+    };
+  }, [user, carregarWorkspaces]);
 
   // Trocar workspace sem reload - versão otimizada
   const trocarWorkspace = useCallback((workspaceId: string) => {

@@ -270,12 +270,15 @@ const Relatorios = () => {
 
   if (isLoading) {
     return (
-      <main className="flex-1 p-6 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
-            <BarChart3 className="w-8 h-8 text-white" />
+      <main className="flex-1 p-3 sm:p-6 space-y-4 sm:space-y-6">
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+              <BarChart3 className="w-8 h-8 text-white" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Carregando Relatórios...</h3>
+            <p className="text-gray-600">Preparando análises e relatórios</p>
           </div>
-          <h3 className="text-lg font-semibold flex items-center gap-2"><BarChart3 className="h-5 w-5" /> Carregando Relatórios...</h3>
         </div>
       </main>
     );

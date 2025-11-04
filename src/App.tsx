@@ -5,6 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { LayoutWithSidebar } from "@/components/layout/LayoutWithSidebar";
 import AuthGuard from "@/components/AuthGuard";
+import { HMRReloader } from "@/components/HMRReloader";
+import { AutoRefreshMonitor } from "@/components/AutoRefreshMonitor";
 import Index from "./pages/Index";
 import Produtos from "./pages/Produtos";
 import Entradas from "./pages/Entradas";
@@ -35,6 +37,9 @@ const queryClient = new QueryClient();
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
+      {/* 🔄 Auto-refresh global - Monitora conexão e recarrega automaticamente se necessário */}
+      <HMRReloader />
+      <AutoRefreshMonitor />
       {/* 🔐 Auth Provider - Gerencia autenticação com JWT */}
       <AuthProvider>
         {/* 🏢 Workspace Provider - Gerencia qual workspace está ativo */}

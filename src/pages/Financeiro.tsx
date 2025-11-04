@@ -348,7 +348,7 @@ Flexi Gestor - Controle de Estoque
             <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
               <DollarSign className="w-8 h-8 text-white" />
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2 flex items-center gap-2"><DollarSign className="h-5 w-5" /> Carregando Financeiro...</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Carregando Financeiro...</h3>
             <p className="text-gray-600">Preparando dados financeiros e movimentações</p>
           </div>
         </div>

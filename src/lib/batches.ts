@@ -401,6 +401,32 @@ export const adjustBatchQuantity = async (
   }
 };
 
+// 🔄 Sincronizar estoque do produto com a soma dos lotes
+// Para produtos gerenciados por lote, o estoque deve ser sempre igual à soma dos lotes
+export const syncProductStockFromBatches = async (
+  productId: string,
+  userId: string,
+  updateProductStock: (productId: string, stock: number) => Promise<void>
+): Promise<number | null> => {
+  try {
+    // Buscar todos os lotes do produto
+    const batches = await getBatchesByProduct(productId, userId);
+    
+    // Calcular estoque total como soma dos lotes
+    const totalStock = batches.reduce((sum, batch) => sum + batch.quantity, 0);
+    
+    // Atualizar estoque do produto
+    await updateProductStock(productId, totalStock);
+    
+    console.log(`✅ [syncProductStockFromBatches] Estoque sincronizado: ${productId} -> ${totalStock} unidades`);
+    
+    return totalStock;
+  } catch (error) {
+    console.error('❌ [syncProductStockFromBatches] Erro ao sincronizar estoque:', error);
+    return null;
+  }
+};
+
 // Buscar todos os lotes disponíveis (com quantidade > 0) junto com informações do produto
 export interface BatchWithProduct extends Batch {
   product: {

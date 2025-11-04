@@ -103,6 +103,7 @@ const Saidas = () => {
   // Carrinho de vendas
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [discount, setDiscount] = useState<number>(0); // Desconto em R$
+  const [amountReceived, setAmountReceived] = useState<number>(0); // Valor recebido para cálculo de troco
 
   // Hooks
   const { toast } = useToast();
@@ -378,6 +379,7 @@ const Saidas = () => {
     try {
       setCartItems([]);
       setDiscount(0);
+      setAmountReceived(0);
       localStorage.removeItem('fg_cart_items');
       setIsCartPanelOpen(false);
       toast({ title: 'Carrinho esvaziado' });
@@ -525,6 +527,7 @@ const Saidas = () => {
       // Limpar carrinho e fechar modal
       setCartItems([]);
       setDiscount(0);
+      setAmountReceived(0);
       setIsCartPanelOpen(false);
       setIsAddDialogOpen(false);
       
@@ -2111,6 +2114,112 @@ const Saidas = () => {
                                   </FormItem>
                                 )}
                               />
+                            </CardContent>
+                          </Card>
+                        )}
+
+                        {/* Campo de Troco */}
+                        {(selectedProductId || cartItems.length > 0) && (
+                          <Card className="border-2 border-blue-200">
+                            <CardHeader className="pb-3">
+                              <CardTitle className="text-base font-semibold text-gray-900">
+                                <div className="flex items-center gap-2"><Calculator className="h-4 w-4" /> Cálculo de Troco</div>
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="space-y-2">
+                                <Label className="text-sm font-semibold text-neutral-700">
+                                  <div className="flex items-center gap-2"><DollarSign className="h-4 w-4" /> Valor Recebido</div>
+                                </Label>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  placeholder="Ex: 100.00"
+                                  value={amountReceived === 0 ? '' : amountReceived}
+                                  onChange={(e) => {
+                                    const value = e.target.value;
+                                    if (value === '' || value === null) {
+                                      setAmountReceived(0);
+                                      return;
+                                    }
+                                    const numValue = parseFloat(value);
+                                    if (!isNaN(numValue) && numValue >= 0) {
+                                      setAmountReceived(numValue);
+                                    }
+                                  }}
+                                  className="h-11 sm:h-10 border-2 border-blue-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-base sm:text-sm bg-blue-50/50"
+                                />
+                                {(() => {
+                                  // Se houver itens no carrinho, usar o total do carrinho (já com desconto aplicado)
+                                  let totalToPay = 0;
+                                  
+                                  if (cartItems.length > 0) {
+                                    // Usar o total do carrinho (subtotal - desconto)
+                                    const subtotal = cartItems.reduce((sum, i) => sum + (i.quantity * i.unitPrice), 0);
+                                    totalToPay = Math.max(0, subtotal - discount);
+                                  } else if (selectedProductId) {
+                                    // Calcular baseado no produto selecionado
+                                    const selectedProduct = products.find(p => p.id === selectedProductId);
+                                    if (!selectedProduct) return null;
+                                    
+                                    const basePrice = getProductPrice(selectedProduct.id);
+                                    const discountValue = form.watch('discount') || 0;
+                                    const priceWithDiscount = discountValue > 0 && basePrice > 0 
+                                      ? basePrice * (1 - discountValue / 100) 
+                                      : basePrice;
+                                    
+                                    // Calcular total: considerar a quantidade do produto ou dos lotes selecionados
+                                    let quantityToCalculate = 0;
+                                    if ((selectedProduct as any)?.managedByBatch === true) {
+                                      quantityToCalculate = selectedBatches.reduce((sum, b) => sum + (b.quantity || 0), 0);
+                                    } else {
+                                      quantityToCalculate = form.watch('quantity') || 0;
+                                    }
+                                    
+                                    totalToPay = priceWithDiscount * quantityToCalculate;
+                                  }
+                                  
+                                  const change = amountReceived > 0 ? amountReceived - totalToPay : 0;
+                                  
+                                  return (
+                                    <div className="mt-3 space-y-2">
+                                      <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                        <div className="flex items-center justify-between mb-2">
+                                          <span className="text-sm font-medium text-gray-700">Total a Pagar:</span>
+                                          <span className="text-lg font-bold text-blue-600">
+                                            R$ {totalToPay.toFixed(2).replace('.', ',')}
+                                          </span>
+                                        </div>
+                                        {amountReceived > 0 && (
+                                          <>
+                                            <div className="flex items-center justify-between pt-2 border-t border-blue-200">
+                                              <span className="text-sm font-medium text-gray-700">Valor Recebido:</span>
+                                              <span className="text-sm font-semibold text-gray-900">
+                                                R$ {amountReceived.toFixed(2).replace('.', ',')}
+                                              </span>
+                                            </div>
+                                            <div className="flex items-center justify-between pt-2 border-t border-blue-200">
+                                              <span className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                                                <Calculator className="h-4 w-4" /> Troco:
+                                              </span>
+                                              <span className={`text-lg font-bold ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                R$ {Math.abs(change).toFixed(2).replace('.', ',')}
+                                              </span>
+                                            </div>
+                                            {change < 0 && (
+                                              <p className="text-xs text-red-600 mt-2 flex items-center gap-1">
+                                                <AlertTriangle className="h-3 w-3" />
+                                                Valor insuficiente! Faltam R$ {Math.abs(change).toFixed(2).replace('.', ',')}
+                                              </p>
+                                            )}
+                                          </>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
+                              </div>
                             </CardContent>
                           </Card>
                         )}
