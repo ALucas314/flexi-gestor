@@ -1663,9 +1663,12 @@ const Saidas = () => {
                                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
                                             {/* Campo Lote */}
                                             <div className="space-y-2">
-                                              <Label htmlFor={`batch-${index}`} className="text-sm font-medium">
-                                                <div className="flex items-center gap-2"><Package className="h-4 w-4" /> Selecione o Lote</div>
-                                              </Label>
+                                              <div className="flex items-center justify-between gap-2 h-7">
+                                                <Label htmlFor={`batch-${index}`} className="text-sm font-medium">
+                                                  <div className="flex items-center gap-2"><Package className="h-4 w-4" /> Selecione o Lote</div>
+                                                </Label>
+                                                <span className="h-7" />
+                                              </div>
                                               <Input
                                                 id={`batch-${index}`}
                                                 type="text"
@@ -1686,11 +1689,7 @@ const Saidas = () => {
                                                 <p className="text-xs text-yellow-600">
                                                   <span className="flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-yellow-600" /> Lote não encontrado. Verifique o número digitado.</span>
                                                 </p>
-                                              ) : (
-                                                <p className="text-xs text-gray-500">
-                                                  <span className="flex items-center gap-2"><FileText className="h-4 w-4" /> Digite o número do lote ou use "Usar Existente"</span>
-                                                </p>
-                                              )}
+                                              ) : null}
                                             </div>
                                             {/* Campo Quantidade */}
                                             <div className="space-y-2">
