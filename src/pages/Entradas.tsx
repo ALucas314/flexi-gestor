@@ -532,6 +532,13 @@ const Entradas = () => {
             date: entryDate,
             paymentMethod: paymentMethod === "parcelado" ? `parcelado-${installments}x` : paymentMethod,
           });
+          
+          // Atualizar preço de venda do produto se houver markup
+          const markup = formData.markup || 0;
+          if (markup > 0 && averageCost > 0) {
+            const salePrice = averageCost * (1 + markup / 100);
+            await updateProduct(item.productId, { price: salePrice });
+          }
         } else {
           // Processar sem lotes
           // Usar originalUnitCost (sem markup) para processamento
@@ -562,6 +569,13 @@ const Entradas = () => {
             date: entryDate,
             paymentMethod: paymentMethod === "parcelado" ? `parcelado-${installments}x` : paymentMethod,
           });
+          
+          // Atualizar preço de venda do produto se houver markup
+          const markup = formData.markup || 0;
+          if (markup > 0 && baseUnitCost > 0) {
+            const salePrice = baseUnitCost * (1 + markup / 100);
+            await updateProduct(item.productId, { price: salePrice });
+          }
         }
       }
 

@@ -257,7 +257,57 @@ const Saidas = () => {
       return;
     }
     const managedByBatch = (selectedProduct as any)?.managedByBatch === true;
-    const unitPrice = getProductPrice(selectedProduct.id);
+    
+    // Calcular preço de venda com markup padrão se necessário (igual à interface de "Informações da Venda")
+    let unitPrice = getProductPrice(selectedProduct.id);
+    
+    // Buscar entradas do produto para calcular preço de aquisição
+    const normalizeId = (id: any): string => {
+      if (!id) return '';
+      return String(id).trim().toLowerCase();
+    };
+    
+    const allMovementsForProduct = movements.filter(m => {
+      const mProductId = normalizeId(m.productId);
+      const selectedId = normalizeId(selectedProduct.id);
+      return mProductId === selectedId;
+    });
+    
+    const productEntries = allMovementsForProduct
+      .filter(m => {
+        const typeStr = String(m.type || '').toLowerCase().trim();
+        return typeStr === 'entrada';
+      })
+      .sort((a, b) => {
+        const dateA = a.date instanceof Date ? a.date : new Date(a.date);
+        const dateB = b.date instanceof Date ? b.date : new Date(b.date);
+        return dateB.getTime() - dateA.getTime();
+      });
+    
+    // Calcular custo de aquisição
+    let acquisitionCost = 0;
+    if (productEntries.length > 0) {
+      const latestEntry = productEntries[0];
+      if (latestEntry.unitPrice && latestEntry.unitPrice > 0) {
+        acquisitionCost = latestEntry.unitPrice;
+      } else if (latestEntry.total && latestEntry.quantity && latestEntry.quantity > 0) {
+        acquisitionCost = latestEntry.total / latestEntry.quantity;
+      }
+    }
+    
+    // Se o preço de venda é igual ao de aquisição ou não definido, aplicar markup padrão de 30%
+    if (acquisitionCost > 0) {
+      if (unitPrice === 0 || Math.abs(unitPrice - acquisitionCost) < 0.01) {
+        unitPrice = acquisitionCost * 1.30; // 30% de markup padrão
+      }
+    }
+    
+    // Aplicar desconto se informado (subtrair percentual do preço base)
+    const discount = form.watch('discount') || 0;
+    const baseUnitPrice = unitPrice; // Guardar preço base antes do desconto
+    if (discount > 0 && unitPrice > 0) {
+      unitPrice = unitPrice * (1 - discount / 100);
+    }
 
     if (managedByBatch) {
       const totalQty = getTotalSelectedQuantity();
@@ -278,7 +328,7 @@ const Saidas = () => {
         productSku: selectedProduct.sku,
         managedByBatch: true,
         quantity: totalQty,
-        unitPrice,
+        unitPrice, // Preço com desconto já aplicado
         batches
       }]);
       setIsCartPanelOpen(true);
@@ -297,7 +347,7 @@ const Saidas = () => {
         productSku: selectedProduct.sku,
         managedByBatch: false,
         quantity: qty,
-        unitPrice
+        unitPrice // Preço com desconto já aplicado
       }]);
       setIsCartPanelOpen(true);
       setTimeout(() => {
@@ -653,20 +703,9 @@ const Saidas = () => {
           toast({ title: "Verifique o carrinho", description: `${product?.name || 'Produto'} com quantidade inválida ou estoque insuficiente.`, variant: "destructive" });
           return;
         }
-        let unitPrice = getProductPrice(item.productId);
-        // Aplicar desconto se informado (subtrair percentual do preço de venda)
-        const discount = form.watch('discount') || (data as any).discount || 0;
-        const basePriceBeforeDiscount = unitPrice;
-        if (discount > 0 && unitPrice > 0) {
-          const discountValue = discount;
-          if (typeof discountValue === 'number' && !isNaN(discountValue)) {
-            unitPrice = unitPrice * (1 - discountValue / 100);
-            console.log(`[SAIDAS-CARRINHO] Aplicando desconto no item ${item.productId}:`);
-            console.log(`  - Preço base: R$ ${basePriceBeforeDiscount.toFixed(2)}`);
-            console.log(`  - Desconto: ${discountValue}%`);
-            console.log(`  - Preço final: R$ ${unitPrice.toFixed(2)}`);
-          }
-        }
+        // Usar o preço do item do carrinho diretamente (já inclui desconto aplicado quando foi adicionado)
+        // O preço já foi calculado com desconto em addCurrentSelectionToCart
+        const unitPrice = item.unitPrice;
         const receiptNumber = generateReceiptNumber();
 
         // Atualizar lotes se gerenciado por lote
@@ -1495,17 +1534,6 @@ const Saidas = () => {
                                 {/* Datas removidas para saída de produtos sem lote */}
                                 
                                 {form.watch('quantity') > 0 && selectedProduct && (() => {
-                                  const baseUnitPrice = getProductPrice(selectedProduct.id);
-                                  const discount = form.watch('discount') || 0;
-                                  // Calcular preço com desconto (subtrair percentual do preço base)
-                                  const unitPriceWithDiscount = discount > 0 && baseUnitPrice > 0 
-                                    ? baseUnitPrice * (1 - discount / 100) 
-                                    : baseUnitPrice;
-                                  const quantityToExit = form.watch('quantity');
-                                  const totalPrice = quantityToExit * unitPriceWithDiscount;
-                                  const currentStock = selectedProduct?.stock || 0;
-                                  const remaining = currentStock - quantityToExit;
-                                  
                                   // Buscar entradas do produto para calcular preço original de aquisição
                                   const normalizeId = (id: any): string => {
                                     if (!id) return '';
@@ -1541,6 +1569,26 @@ const Saidas = () => {
                                       acquisitionCost = latestEntry.total / latestEntry.quantity;
                                     }
                                   }
+                                  
+                                  // Calcular preço de venda base
+                                  let baseUnitPrice = getProductPrice(selectedProduct.id);
+                                  
+                                  // Se o preço de venda é igual ao de aquisição ou não definido, aplicar markup padrão de 30%
+                                  if (acquisitionCost > 0) {
+                                    if (baseUnitPrice === 0 || Math.abs(baseUnitPrice - acquisitionCost) < 0.01) {
+                                      baseUnitPrice = acquisitionCost * 1.30; // 30% de markup padrão
+                                    }
+                                  }
+                                  
+                                  const discount = form.watch('discount') || 0;
+                                  // Calcular preço com desconto (subtrair percentual do preço base)
+                                  const unitPriceWithDiscount = discount > 0 && baseUnitPrice > 0 
+                                    ? baseUnitPrice * (1 - discount / 100) 
+                                    : baseUnitPrice;
+                                  const quantityToExit = form.watch('quantity');
+                                  const totalPrice = quantityToExit * unitPriceWithDiscount;
+                                  const currentStock = selectedProduct?.stock || 0;
+                                  const remaining = currentStock - quantityToExit;
                                   
                                   // Calcular lucro e margem de contribuição
                                   const sellingPrice = unitPriceWithDiscount > 0 ? unitPriceWithDiscount : baseUnitPrice;
@@ -1862,20 +1910,29 @@ const Saidas = () => {
                                         
                                         // SEMPRE priorizar o preço de VENDA do produto (já calculado com markup)
                                         let baseUnitPrice = 0;
+                                        let acquisitionCost = 0;
+                                        
+                                        // Calcular custo de aquisição primeiro
+                                        if (productEntries.length > 0) {
+                                          const latestEntry = productEntries[0];
+                                          if (latestEntry.unitPrice && latestEntry.unitPrice > 0) {
+                                            acquisitionCost = latestEntry.unitPrice;
+                                          } else if (latestEntry.total && latestEntry.quantity && latestEntry.quantity > 0) {
+                                            acquisitionCost = latestEntry.total / latestEntry.quantity;
+                                          }
+                                        }
+                                        
                                         // Primeiro: usar preço de venda do produto (com markup aplicado)
                                         if (product && product.price > 0) {
                                           baseUnitPrice = product.price;
-                                        }
-                                        // Se o produto não tem preço de venda, usar preço de compra da última entrada como fallback
-                                        else if (productEntries.length > 0) {
-                                          // Pegar o primeiro (mais recente) e verificar se tem unitPrice válido
-                                          const latestEntry = productEntries[0];
-                                          if (latestEntry.unitPrice && latestEntry.unitPrice > 0) {
-                                            baseUnitPrice = latestEntry.unitPrice;
-                                          } else if (latestEntry.total && latestEntry.quantity && latestEntry.quantity > 0) {
-                                            // Se não tiver unitPrice, calcular a partir do total e quantidade
-                                            baseUnitPrice = latestEntry.total / latestEntry.quantity;
+                                          // Se o preço de venda é igual ao de aquisição, aplicar markup padrão de 30%
+                                          if (acquisitionCost > 0 && Math.abs(baseUnitPrice - acquisitionCost) < 0.01) {
+                                            baseUnitPrice = acquisitionCost * 1.30; // 30% de markup padrão
                                           }
+                                        }
+                                        // Se o produto não tem preço de venda, calcular com markup padrão de 30%
+                                        else if (acquisitionCost > 0) {
+                                          baseUnitPrice = acquisitionCost * 1.30; // 30% de markup padrão
                                         }
                                         
                                         // Aplicar desconto se informado
@@ -1919,21 +1976,7 @@ const Saidas = () => {
                                           console.log('=====================================');
                                         }
                                         
-                                        // Calcular custo de aquisição (preço original antes do markup)
-                                        // Usar o custo unitário da última entrada (mais recente)
-                                        let acquisitionCost = 0;
-                                        if (productEntries.length > 0) {
-                                          // Pegar a última entrada (mais recente) - já está ordenado por data descendente
-                                          const latestEntry = productEntries[0];
-                                          
-                                          // O unitPrice na entrada é o custo de compra original (antes do markup)
-                                          if (latestEntry.unitPrice && latestEntry.unitPrice > 0) {
-                                            acquisitionCost = latestEntry.unitPrice;
-                                          } else if (latestEntry.total && latestEntry.quantity && latestEntry.quantity > 0) {
-                                            // Se não tiver unitPrice, calcular a partir do total e quantidade
-                                            acquisitionCost = latestEntry.total / latestEntry.quantity;
-                                          }
-                                        }
+                                        // acquisitionCost já foi calculado acima
                                         
                                         // Calcular lucro e margem de contribuição
                                         // Lucro = (Preço de venda com desconto - Custo de aquisição) * Quantidade
