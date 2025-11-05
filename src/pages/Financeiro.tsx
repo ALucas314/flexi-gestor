@@ -42,6 +42,8 @@ import {
 import { useData } from "@/contexts/DataContext";
 import { useResponsive } from "@/hooks/use-responsive";
 import { printReceipt, downloadReceipt } from "@/lib/receiptPDF";
+import { exportFinancialReportToPDF, type FinancialReportData } from "@/lib/financialPDF";
+import { toast } from "sonner";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 const Financeiro = () => {
@@ -224,6 +226,165 @@ const Financeiro = () => {
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const year = d.getFullYear();
     return `${day}/${month}/${year}`;
+  };
+
+  // Função para exportar relatório completo em PDF
+  const exportToPDF = () => {
+    try {
+      // Preparar dados mensais para o gráfico
+      const monthlyDataMap = movements.reduce((acc: any, movement) => {
+        const date = new Date(movement.date);
+        const monthKey = `${date.getMonth() + 1}/${date.getFullYear()}`;
+        const monthLabel = date.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' });
+        
+        if (!acc[monthKey]) {
+          acc[monthKey] = {
+            month: monthLabel,
+            entradas: 0,
+            saidas: 0,
+          };
+        }
+        
+        if (movement.type === 'entrada') {
+          acc[monthKey].entradas += movement.total;
+        } else if (movement.type === 'saida') {
+          acc[monthKey].saidas += movement.total;
+        }
+        
+        return acc;
+      }, {});
+
+      const monthlyData = Object.entries(monthlyDataMap)
+        .map(([key, value]: [string, any]) => ({
+          ...value,
+          sortKey: key
+        }))
+        .sort((a: any, b: any) => {
+          const [monthA, yearA] = a.sortKey.split('/').map(Number);
+          const [monthB, yearB] = b.sortKey.split('/').map(Number);
+          if (yearA !== yearB) return yearA - yearB;
+          return monthA - monthB;
+        })
+        .slice(-6)
+        .map((item: any) => {
+          const { sortKey, ...rest } = item;
+          return rest;
+        });
+
+      // Preparar produtos com estoque baixo
+      const lowStockProductsFormatted = products
+        .filter(p => {
+          const stock = typeof p.stock === 'number' ? p.stock : parseFloat(String(p.stock || 0));
+          const minStock = p.minStock || 0;
+          return stock <= minStock && minStock > 0;
+        })
+        .map(p => ({
+          id: p.id,
+          name: p.name,
+          sku: p.sku || '',
+          stock: typeof p.stock === 'number' ? p.stock : parseFloat(String(p.stock || 0)),
+          minStock: p.minStock || 0
+        }));
+
+      // Preparar top produtos mais valiosos
+      const topProductsFormatted = products.map(product => {
+        const productEntries = entradas
+          .filter(m => m.productId === product.id)
+          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        
+        let unitValue = 0;
+        
+        if (productEntries.length > 0) {
+          let totalCost = 0;
+          let totalQuantity = 0;
+          
+          productEntries.forEach(entry => {
+            totalCost += (entry.unitPrice * entry.quantity);
+            totalQuantity += entry.quantity;
+          });
+          
+          const averageCost = totalQuantity > 0 ? totalCost / totalQuantity : 0;
+          unitValue = averageCost > 0 ? averageCost : (product.price || 0);
+        } else {
+          unitValue = product.price || 0;
+        }
+        
+        const stock = typeof product.stock === 'number' ? product.stock : parseFloat(String(product.stock || 0));
+        const totalValue = unitValue * stock;
+        
+        return {
+          id: product.id,
+          name: product.name,
+          stock,
+          totalValue,
+          unitPrice: unitValue
+        };
+      })
+      .filter(p => p.totalValue > 0)
+      .sort((a, b) => b.totalValue - a.totalValue)
+      .slice(0, 5);
+
+      // Preparar movimentações formatadas
+      const movementsFormatted: FinancialReportData['movements'] = filteredMovements.map(m => ({
+        id: m.id,
+        date: m.date instanceof Date ? m.date.toISOString() : (typeof m.date === 'string' ? m.date : new Date(m.date).toISOString()),
+        type: m.type,
+        productName: m.productName || '',
+        description: m.description || '',
+        quantity: m.quantity,
+        unitPrice: m.unitPrice,
+        total: m.total,
+        paymentMethod: (m as any).paymentMethod || ''
+      }));
+
+      // Preparar lucro por produto formatado
+      const profitByProductFormatted = profitByProductSorted.map(p => ({
+        productName: p.productName,
+        totalVenda: p.totalVenda,
+        lucro: p.lucro,
+        margem: calcularMargemContribuicao(p.lucro, p.totalVenda)
+      }));
+
+      const periodText = period === 'todos' ? 'Todos os Períodos' : 
+                        period === 'mes' ? 'Este Mês' : 
+                        period === 'trimestre' ? 'Este Trimestre' : 'Este Ano';
+
+      const reportData: FinancialReportData = {
+        period,
+        periodText,
+        totalProducts,
+        totalStockValue,
+        totalEntradas,
+        totalSaidas,
+        saldo,
+        lucroTotal,
+        totalMovements,
+        productosMovimentados,
+        thisMonthMovements: thisMonthMovements.length,
+        lowStockProducts: lowStockProductsFormatted,
+        topProducts: topProductsFormatted,
+        movements: movementsFormatted,
+        monthlyData,
+        profitByProduct: profitByProductFormatted
+      };
+
+      exportFinancialReportToPDF(reportData, (error) => {
+        toast.error("Erro ao Exportar PDF", {
+          description: error,
+          duration: 5000,
+        });
+      });
+
+      toast.success("PDF gerado com sucesso!", {
+        description: "Abra a janela de impressão para salvar como PDF",
+        duration: 3000,
+      });
+    } catch (error) {
+      toast.error("Erro ao Exportar PDF", {
+        description: error instanceof Error ? error.message : "Erro desconhecido",
+        duration: 5000,
+      });
+    }
   };
 
   // Função para exportar relatório em CSV (Excel) - Versão completa
@@ -551,6 +712,13 @@ Flexi Gestor - Controle de Estoque
                 <SelectItem value="ano"><span className="flex items-center gap-2"><BarChart3 className="h-4 w-4" /> Este Ano</span></SelectItem>
               </SelectContent>
             </Select>
+            <Button 
+              onClick={exportToPDF}
+              className="w-full sm:w-auto bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-xl sm:rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-200 transform hover:scale-105"
+            >
+              <FileText className="w-5 h-5 sm:w-6 sm:h-6 mr-2 sm:mr-3" />
+              Exportar PDF
+            </Button>
             <Button 
               onClick={exportToCSV}
               className="w-full sm:w-auto bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-xl sm:rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-200 transform hover:scale-105"
