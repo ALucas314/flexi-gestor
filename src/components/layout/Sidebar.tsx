@@ -65,12 +65,6 @@ const navigationItems = [
     description: "Controle de vendas"
   },
   { 
-    icon: FileText, 
-    label: "Relatórios", 
-    path: "/relatorios",
-    description: "Análises e dados"
-  },
-  { 
     icon: DollarSign, 
     label: "Financeiro", 
     path: "/financeiro",

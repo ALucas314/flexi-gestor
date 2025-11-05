@@ -72,16 +72,6 @@ const defaultActions = [
     order: 2
   },
   {
-    id: "relatorios",
-    title: "Relatórios",
-    description: "Análises e dados",
-    icon: "BarChart3",
-    color: "from-purple-500 to-purple-600",
-    hoverColor: "from-purple-600 to-purple-700",
-    path: "/relatorios",
-    order: 3
-  },
-  {
     id: "financeiro",
     title: "Financeiro",
     description: "Controle financeiro",
@@ -122,12 +112,6 @@ const availablePages = [
     path: "/saidas", 
     description: "Controle de vendas",
     icon: "TrendingDown"
-  },
-  { 
-    name: "Relatórios", 
-    path: "/relatorios", 
-    description: "Análises e dados",
-    icon: "BarChart3"
   },
   { 
     name: "Financeiro", 
@@ -200,27 +184,35 @@ export const QuickActions = () => {
   useEffect(() => {
     const savedActions = localStorage.getItem('flexi-gestor-quick-actions');
     const actionsVersion = localStorage.getItem('flexi-gestor-actions-version');
-    const currentVersion = '2.1'; // bump para remover atalhos antigos de PDV
+    const currentVersion = '2.2'; // bump para remover atalhos antigos de PDV e Relatórios
 
-    const removeOldPDVRefs = (list: QuickAction[]) =>
-      (list || []).filter(a => a.path !== '/pdv' && a.title.toLowerCase() !== 'pdv' && !/ponto de venda/i.test(a.description || ''));
+    const removeOldRefs = (list: QuickAction[]) =>
+      (list || []).filter(a => 
+        a.path !== '/pdv' && 
+        a.path !== '/relatorios' &&
+        a.title.toLowerCase() !== 'pdv' && 
+        a.title.toLowerCase() !== 'relatórios' &&
+        a.title.toLowerCase() !== 'relatorios' &&
+        !/ponto de venda/i.test(a.description || '') &&
+        !/relat[óo]rios/i.test(a.description || '')
+      );
     
     // Se não tem versão ou a versão é diferente, resetar para os padrões
     if (!actionsVersion || actionsVersion !== currentVersion) {
-      const cleanedDefaults = removeOldPDVRefs(defaultActions);
+      const cleanedDefaults = removeOldRefs(defaultActions);
       setActions(cleanedDefaults);
       localStorage.setItem('flexi-gestor-quick-actions', JSON.stringify(cleanedDefaults));
       localStorage.setItem('flexi-gestor-actions-version', currentVersion);
     } else if (savedActions) {
       const parsed: QuickAction[] = JSON.parse(savedActions);
-      const cleaned = removeOldPDVRefs(parsed);
+      const cleaned = removeOldRefs(parsed);
       setActions(cleaned);
       if (cleaned.length !== parsed.length) {
         localStorage.setItem('flexi-gestor-quick-actions', JSON.stringify(cleaned));
       }
     } else {
       // Usar ações padrão na primeira vez
-      const cleanedDefaults = removeOldPDVRefs(defaultActions);
+      const cleanedDefaults = removeOldRefs(defaultActions);
       setActions(cleanedDefaults);
       localStorage.setItem('flexi-gestor-quick-actions', JSON.stringify(cleanedDefaults));
       localStorage.setItem('flexi-gestor-actions-version', currentVersion);
