@@ -568,11 +568,6 @@ const Produtos = () => {
         description: `${data.name} foi adicionado com sucesso ao catálogo.`,
       });
     } catch (error: any) {
-      console.error('Erro completo:', error);
-      console.error('Tipo do erro:', typeof error);
-      console.error('Error.message:', error?.message);
-      console.error('Error.toString():', error?.toString?.());
-      
       // Extrair mensagem de erro de forma robusta
       let errorMessage = "Ocorreu um erro ao adicionar o produto.";
       
@@ -591,8 +586,6 @@ const Produtos = () => {
       if (errorMessage.toLowerCase().includes('sku') || errorMessage.toLowerCase().includes('código') || errorMessage.toLowerCase().includes('duplicado')) {
         errorMessage = 'O SKU deste produto já foi adicionado. Escolha outro código.';
       }
-      
-      console.error('MENSAGEM FINAL QUE SERÁ EXIBIDA:', errorMessage);
       
       toast.error("Erro ao Adicionar Produto", {
         description: errorMessage,
@@ -616,8 +609,6 @@ const Produtos = () => {
         description: `${data.name} foi atualizado com sucesso.`,
       });
     } catch (error: any) {
-      console.error('Erro completo ao atualizar:', error);
-      
       // Extrair mensagem de erro de forma robusta
       let errorMessage = "Ocorreu um erro ao atualizar o produto.";
       

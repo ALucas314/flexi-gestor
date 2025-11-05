@@ -20,9 +20,9 @@ export interface ReceiptData {
 }
 
 /**
- * Gera e abre uma janela de impressão com a receita formatada
+ * Gera o HTML da receita
  */
-export const printReceipt = (data: ReceiptData) => {
+const generateReceiptHTML = (data: ReceiptData): string => {
   const {
     type,
     receiptNumber,
@@ -42,8 +42,7 @@ export const printReceipt = (data: ReceiptData) => {
   const clientLabel = isSaida ? 'Cliente' : 'Fornecedor';
   const clientName = isSaida ? customer : supplier;
 
-  // Criar HTML da receita
-  const html = `
+  return `
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -305,15 +304,24 @@ export const printReceipt = (data: ReceiptData) => {
 </body>
 </html>
   `.trim();
+};
 
-  // Abrir nova janela com a receita
+/**
+ * Gera e abre uma janela de impressão com a receita formatada
+ */
+export const printReceipt = (data: ReceiptData, onError?: (message: string) => void) => {
+  const html = generateReceiptHTML(data);
+
+  // Tentar abrir janela de impressão
   const printWindow = window.open('', '', 'width=800,height=600');
   
   if (printWindow) {
     printWindow.document.write(html);
     printWindow.document.close();
   } else {
-    alert('Por favor, permita pop-ups para imprimir a receita');
+    if (onError) {
+      onError('Por favor, permita pop-ups para imprimir a receita');
+    }
   }
 };
 

@@ -172,7 +172,11 @@ const Saidas = () => {
   };
 
   // Adicionar lote à seleção
-  const addBatchToSelection = () => {
+  const addBatchToSelection = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     setSelectedBatches(prev => [...prev, { batchId: '', batchNumber: '', quantity: 0 }]);
   };
 
@@ -692,6 +696,12 @@ const Saidas = () => {
       unitPrice: exit.unitPrice,
       totalPrice: exit.totalPrice,
       notes: exit.notes
+    }, (errorMessage) => {
+      toast({
+        title: "Erro ao imprimir",
+        description: errorMessage,
+        variant: "destructive",
+      });
     });
   };
 
@@ -787,12 +797,7 @@ const Saidas = () => {
         if (typeof discountValue === 'number' && !isNaN(discountValue)) {
           unitPrice = baseUnitPrice * (1 - discountValue / 100);
           discountAlreadyApplied = true; // Marcar que desconto já foi aplicado
-          console.log(`[SAIDAS-LOTE] Aplicando desconto:`);
-          console.log(`  - Preço base: R$ ${baseUnitPrice.toFixed(2)}`);
-          console.log(`  - Desconto: ${discountValue}%`);
-          console.log(`  - Preço final: R$ ${unitPrice.toFixed(2)}`);
         } else {
-          console.error('[SAIDAS-LOTE] Erro: Desconto inválido:', discount);
           unitPrice = baseUnitPrice;
         }
       } else {
@@ -850,29 +855,15 @@ const Saidas = () => {
     // Aplicar desconto se informado (apenas se ainda não foi aplicado no bloco de lote)
     if (!discountAlreadyApplied) {
       const discount = form.watch('discount') || (data as any).discount || 0;
-      const basePriceBeforeDiscount = unitPrice; // Guardar preço base para debug
       if (discount > 0 && unitPrice > 0) {
         // Calcular preço com desconto: Preço Base * (1 - Desconto/100)
         // Exemplo: Se preço base é R$ 26,00 e desconto é 10%:
         // 26 * (1 - 10/100) = 26 * 0.90 = 23.40
-        const originalPrice = unitPrice;
         const discountValue = discount; // Garantir que é um número
-        if (typeof discountValue !== 'number' || isNaN(discountValue)) {
-          console.error('[SAIDAS] Erro: Desconto inválido:', discount);
-        } else {
+        if (typeof discountValue === 'number' && !isNaN(discountValue)) {
           unitPrice = unitPrice * (1 - discountValue / 100);
-          console.log(`[SAIDAS] Aplicando desconto:`);
-          console.log(`  - Preço base ANTES desconto: R$ ${originalPrice.toFixed(2)}`);
-          console.log(`  - Desconto informado: ${discountValue}%`);
-          console.log(`  - Multiplicador: ${(1 - discountValue / 100).toFixed(4)}`);
-          console.log(`  - Preço final DEPOIS desconto: R$ ${unitPrice.toFixed(2)}`);
-          console.log(`  - Fórmula: ${originalPrice.toFixed(2)} * (1 - ${discountValue}/100) = ${originalPrice.toFixed(2)} * ${(1 - discountValue / 100).toFixed(4)} = ${unitPrice.toFixed(2)}`);
         }
-      } else {
-        console.log(`[SAIDAS] Sem desconto aplicado. Preço base: R$ ${unitPrice.toFixed(2)}`);
       }
-    } else {
-      console.log(`[SAIDAS] Desconto já foi aplicado anteriormente. Preço final: R$ ${unitPrice.toFixed(2)}`);
     }
 
     // Verificar se há estoque suficiente
@@ -1745,13 +1736,22 @@ const Saidas = () => {
                         // Se usa gerenciamento por lote, mostrar Card de Lotes
                         return (
                           <Card className="border-2 border-red-200">
-                            <CardHeader className="pb-3">
-                              <div className="flex items-center justify-end">
+                            <CardHeader className="pb-3" style={{ pointerEvents: 'auto' }}>
+                              <div className="flex items-center justify-end" style={{ pointerEvents: 'auto' }}>
                                 <Button
                                   type="button"
                                   size="sm"
-                                  onClick={addBatchToSelection}
-                                  className="inline-flex items-center gap-2 h-9 rounded-md px-3 text-sm font-medium bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:from-indigo-700 hover:to-purple-700 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    addBatchToSelection(e);
+                                  }}
+                                  onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                  }}
+                                  className="inline-flex items-center gap-2 h-9 rounded-md px-3 text-sm font-medium bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:from-indigo-700 hover:to-purple-700 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 cursor-pointer z-10 relative"
+                                  style={{ pointerEvents: 'auto' }}
                                 >
                                   <Plus className="h-4 w-4 mr-1" />
                                   Selecionar Lote
@@ -1937,17 +1937,6 @@ const Saidas = () => {
                                           // Estoque restante = estoque total dos lotes selecionados - quantidade total a retirar
                                           // Exemplo: Lote tem 10 unidades, vamos retirar 10 → 10 - 10 = 0 unidades restantes
                                           remaining = Math.max(0, totalStock - totalToExit);
-                                          
-                                          // Debug temporário para verificar cálculo
-                                          console.log('DEBUG LOTE RESTANTE:', {
-                                            managedByBatch,
-                                            totalStock,
-                                            totalToExit,
-                                            remaining,
-                                            selectedBatches: selectedBatches.map(b => ({ batchId: b.batchId, quantity: b.quantity, batchNumber: b.batchNumber })),
-                                            hasSelectedBatches,
-                                            productStock: product?.stock
-                                          });
                                         } else {
                                           // Se não há lotes selecionados OU produto não usa lotes, usar estoque total do produto
                                           totalStock = product?.stock || 0;
@@ -2014,39 +2003,6 @@ const Saidas = () => {
                                           : baseUnitPrice;
                                         
                                         const totalPrice = totalToExit * unitPrice;
-                                        
-                                        // Debug temporário - sempre logar quando houver produto selecionado
-                                        if (selectedProductId) {
-                                          console.log('=== DEBUG SAIDAS - PREÇO UNITÁRIO ===');
-                                          console.log('ProductId selecionado:', selectedProductId, `(tipo: ${typeof selectedProductId})`);
-                                          console.log('Produto encontrado:', product?.name, `(ID: ${product?.id})`);
-                                          console.log('Total de movimentações no sistema:', movements.length);
-                                          console.log('Movimentações do produto encontradas:', allMovementsForProduct.length);
-                                          console.log('Detalhes das movimentações:', allMovementsForProduct.map(m => ({
-                                            id: m.id,
-                                            type: m.type,
-                                            productId: m.productId,
-                                            productIdNormalized: normalizeId(m.productId),
-                                            productName: m.productName,
-                                            unitPrice: m.unitPrice,
-                                            total: m.total,
-                                            quantity: m.quantity,
-                                            date: m.date
-                                          })));
-                                          console.log('Entradas encontradas:', productEntries.length);
-                                          if (productEntries.length > 0) {
-                                            console.log('Detalhes da última entrada:', {
-                                              ...productEntries[0],
-                                              unitPriceCalculated: productEntries[0].unitPrice || (productEntries[0].total / productEntries[0].quantity)
-                                            });
-                                          } else {
-                                            console.log('NENHUMA ENTRADA ENCONTRADA!');
-                                            console.log('Tipos de movimentações encontradas:', [...new Set(allMovementsForProduct.map(m => m.type))]);
-                                          }
-                                          console.log('Preço unitário final calculado:', unitPrice);
-                                          console.log('Valor total:', totalPrice);
-                                          console.log('=====================================');
-                                        }
                                         
                                         // acquisitionCost já foi calculado acima
                                         

@@ -91,7 +91,6 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
         // O estoque deve sempre ser igual à soma dos lotes para produtos gerenciados por lote
         // Se não houver lotes, o estoque será 0
         if (totalBatches !== productStock) {
-          console.log(`🔄 [BatchManager] Sincronizando estoque ao carregar: ${productStock} -> ${totalBatches}`);
           await syncProductStockFromBatches(
             productId,
             user.id,
@@ -158,8 +157,6 @@ export const BatchManager: React.FC<BatchManagerProps> = ({
               filter: `produto_id=eq.${productId}`
             }, 
             async (payload) => {
-              console.log('📡 Realtime: Lote alterado', payload.eventType, payload);
-              
               // Limpar timer anterior se existir
               if (debounceTimer) {
                 clearTimeout(debounceTimer);

@@ -262,14 +262,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   // 🔄 Escutar mudanças de workspace para recarregar dados
   useEffect(() => {
     const handleWorkspaceChanged = async () => {
-      console.log('🔄 Workspace mudou, recarregando dados...');
       await refreshData();
       loadNotificationsFromLocalStorage();
     };
 
     // 🆕 Escutar eventos de reconexão global para recarregar dados automaticamente
     const handleForceReload = async () => {
-      console.log('🔄 Evento de reload forçado detectado, recarregando dados...');
       await refreshData();
     };
 
@@ -328,12 +326,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         
         // Se excedeu o máximo de tentativas, não tentar mais
         if (attempts >= MAX_RECONNECT_ATTEMPTS) {
-          console.error(`❌ Realtime: ${tableName} - Máximo de tentativas de reconexão atingido`);
           return null;
         }
         
         try {
-          console.log(`🔌 Criando subscription para ${tableName}...`);
           const channel = supabase
             .channel(channelName)
             .on(
@@ -345,13 +341,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
                 filter: `usuario_id=eq.${workspaceAtivo.id}`
               },
               async (payload) => {
-                console.log(`🔄 Realtime: ${tableName} atualizado`, payload.eventType, payload);
-                
                 // Para eventos DELETE, atualizar imediatamente sem debounce
                 // para garantir que os dados sejam atualizados rapidamente
                 if (payload.eventType === 'DELETE') {
                   try {
-                    console.log(`⚡ DELETE detectado em ${tableName}, atualizando imediatamente...`);
                     await onUpdate();
                     lastSuccessfulConnection = Date.now();
                     reconnectAttempts.delete(tableName);
@@ -384,20 +377,16 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
               }
             )
             .subscribe((status) => {
-              console.log(`📡 Realtime: ${tableName} - Status: ${status}`);
-              
               if (status === 'SUBSCRIBED') {
-                console.log(`✅ Realtime: ${tableName} conectado com sucesso`);
                 lastSuccessfulConnection = Date.now();
                 reconnectAttempts.delete(tableName); // Resetar contador
               } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-                console.warn(`⚠️ Realtime: ${tableName} desconectado (${status}), tentando reconectar...`);
                 // Remover subscription antiga
                 if (subscriptions.has(tableName)) {
                   try {
                     supabase.removeChannel(subscriptions.get(tableName));
                   } catch (e) {
-                    console.error(`Erro ao remover channel ${tableName}:`, e);
+                    // Ignorar erros ao remover
                   }
                   subscriptions.delete(tableName);
                 }
@@ -409,15 +398,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
                 setTimeout(() => {
                   const newAttempts = reconnectAttempts.get(tableName) || 0;
                   if (newAttempts < MAX_RECONNECT_ATTEMPTS) {
-                    console.log(`🔄 Tentando reconectar ${tableName} (tentativa ${newAttempts + 1}/${MAX_RECONNECT_ATTEMPTS})...`);
                     createSubscription(tableName, onUpdate);
-                  } else {
-                    console.error(`❌ Máximo de tentativas atingido para ${tableName}`);
                   }
                 }, RECONNECT_DELAY);
-              } else {
-                // Logar outros status para debug
-                console.log(`📊 Realtime: ${tableName} - Status desconhecido: ${status}`);
               }
             });
 
@@ -443,7 +426,6 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         subscriptions.forEach((channel, tableName) => {
           try {
             supabase.removeChannel(channel);
-            console.log(`🔌 Removendo subscription: ${tableName}`);
           } catch (error) {
             // Ignorar erros ao remover
           }
@@ -511,11 +493,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           // Mas pode ser útil para atualizar UI se necessário
         });
 
-        console.log(`✅ Realtime: ${subscriptions.size} subscriptions criadas`);
       };
 
       // Configurar todas as subscriptions inicialmente
-      console.log('🚀 Iniciando subscriptions real-time...');
       reconfigureAllSubscriptions();
 
       // 🔄 Health check que detecta desconexão e reconecta automaticamente
@@ -525,7 +505,6 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         
         // Se não houve conexão bem-sucedida nos últimos 60 segundos, reconectar
         if (timeSinceLastConnection > 60000) {
-          console.warn('⚠️ Realtime: Sem conexão há mais de 60s, reconectando...');
           try {
             // Se não houve conexão recente, reconectar todas as subscriptions
             // O status das subscriptions é gerenciado pelos callbacks de subscribe()
@@ -547,12 +526,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       // Isso garante que mesmo se o real-time falhar, os dados serão atualizados
       const refreshInterval = setInterval(async () => {
         try {
-          console.log('🔄 Refresh periódico (fallback se real-time falhar)...');
           await refreshData();
           lastSuccessfulConnection = Date.now();
         } catch (e) {
           // Silencioso: mantém a UI estável
-          console.error('Erro no refresh periódico:', e);
         }
       }, 30000); // 30 segundos (fallback mais frequente)
 
@@ -560,7 +537,6 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       const handleVisibilityChange = () => {
         if (!document.hidden) {
           // Página voltou a ficar visível - reconectar imediatamente
-          console.log('👁️ Página visível novamente, reconectando Realtime...');
           setTimeout(() => {
             reconfigureAllSubscriptions();
             refreshData().catch(() => {
@@ -573,7 +549,6 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
       // 🔄 Listener para quando a janela ganha foco - reconectar quando voltar
       const handleFocus = () => {
-        console.log('🔄 Janela ganhou foco, reconectando Realtime...');
         setTimeout(() => {
           reconfigureAllSubscriptions();
           refreshData().catch(() => {
@@ -585,7 +560,6 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
       // 🔄 Listener para eventos online/offline - reconectar quando voltar online
       const handleOnline = () => {
-        console.log('🌐 Conexão restaurada, reconectando Realtime...');
         setTimeout(() => {
           reconfigureAllSubscriptions();
           refreshData().catch(() => {

@@ -1494,7 +1494,11 @@ const Entradas = () => {
   // Função para exportar dados em CSV com formatação profissional
   const exportToCSV = () => {
     if (filteredEntries.length === 0) {
-      alert('Não há dados para exportar');
+      toast({
+        title: "Sem dados",
+        description: "Não há dados para exportar",
+        variant: "destructive",
+      });
       return;
     }
 

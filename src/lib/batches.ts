@@ -189,9 +189,6 @@ export const generateNextAvailableBatchNumber = async (
     // Buscar TODOS os lotes de TODOS os produtos para numeração global
     const allBatches = await getAllBatchesGlobal(userId);
     
-    console.log('[generateNextAvailableBatchNumber] Lotes encontrados globalmente:', allBatches.length);
-    console.log('[generateNextAvailableBatchNumber] Números de lote encontrados:', allBatches.map(b => b.batchNumber));
-    
     // Criar conjunto com números já usados (apenas os números extraídos)
     const usedNumbers = new Set<number>();
     
@@ -213,7 +210,6 @@ export const generateNextAvailableBatchNumber = async (
         const num = extractNumber(b.batchNumber);
         if (num !== null) {
           usedNumbers.add(num);
-          console.log('[generateNextAvailableBatchNumber] Número extraído:', b.batchNumber, '->', num);
         }
       }
     });
@@ -228,8 +224,6 @@ export const generateNextAvailableBatchNumber = async (
       }
     });
     
-    console.log('[generateNextAvailableBatchNumber] Números já usados (global):', Array.from(usedNumbers));
-    
     // Gerar próximo número disponível começando de 1
     let nextNumber = 1;
     
@@ -240,12 +234,9 @@ export const generateNextAvailableBatchNumber = async (
       // Proteção contra loop infinito
       if (nextNumber > 10000) {
         // Usar timestamp como fallback para garantir unicidade
-        console.log('[generateNextAvailableBatchNumber] Proteção ativada, usando timestamp');
         return String(Date.now());
       }
     }
-    
-    console.log('[generateNextAvailableBatchNumber] Próximo número disponível (global):', nextNumber);
     
     // Retornar apenas o número (sem prefixo "Lote")
     return String(nextNumber);
@@ -418,7 +409,6 @@ export const syncProductStockFromBatches = async (
     // Atualizar estoque do produto
     await updateProductStock(productId, totalStock);
     
-    console.log(`✅ [syncProductStockFromBatches] Estoque sincronizado: ${productId} -> ${totalStock} unidades`);
     
     return totalStock;
   } catch (error) {

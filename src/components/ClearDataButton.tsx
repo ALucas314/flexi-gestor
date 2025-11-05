@@ -1,6 +1,7 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 const ClearDataButton = () => {
   const clearAllData = () => {
@@ -12,10 +13,12 @@ const ClearDataButton = () => {
       localStorage.removeItem('flexi-gestor-user');
       localStorage.removeItem('flexi-gestor-auth');
       
-      // Recarregar página
-      window.location.reload();
+      toast.success('Dados limpos! A página será recarregada.');
       
-      alert('✅ Dados limpos! A página será recarregada.');
+      // Recarregar página após um pequeno delay para mostrar o toast
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
     }
   };
 
