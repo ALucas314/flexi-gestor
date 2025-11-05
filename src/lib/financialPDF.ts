@@ -563,25 +563,74 @@ export const generateFinancialReportHTML = (data: FinancialReportData): string =
 
 /**
  * Exporta o relatório financeiro como PDF
+ * Gera o PDF diretamente sem exibir página intermediária ao usuário
  */
 export const exportFinancialReportToPDF = (data: FinancialReportData, onError?: (message: string) => void) => {
   try {
     const html = generateFinancialReportHTML(data);
-    const printWindow = window.open('', '_blank', 'width=800,height=600');
     
-    if (printWindow) {
-      printWindow.document.write(html);
-      printWindow.document.close();
-      
-      // Aguardar um pouco para garantir que o conteúdo foi carregado
-      setTimeout(() => {
-        printWindow.print();
-      }, 250);
-    } else {
+    // Criar iframe oculto para gerar o PDF sem mostrar página intermediária
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = 'none';
+    iframe.style.opacity = '0';
+    iframe.style.pointerEvents = 'none';
+    
+    document.body.appendChild(iframe);
+    
+    // Escrever o HTML no iframe
+    const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+    
+    if (!iframeDoc) {
+      document.body.removeChild(iframe);
       if (onError) {
-        onError('Por favor, permita pop-ups para gerar o PDF');
+        onError('Erro ao criar iframe para gerar PDF');
       }
+      return;
     }
+    
+    iframeDoc.open();
+    iframeDoc.write(html);
+    iframeDoc.close();
+    
+    // Flag para garantir que print() seja chamado apenas uma vez
+    let hasPrinted = false;
+    
+    const printPDF = () => {
+      if (hasPrinted) return;
+      hasPrinted = true;
+      
+      try {
+        iframe.contentWindow?.print();
+        
+        // Remover o iframe após um tempo para limpar o DOM
+        setTimeout(() => {
+          if (iframe.parentNode) {
+            document.body.removeChild(iframe);
+          }
+        }, 1000);
+      } catch (error) {
+        if (iframe.parentNode) {
+          document.body.removeChild(iframe);
+        }
+        if (onError) {
+          onError(`Erro ao imprimir: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+        }
+      }
+    };
+    
+    // Aguardar o carregamento completo do conteúdo antes de imprimir
+    iframe.onload = () => {
+      setTimeout(printPDF, 300);
+    };
+    
+    // Fallback caso onload não seja disparado
+    setTimeout(printPDF, 500);
+    
   } catch (error) {
     if (onError) {
       onError(`Erro ao gerar PDF: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
