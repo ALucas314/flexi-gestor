@@ -73,8 +73,8 @@ const defaultActions = [
   },
   {
     id: "financeiro",
-    title: "Financeiro",
-    description: "Controle financeiro",
+    title: "Relatórios",
+    description: "Relatórios e análises",
     icon: "DollarSign",
     color: "from-amber-500 to-amber-600",
     hoverColor: "from-amber-600 to-amber-700",
@@ -114,9 +114,9 @@ const availablePages = [
     icon: "TrendingDown"
   },
   { 
-    name: "Financeiro", 
+    name: "Relatórios", 
     path: "/financeiro", 
-    description: "Controle financeiro",
+    description: "Relatórios e análises",
     icon: "DollarSign"
   },
   { 
@@ -184,31 +184,70 @@ export const QuickActions = () => {
   useEffect(() => {
     const savedActions = localStorage.getItem('flexi-gestor-quick-actions');
     const actionsVersion = localStorage.getItem('flexi-gestor-actions-version');
-    const currentVersion = '2.2'; // bump para remover atalhos antigos de PDV e Relatórios
+    const currentVersion = '2.3'; // bump para atualizar Financeiro para Relatórios
 
     const removeOldRefs = (list: QuickAction[]) =>
       (list || []).filter(a => 
         a.path !== '/pdv' && 
         a.path !== '/relatorios' &&
         a.title.toLowerCase() !== 'pdv' && 
-        a.title.toLowerCase() !== 'relatórios' &&
+        a.title.toLowerCase() !== 'relatórios' && 
         a.title.toLowerCase() !== 'relatorios' &&
         !/ponto de venda/i.test(a.description || '') &&
         !/relat[óo]rios/i.test(a.description || '')
       );
+
+    // Função para migrar ações antigas: atualizar Financeiro para Relatórios
+    const migrateActions = (list: QuickAction[]): QuickAction[] => {
+      return list.map(action => {
+        // Se é a ação financeiro, atualizar título e descrição
+        if (action.path === '/financeiro' || action.id === 'financeiro' || 
+            action.title === 'Financeiro' || action.title.toLowerCase() === 'financeiro') {
+          return {
+            ...action,
+            title: 'Relatórios',
+            description: 'Relatórios e análises'
+          };
+        }
+        return action;
+      });
+    };
     
-    // Se não tem versão ou a versão é diferente, resetar para os padrões
+    // Se não tem versão ou a versão é diferente, migrar e atualizar
     if (!actionsVersion || actionsVersion !== currentVersion) {
-      const cleanedDefaults = removeOldRefs(defaultActions);
-      setActions(cleanedDefaults);
-      localStorage.setItem('flexi-gestor-quick-actions', JSON.stringify(cleanedDefaults));
+      if (savedActions) {
+        // Migrar ações existentes
+        const parsed: QuickAction[] = JSON.parse(savedActions);
+        const migrated = migrateActions(parsed);
+        const cleaned = removeOldRefs(migrated);
+        setActions(cleaned);
+        localStorage.setItem('flexi-gestor-quick-actions', JSON.stringify(cleaned));
+      } else {
+        // Usar ações padrão na primeira vez
+        const cleanedDefaults = removeOldRefs(defaultActions);
+        setActions(cleanedDefaults);
+        localStorage.setItem('flexi-gestor-quick-actions', JSON.stringify(cleanedDefaults));
+      }
       localStorage.setItem('flexi-gestor-actions-version', currentVersion);
     } else if (savedActions) {
+      // Versão atual, mas verificar se precisa migrar (caso tenha sido atualizado manualmente)
       const parsed: QuickAction[] = JSON.parse(savedActions);
-      const cleaned = removeOldRefs(parsed);
-      setActions(cleaned);
-      if (cleaned.length !== parsed.length) {
+      const needsMigration = parsed.some(a => 
+        (a.path === '/financeiro' || a.id === 'financeiro') && 
+        (a.title === 'Financeiro' || a.title.toLowerCase() === 'financeiro')
+      );
+      
+      if (needsMigration) {
+        const migrated = migrateActions(parsed);
+        const cleaned = removeOldRefs(migrated);
+        setActions(cleaned);
         localStorage.setItem('flexi-gestor-quick-actions', JSON.stringify(cleaned));
+      } else {
+        const cleaned = removeOldRefs(parsed);
+        setActions(cleaned);
+        if (cleaned.length !== parsed.length) {
+          localStorage.setItem('flexi-gestor-quick-actions', JSON.stringify(cleaned));
+        }
       }
     } else {
       // Usar ações padrão na primeira vez

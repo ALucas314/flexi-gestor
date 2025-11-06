@@ -1,7 +1,7 @@
 // Página de Controle Financeiro
 // Gerenciamento de receitas, despesas, fluxo de caixa e movimentações de estoque
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,6 @@ import {
   Package,
   Search,
   Filter,
-  Calendar,
   RotateCcw,
   Download,
   Coins as PiggyBank,
@@ -45,10 +44,25 @@ import { printReceipt, downloadReceipt } from "@/lib/receiptPDF";
 import { exportFinancialReportToPDF, type FinancialReportData } from "@/lib/financialPDF";
 import { toast } from "sonner";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { calcularDRE, formatarMoeda, formatarPercentual, getCategoriaDRETexto } from "@/lib/dre";
+import { exportDREToPDF } from "@/lib/drePDF";
+import type { ContaPagar, ContaReceber, DRECategory, AccountStatus } from "@/types/financial";
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/contexts/AuthContext";
+import { useWorkspace } from "@/contexts/WorkspaceContext";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Calendar as CalendarIcon } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 const Financeiro = () => {
   const { isMobile } = useResponsive();
   const { movements, products } = useData();
+  const { user } = useAuth();
+  const { workspaceAtivo } = useWorkspace();
   const location = useLocation();
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState<string>("todos");
@@ -59,6 +73,51 @@ const Financeiro = () => {
   const [showPurchase, setShowPurchase] = useState(false);
   const [selectedMovement, setSelectedMovement] = useState<any>(null);
   const [showAllMovements, setShowAllMovements] = useState(false);
+
+  // Estados para Contas a Pagar e Contas a Receber
+  const [contasPagar, setContasPagar] = useState<ContaPagar[]>([]);
+  const [contasReceber, setContasReceber] = useState<ContaReceber[]>([]);
+  const [loadingContas, setLoadingContas] = useState(false);
+  const [showDialogContaPagar, setShowDialogContaPagar] = useState(false);
+  const [showDialogContaReceber, setShowDialogContaReceber] = useState(false);
+  const [contaPagarEditando, setContaPagarEditando] = useState<ContaPagar | null>(null);
+  const [contaReceberEditando, setContaReceberEditando] = useState<ContaReceber | null>(null);
+  
+  // Estados para formulários
+  const [formContaPagar, setFormContaPagar] = useState({
+    descricao: '',
+    valor: 0,
+    data_vencimento: new Date(),
+    categoria_dre: '' as DRECategory | '',
+    fornecedor: '',
+    observacoes: '',
+    movimento_id: ''
+  });
+  
+  const [formContaReceber, setFormContaReceber] = useState({
+    descricao: '',
+    valor: 0,
+    data_vencimento: new Date(),
+    categoria_dre: '' as DRECategory | '',
+    cliente: '',
+    observacoes: '',
+    movimento_id: ''
+  });
+
+  // Estados para DRE
+  const [drePeriodoInicio, setDrePeriodoInicio] = useState<Date>(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const [drePeriodoFim, setDrePeriodoFim] = useState<Date>(new Date());
+
+  // Estado para controlar a aba ativa
+  const [abaAtiva, setAbaAtiva] = useState<string>("movimentacoes");
+
+  // Estados para busca de fornecedores e clientes
+  const [fornecedorSearchTerm, setFornecedorSearchTerm] = useState("");
+  const [showFornecedorDropdown, setShowFornecedorDropdown] = useState(false);
+  const [clienteSearchTerm, setClienteSearchTerm] = useState("");
+  const [showClienteDropdown, setShowClienteDropdown] = useState(false);
+  const fornecedorInputRef = useRef<HTMLDivElement>(null);
+  const clienteInputRef = useRef<HTMLDivElement>(null);
 
   // Função para abrir a receita de uma movimentação (saída)
   const openReceipt = (movement: any) => {
@@ -669,6 +728,427 @@ Flexi Gestor - Controle de Estoque
     }
   };
 
+  // ========== FUNÇÕES PARA CONTAS A PAGAR ==========
+  
+  // Carregar Contas a Pagar
+  const carregarContasPagar = async () => {
+    if (!user?.id || !workspaceAtivo?.id) return;
+    
+    setLoadingContas(true);
+    try {
+      const { data, error } = await supabase
+        .from('contas_pagar')
+        .select('*')
+        .eq('usuario_id', workspaceAtivo.id)
+        .order('data_vencimento', { ascending: false });
+
+      if (error) throw error;
+
+      const contasFormatadas: ContaPagar[] = (data || []).map((c: any) => ({
+        id: c.id,
+        descricao: c.descricao,
+        valor: parseFloat(c.valor) || 0,
+        data_vencimento: new Date(c.data_vencimento),
+        data_pagamento: c.data_pagamento ? new Date(c.data_pagamento) : undefined,
+        status: c.status as AccountStatus,
+        categoria_dre: c.categoria_dre as DRECategory | undefined,
+        fornecedor: c.fornecedor || '',
+        observacoes: c.observacoes || '',
+        movimento_id: c.movimento_id || '',
+        usuario_id: c.usuario_id,
+        workspace_id: c.workspace_id,
+        criado_em: new Date(c.criado_em),
+        atualizado_em: new Date(c.atualizado_em)
+      }));
+
+      setContasPagar(contasFormatadas);
+    } catch (error) {
+      console.error('Erro ao carregar contas a pagar:', error);
+      toast.error('Erro ao carregar contas a pagar');
+    } finally {
+      setLoadingContas(false);
+    }
+  };
+
+  // Carregar Contas a Receber
+  const carregarContasReceber = async () => {
+    if (!user?.id || !workspaceAtivo?.id) return;
+    
+    setLoadingContas(true);
+    try {
+      const { data, error } = await supabase
+        .from('contas_receber')
+        .select('*')
+        .eq('usuario_id', workspaceAtivo.id)
+        .order('data_vencimento', { ascending: false });
+
+      if (error) throw error;
+
+      const contasFormatadas: ContaReceber[] = (data || []).map((c: any) => ({
+        id: c.id,
+        descricao: c.descricao,
+        valor: parseFloat(c.valor) || 0,
+        data_vencimento: new Date(c.data_vencimento),
+        data_recebimento: c.data_recebimento ? new Date(c.data_recebimento) : undefined,
+        status: c.status as AccountStatus,
+        categoria_dre: c.categoria_dre as DRECategory | undefined,
+        cliente: c.cliente || '',
+        observacoes: c.observacoes || '',
+        movimento_id: c.movimento_id || '',
+        usuario_id: c.usuario_id,
+        workspace_id: c.workspace_id,
+        criado_em: new Date(c.criado_em),
+        atualizado_em: new Date(c.atualizado_em)
+      }));
+
+      setContasReceber(contasFormatadas);
+    } catch (error) {
+      console.error('Erro ao carregar contas a receber:', error);
+      toast.error('Erro ao carregar contas a receber');
+    } finally {
+      setLoadingContas(false);
+    }
+  };
+
+  // Criar ou atualizar Conta a Pagar
+  const salvarContaPagar = async () => {
+    if (!user?.id || !workspaceAtivo?.id) {
+      toast.error('Usuário ou workspace não encontrado');
+      return;
+    }
+
+    if (!formContaPagar.descricao || formContaPagar.valor <= 0) {
+      toast.error('Preencha todos os campos obrigatórios');
+      return;
+    }
+
+    try {
+      const dadosConta = {
+        descricao: formContaPagar.descricao,
+        valor: formContaPagar.valor,
+        data_vencimento: formContaPagar.data_vencimento.toISOString(),
+        status: 'pendente' as AccountStatus,
+        categoria_dre: formContaPagar.categoria_dre || null,
+        fornecedor: formContaPagar.fornecedor || null,
+        observacoes: formContaPagar.observacoes || null,
+        movimento_id: formContaPagar.movimento_id || null,
+        usuario_id: workspaceAtivo.id,
+        workspace_id: workspaceAtivo.id
+      };
+
+      if (contaPagarEditando) {
+        // Atualizar
+        const { error } = await supabase
+          .from('contas_pagar')
+          .update(dadosConta)
+          .eq('id', contaPagarEditando.id);
+
+        if (error) throw error;
+        toast.success('Conta a pagar atualizada com sucesso!');
+      } else {
+        // Criar
+        const { error } = await supabase
+          .from('contas_pagar')
+          .insert([dadosConta]);
+
+        if (error) throw error;
+        toast.success('Conta a pagar criada com sucesso!');
+      }
+
+      await carregarContasPagar();
+      setShowDialogContaPagar(false);
+      setContaPagarEditando(null);
+      setFornecedorSearchTerm('');
+      setShowFornecedorDropdown(false);
+      setFormContaPagar({
+        descricao: '',
+        valor: 0,
+        data_vencimento: new Date(),
+        categoria_dre: '' as DRECategory | '',
+        fornecedor: '',
+        observacoes: '',
+        movimento_id: ''
+      });
+    } catch (error: any) {
+      console.error('Erro ao salvar conta a pagar:', error);
+      toast.error(error.message || 'Erro ao salvar conta a pagar');
+    }
+  };
+
+  // Criar ou atualizar Conta a Receber
+  const salvarContaReceber = async () => {
+    if (!user?.id || !workspaceAtivo?.id) {
+      toast.error('Usuário ou workspace não encontrado');
+      return;
+    }
+
+    if (!formContaReceber.descricao || formContaReceber.valor <= 0) {
+      toast.error('Preencha todos os campos obrigatórios');
+      return;
+    }
+
+    try {
+      const dadosConta = {
+        descricao: formContaReceber.descricao,
+        valor: formContaReceber.valor,
+        data_vencimento: formContaReceber.data_vencimento.toISOString(),
+        status: 'pendente' as AccountStatus,
+        categoria_dre: formContaReceber.categoria_dre || null,
+        cliente: formContaReceber.cliente || null,
+        observacoes: formContaReceber.observacoes || null,
+        movimento_id: formContaReceber.movimento_id || null,
+        usuario_id: workspaceAtivo.id,
+        workspace_id: workspaceAtivo.id
+      };
+
+      if (contaReceberEditando) {
+        // Atualizar
+        const { error } = await supabase
+          .from('contas_receber')
+          .update(dadosConta)
+          .eq('id', contaReceberEditando.id);
+
+        if (error) throw error;
+        toast.success('Conta a receber atualizada com sucesso!');
+      } else {
+        // Criar
+        const { error } = await supabase
+          .from('contas_receber')
+          .insert([dadosConta]);
+
+        if (error) throw error;
+        toast.success('Conta a receber criada com sucesso!');
+      }
+
+      await carregarContasReceber();
+      setShowDialogContaReceber(false);
+      setContaReceberEditando(null);
+      setClienteSearchTerm('');
+      setShowClienteDropdown(false);
+      setFormContaReceber({
+        descricao: '',
+        valor: 0,
+        data_vencimento: new Date(),
+        categoria_dre: '' as DRECategory | '',
+        cliente: '',
+        observacoes: '',
+        movimento_id: ''
+      });
+    } catch (error: any) {
+      console.error('Erro ao salvar conta a receber:', error);
+      toast.error(error.message || 'Erro ao salvar conta a receber');
+    }
+  };
+
+  // Marcar conta como paga/recebida
+  const marcarContaComoPaga = async (conta: ContaPagar) => {
+    try {
+      const { error } = await supabase
+        .from('contas_pagar')
+        .update({ 
+          status: 'pago',
+          data_pagamento: new Date().toISOString()
+        })
+        .eq('id', conta.id);
+
+      if (error) throw error;
+      toast.success('Conta marcada como paga!');
+      await carregarContasPagar();
+    } catch (error: any) {
+      toast.error(error.message || 'Erro ao marcar conta como paga');
+    }
+  };
+
+  const marcarContaComoRecebida = async (conta: ContaReceber) => {
+    try {
+      const { error } = await supabase
+        .from('contas_receber')
+        .update({ 
+          status: 'pago',
+          data_recebimento: new Date().toISOString()
+        })
+        .eq('id', conta.id);
+
+      if (error) throw error;
+      toast.success('Conta marcada como recebida!');
+      await carregarContasReceber();
+    } catch (error: any) {
+      toast.error(error.message || 'Erro ao marcar conta como recebida');
+    }
+  };
+
+  // Deletar conta
+  const deletarContaPagar = async (id: string) => {
+    if (!confirm('Tem certeza que deseja excluir esta conta?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('contas_pagar')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      toast.success('Conta excluída com sucesso!');
+      await carregarContasPagar();
+    } catch (error: any) {
+      toast.error(error.message || 'Erro ao excluir conta');
+    }
+  };
+
+  const deletarContaReceber = async (id: string) => {
+    if (!confirm('Tem certeza que deseja excluir esta conta?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('contas_receber')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      toast.success('Conta excluída com sucesso!');
+      await carregarContasReceber();
+    } catch (error: any) {
+      toast.error(error.message || 'Erro ao excluir conta');
+    }
+  };
+
+  // Carregar contas ao montar componente
+  useEffect(() => {
+    if (user?.id && workspaceAtivo?.id) {
+      carregarContasPagar();
+      carregarContasReceber();
+    }
+  }, [user?.id, workspaceAtivo?.id]);
+
+  // Extrair lista única de fornecedores das contas a pagar
+  const fornecedoresUnicos = useMemo(() => {
+    const fornecedores = contasPagar
+      .map(c => c.fornecedor)
+      .filter((f): f is string => !!f && f.trim() !== '');
+    return [...new Set(fornecedores)].sort();
+  }, [contasPagar]);
+
+  // Extrair lista única de clientes das contas a receber
+  const clientesUnicos = useMemo(() => {
+    const clientes = contasReceber
+      .map(c => c.cliente)
+      .filter((c): c is string => !!c && c.trim() !== '');
+    return [...new Set(clientes)].sort();
+  }, [contasReceber]);
+
+  // Filtrar fornecedores baseado no termo de busca
+  const fornecedoresFiltrados = useMemo(() => {
+    const search = fornecedorSearchTerm.trim().toLowerCase();
+    if (!search) {
+      return fornecedoresUnicos.slice(0, 20); // Mostrar até 20 quando não há busca
+    }
+    return fornecedoresUnicos
+      .filter(f => f.toLowerCase().includes(search))
+      .slice(0, 20);
+  }, [fornecedoresUnicos, fornecedorSearchTerm]);
+
+  // Filtrar clientes baseado no termo de busca
+  const clientesFiltrados = useMemo(() => {
+    const search = clienteSearchTerm.trim().toLowerCase();
+    if (!search) {
+      return clientesUnicos.slice(0, 20); // Mostrar até 20 quando não há busca
+    }
+    return clientesUnicos
+      .filter(c => c.toLowerCase().includes(search))
+      .slice(0, 20);
+  }, [clientesUnicos, clienteSearchTerm]);
+
+  // Fechar dropdown quando clicar fora (fornecedores)
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (fornecedorInputRef.current && !fornecedorInputRef.current.contains(event.target as Node)) {
+        setShowFornecedorDropdown(false);
+      }
+    };
+    if (showFornecedorDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showFornecedorDropdown]);
+
+  // Fechar dropdown quando clicar fora (clientes)
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (clienteInputRef.current && !clienteInputRef.current.contains(event.target as Node)) {
+        setShowClienteDropdown(false);
+      }
+    };
+    if (showClienteDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showClienteDropdown]);
+
+  // Calcular DRE
+  const calcularDREAtual = () => {
+    return calcularDRE(
+      contasPagar,
+      contasReceber,
+      movements
+        .filter(m => m.type === 'entrada' || m.type === 'saida')
+        .map(m => ({
+          id: m.id,
+          type: m.type as 'entrada' | 'saida',
+          total: m.total,
+          date: m.date instanceof Date ? m.date : new Date(m.date),
+          description: m.description
+        })),
+      drePeriodoInicio,
+      drePeriodoFim
+    );
+  };
+
+  // Exportar DRE em PDF
+  const exportarDREPDF = () => {
+    try {
+      const dre = calcularDREAtual();
+      const periodoTexto = `${drePeriodoInicio.toLocaleDateString('pt-BR')} a ${drePeriodoFim.toLocaleDateString('pt-BR')}`;
+
+      const dadosPDF = {
+        dre,
+        periodo_texto: periodoTexto,
+        data_geracao: new Date(),
+        contas_pagar: contasPagar,
+        contas_receber: contasReceber,
+        movimentacoes: movements
+          .filter(m => m.type === 'entrada' || m.type === 'saida')
+          .map(m => ({
+            id: m.id,
+            tipo: m.type as 'entrada' | 'saida',
+            descricao: m.description,
+            valor: m.total,
+            data: m.date instanceof Date ? m.date : new Date(m.date)
+          }))
+      };
+
+      exportDREToPDF(dadosPDF, (error) => {
+        toast.error("Erro ao Exportar DRE em PDF", {
+          description: error,
+          duration: 5000,
+        });
+      });
+
+      toast.success("DRE gerado com sucesso!", {
+        description: "Abra a janela de impressão para salvar como PDF",
+        duration: 3000,
+      });
+    } catch (error) {
+      toast.error("Erro ao Exportar DRE", {
+        description: error instanceof Error ? error.message : "Erro desconhecido",
+        duration: 5000,
+      });
+    }
+  };
+
   if (isLoading) {
     return (
       <main className="flex-1 p-3 sm:p-6 space-y-4 sm:space-y-6">
@@ -707,7 +1187,7 @@ Flexi Gestor - Controle de Estoque
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="todos"><span className="flex items-center gap-2"><BarChart3 className="h-4 w-4" /> Todos</span></SelectItem>
-                <SelectItem value="mes"><span className="flex items-center gap-2"><Calendar className="h-4 w-4" /> Este Mês</span></SelectItem>
+                <SelectItem value="mes"><span className="flex items-center gap-2"><CalendarIcon className="h-4 w-4" /> Este Mês</span></SelectItem>
                 <SelectItem value="trimestre"><span className="flex items-center gap-2"><TrendingUp className="h-4 w-4" /> Trimestre</span></SelectItem>
                 <SelectItem value="ano"><span className="flex items-center gap-2"><BarChart3 className="h-4 w-4" /> Este Ano</span></SelectItem>
               </SelectContent>
@@ -815,18 +1295,843 @@ Flexi Gestor - Controle de Estoque
         </CardContent>
       </Card>
 
-      {/* Tabs: Movimentações de Estoque e Resumo Financeiro */}
-      <Tabs defaultValue="movimentacoes" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2 lg:w-auto">
-          <TabsTrigger value="movimentacoes" className="gap-2">
-            <Receipt className="h-4 w-4" />
-            Movimentações de Estoque
-          </TabsTrigger>
-          <TabsTrigger value="resumo" className="gap-2">
-            <PiggyBank className="h-4 w-4" />
-            Resumo Financeiro
-          </TabsTrigger>
-        </TabsList>
+      {/* Cards de Navegação */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+        {/* Card Movimentações */}
+        <Card 
+          className={`cursor-pointer transition-colors ${
+            abaAtiva === 'movimentacoes' 
+              ? 'border-blue-500 bg-blue-50' 
+              : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50'
+          }`}
+          onClick={() => setAbaAtiva('movimentacoes')}
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-md ${
+                abaAtiva === 'movimentacoes' ? 'bg-blue-100' : 'bg-gray-100'
+              }`}>
+                <Receipt className={`h-5 w-5 ${
+                  abaAtiva === 'movimentacoes' ? 'text-blue-600' : 'text-gray-600'
+                }`} />
+              </div>
+              <div>
+                <h3 className={`font-semibold text-sm ${
+                  abaAtiva === 'movimentacoes' ? 'text-blue-900' : 'text-gray-900'
+                }`}>
+                  Movimentações
+                </h3>
+                <p className={`text-xs ${
+                  abaAtiva === 'movimentacoes' ? 'text-blue-600' : 'text-gray-500'
+                }`}>
+                  Estoque
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Card Resumo */}
+        <Card 
+          className={`cursor-pointer transition-colors ${
+            abaAtiva === 'resumo' 
+              ? 'border-indigo-500 bg-indigo-50' 
+              : 'border-gray-200 hover:border-indigo-300 hover:bg-gray-50'
+          }`}
+          onClick={() => setAbaAtiva('resumo')}
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-md ${
+                abaAtiva === 'resumo' ? 'bg-indigo-100' : 'bg-gray-100'
+              }`}>
+                <PiggyBank className={`h-5 w-5 ${
+                  abaAtiva === 'resumo' ? 'text-indigo-600' : 'text-gray-600'
+                }`} />
+              </div>
+              <div>
+                <h3 className={`font-semibold text-sm ${
+                  abaAtiva === 'resumo' ? 'text-indigo-900' : 'text-gray-900'
+                }`}>
+                  Resumo
+                </h3>
+                <p className={`text-xs ${
+                  abaAtiva === 'resumo' ? 'text-indigo-600' : 'text-gray-500'
+                }`}>
+                  Financeiro
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Card Contas a Pagar */}
+        <Card 
+          className={`cursor-pointer transition-colors ${
+            abaAtiva === 'contas-pagar' 
+              ? 'border-red-500 bg-red-50' 
+              : 'border-gray-200 hover:border-red-300 hover:bg-gray-50'
+          }`}
+          onClick={() => setAbaAtiva('contas-pagar')}
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-md ${
+                abaAtiva === 'contas-pagar' ? 'bg-red-100' : 'bg-gray-100'
+              }`}>
+                <ArrowDownCircle className={`h-5 w-5 ${
+                  abaAtiva === 'contas-pagar' ? 'text-red-600' : 'text-gray-600'
+                }`} />
+              </div>
+              <div>
+                <h3 className={`font-semibold text-sm ${
+                  abaAtiva === 'contas-pagar' ? 'text-red-900' : 'text-gray-900'
+                }`}>
+                  Contas a Pagar
+                </h3>
+                <p className={`text-xs ${
+                  abaAtiva === 'contas-pagar' ? 'text-red-600' : 'text-gray-500'
+                }`}>
+                  Despesas
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Card Contas a Receber */}
+        <Card 
+          className={`cursor-pointer transition-colors ${
+            abaAtiva === 'contas-receber' 
+              ? 'border-green-500 bg-green-50' 
+              : 'border-gray-200 hover:border-green-300 hover:bg-gray-50'
+          }`}
+          onClick={() => setAbaAtiva('contas-receber')}
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-md ${
+                abaAtiva === 'contas-receber' ? 'bg-green-100' : 'bg-gray-100'
+              }`}>
+                <ArrowUpCircle className={`h-5 w-5 ${
+                  abaAtiva === 'contas-receber' ? 'text-green-600' : 'text-gray-600'
+                }`} />
+              </div>
+              <div>
+                <h3 className={`font-semibold text-sm ${
+                  abaAtiva === 'contas-receber' ? 'text-green-900' : 'text-gray-900'
+                }`}>
+                  Contas a Receber
+                </h3>
+                <p className={`text-xs ${
+                  abaAtiva === 'contas-receber' ? 'text-green-600' : 'text-gray-500'
+                }`}>
+                  Receitas
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Card DRE */}
+        <Card 
+          className={`cursor-pointer transition-colors ${
+            abaAtiva === 'dre' 
+              ? 'border-purple-500 bg-purple-50' 
+              : 'border-gray-200 hover:border-purple-300 hover:bg-gray-50'
+          }`}
+          onClick={() => setAbaAtiva('dre')}
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-md ${
+                abaAtiva === 'dre' ? 'bg-purple-100' : 'bg-gray-100'
+              }`}>
+                <BarChart3 className={`h-5 w-5 ${
+                  abaAtiva === 'dre' ? 'text-purple-600' : 'text-gray-600'
+                }`} />
+              </div>
+              <div>
+                <h3 className={`font-semibold text-sm ${
+                  abaAtiva === 'dre' ? 'text-purple-900' : 'text-gray-900'
+                }`}>
+                  DRE
+                </h3>
+                <p className={`text-xs ${
+                  abaAtiva === 'dre' ? 'text-purple-600' : 'text-gray-500'
+                }`}>
+                  Resultado
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Conteúdo das Abas */}
+      <Tabs value={abaAtiva} onValueChange={setAbaAtiva} className="space-y-6">
+
+        {/* ABA 1: MOVIMENTAÇÕES */}
+        <TabsContent value="movimentacoes" className="space-y-6">
+          {/* Cards de Estatísticas de Movimentações */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
+            <div className="group bg-gradient-to-br from-blue-100 to-blue-200 rounded-2xl sm:rounded-3xl p-4 sm:p-6 text-blue-800 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 border border-blue-200/50">
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-300/50 rounded-xl sm:rounded-2xl flex items-center justify-center backdrop-blur-sm">
+                  <RotateCcw className="w-5 h-5 sm:w-6 sm:h-6 text-blue-700" />
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl sm:text-3xl font-black">{totalMovements}</div>
+                  <div className="text-xs sm:text-sm opacity-90">Total</div>
+                </div>
+              </div>
+              <h3 className="text-base sm:text-lg font-semibold mb-2 flex items-center gap-2"><BarChart3 className="h-4 w-4" /> Total Movimentações</h3>
+              <p className="text-xs sm:text-sm opacity-80">Registros no sistema</p>
+            </div>
+
+            <div className={`group ${saldo >= 0 ? 'bg-gradient-to-br from-green-100 to-green-200' : 'bg-gradient-to-br from-red-100 to-red-200'} rounded-2xl sm:rounded-3xl p-4 sm:p-6 ${saldo >= 0 ? 'text-green-800' : 'text-red-800'} shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 border ${saldo >= 0 ? 'border-green-200/50' : 'border-red-200/50'}`}>
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
+                <div className={`w-10 h-10 sm:w-12 sm:h-12 ${saldo >= 0 ? 'bg-green-300/50' : 'bg-red-300/50'} rounded-xl sm:rounded-2xl flex items-center justify-center backdrop-blur-sm`}>
+                  <Wallet className={`w-5 h-5 sm:w-6 sm:h-6 ${saldo >= 0 ? 'text-green-700' : 'text-red-700'}`} />
+                </div>
+                <div className="text-right">
+                  <div className="text-lg sm:text-xl font-black">
+                    R$ {Math.abs(saldo).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </div>
+                  <div className="text-xs sm:text-sm opacity-90">{saldo >= 0 ? 'Lucro' : 'Prejuízo'}</div>
+                </div>
+              </div>
+              <h3 className="text-base sm:text-lg font-semibold mb-2 flex items-center gap-2"><DollarSign className="h-4 w-4" /> Saldo</h3>
+              <p className="text-xs sm:text-sm opacity-80">Posição financeira</p>
+            </div>
+
+            <div className="group bg-gradient-to-br from-purple-100 to-purple-200 rounded-2xl sm:rounded-3xl p-4 sm:p-6 text-purple-800 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 border border-purple-200/50">
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-purple-300/50 rounded-xl sm:rounded-2xl flex items-center justify-center backdrop-blur-sm">
+                  <CalendarIcon className="w-5 h-5 sm:w-6 sm:h-6 text-purple-700" />
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl sm:text-3xl font-black">{thisMonthMovements.length}</div>
+                  <div className="text-xs sm:text-sm opacity-90">Movimentações</div>
+                </div>
+              </div>
+              <h3 className="text-base sm:text-lg font-semibold mb-2 flex items-center gap-2"><CalendarIcon className="h-4 w-4" /> Este Mês</h3>
+              <p className="text-xs sm:text-sm opacity-80">Movimentações do período</p>
+            </div>
+
+            <div className="group bg-gradient-to-br from-orange-100 to-orange-200 rounded-2xl sm:rounded-3xl p-4 sm:p-6 text-orange-800 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 border border-orange-200/50">
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-orange-300/50 rounded-xl sm:rounded-2xl flex items-center justify-center backdrop-blur-sm">
+                  <Package className="w-5 h-5 sm:w-6 sm:h-6 text-orange-700" />
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl sm:text-3xl font-black">{productosMovimentados}</div>
+                  <div className="text-xs sm:text-sm opacity-90">Produtos</div>
+                </div>
+              </div>
+              <h3 className="text-base sm:text-lg font-semibold mb-2 flex items-center gap-2"><RotateCcw className="h-4 w-4" /> Produtos</h3>
+              <p className="text-xs sm:text-sm opacity-80">Produtos movimentados</p>
+            </div>
+          </div>
+
+          {/* Resto do conteúdo de movimentações será mantido aqui */}
+          {/* Componente: Estoque Baixo e Top 5 Mais Valiosos */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+            {/* Estoque Baixo */}
+            <Card className="shadow-lg flex flex-col h-full">
+              <CardHeader className="bg-gradient-to-r from-red-50 to-orange-50 flex-shrink-0">
+                <CardTitle className="flex items-center gap-2 text-red-900">
+                  <AlertTriangle className="w-5 h-5 text-red-600" />
+                  Estoque Baixo
+                </CardTitle>
+                <CardDescription>
+                  Produtos com estoque abaixo do mínimo
+                </CardDescription>
+              </CardHeader>
+              {(() => {
+                const lowStockProducts = products
+                  .filter(p => {
+                    const stock = typeof p.stock === 'number' ? p.stock : parseFloat(String(p.stock || 0));
+                    const minStock = p.minStock || 0;
+                    return stock <= minStock && minStock > 0;
+                  })
+                  .sort((a, b) => {
+                    const stockA = typeof a.stock === 'number' ? a.stock : parseFloat(String(a.stock || 0));
+                    const stockB = typeof b.stock === 'number' ? b.stock : parseFloat(String(b.stock || 0));
+                    const minStockA = a.minStock || 0;
+                    const minStockB = b.minStock || 0;
+                    return (stockA - minStockA) - (stockB - minStockB);
+                  });
+                
+                const shouldScroll = lowStockProducts.length >= 5;
+                
+                return (
+                  <CardContent className="p-0">
+                    {lowStockProducts.length === 0 ? (
+                      <div className="p-8 text-center">
+                        <CheckCircle className="w-12 h-12 mx-auto mb-3 text-green-300" />
+                        <p className="text-gray-500 text-sm">Nenhum produto com estoque baixo</p>
+                        <p className="text-xs text-gray-400 mt-1">Todos os produtos estão acima do mínimo</p>
+                      </div>
+                    ) : (
+                      <div 
+                        className="divide-y"
+                        style={shouldScroll ? { 
+                          maxHeight: '350px',
+                          overflowY: 'auto',
+                          overflowX: 'hidden',
+                          WebkitOverflowScrolling: 'touch'
+                        } : {}}
+                      >
+                        {lowStockProducts.map((product) => {
+                          const stock = typeof product.stock === 'number' ? product.stock : parseFloat(String(product.stock || 0));
+                          const minStock = product.minStock || 0;
+                          const isCritical = stock === 0;
+                          
+                          return (
+                            <div key={product.id} className={`p-4 transition-colors ${isCritical ? 'bg-red-50 hover:bg-red-100' : 'hover:bg-orange-50'}`}>
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                                    isCritical ? 'bg-red-200 text-red-700' : 'bg-orange-200 text-orange-700'
+                                  }`}>
+                                    <AlertTriangle className={`w-4 h-4 ${isCritical ? 'text-red-700' : 'text-orange-700'}`} />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="font-semibold text-sm text-gray-900 truncate">{product.name}</p>
+                                    <p className="text-xs text-gray-500">SKU: {product.sku}</p>
+                                  </div>
+                                </div>
+                                <div className="text-right flex-shrink-0 ml-4">
+                                  <p className={`font-bold text-sm ${isCritical ? 'text-red-600' : 'text-orange-600'}`}>
+                                    {stock} / {minStock}
+                                  </p>
+                                  <p className="text-xs text-gray-500">
+                                    {stock === 0 ? 'Esgotado' : `${minStock - stock} abaixo`}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </CardContent>
+                );
+              })()}
+            </Card>
+
+            {/* Top 5 Mais Valiosos */}
+            <Card className="shadow-lg">
+              <CardHeader className="bg-gradient-to-r from-emerald-50 to-green-50">
+                <CardTitle className="flex items-center gap-2 text-emerald-900">
+                  <TrendingUp className="w-5 h-5 text-emerald-600" />
+                  Top 5 Mais Valiosos
+                </CardTitle>
+                <CardDescription>
+                  Produtos com maior valor total em estoque
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="divide-y max-h-[400px] overflow-y-auto">
+                  {(() => {
+                    const productsWithValue = products.map(product => {
+                      const productEntries = entradas
+                        .filter(m => m.productId === product.id)
+                        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+                      
+                      let unitValue = 0;
+                      
+                      if (productEntries.length > 0) {
+                        let totalCost = 0;
+                        let totalQuantity = 0;
+                        
+                        productEntries.forEach(entry => {
+                          totalCost += (entry.unitPrice * entry.quantity);
+                          totalQuantity += entry.quantity;
+                        });
+                        
+                        const averageCost = totalQuantity > 0 ? totalCost / totalQuantity : 0;
+                        unitValue = averageCost > 0 ? averageCost : (product.price || 0);
+                      } else {
+                        unitValue = product.price || 0;
+                      }
+                      
+                      const stock = typeof product.stock === 'number' ? product.stock : parseFloat(String(product.stock || 0));
+                      const totalValue = unitValue * stock;
+                      
+                      return {
+                        ...product,
+                        unitValue,
+                        totalValue,
+                        stock
+                      };
+                    })
+                    .filter(p => p.totalValue > 0)
+                    .sort((a, b) => b.totalValue - a.totalValue);
+                    
+                    if (productsWithValue.length === 0) {
+                      return (
+                        <div className="p-8 text-center">
+                          <Package className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                          <p className="text-gray-500 text-sm">Nenhum produto com estoque valorizado</p>
+                        </div>
+                      );
+                    }
+                    
+                    return productsWithValue.map((product, index) => (
+                      <div key={product.id} className="p-4 hover:bg-gray-50 transition-colors">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
+                              index === 0 ? 'bg-yellow-100 text-yellow-700' :
+                              index === 1 ? 'bg-gray-100 text-gray-700' :
+                              index === 2 ? 'bg-orange-100 text-orange-700' :
+                              'bg-blue-100 text-blue-700'
+                            }`}>
+                              {index + 1}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-semibold text-sm text-gray-900 truncate">{product.name}</p>
+                              <p className="text-xs text-gray-500">{product.stock} unidades</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-bold text-sm text-emerald-600">
+                              R$ {product.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              R$ {product.unitValue.toFixed(2)}/un
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Análise Comparativa: Entradas vs Saídas */}
+          <Card className="shadow-lg">
+            <CardHeader className="bg-gradient-to-r from-blue-50 to-purple-50">
+              <CardTitle className="flex items-center gap-2 text-blue-900">
+                <BarChart3 className="w-5 h-5 text-blue-600" />
+                Análise Comparativa: Entradas vs Saídas
+              </CardTitle>
+              <CardDescription>
+                Comparação visual entre custos de compra (entradas) e receitas de venda (saídas)
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Gráfico Comparativo Mensal */}
+              <div>
+                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2 text-gray-800">
+                  <CalendarIcon className="h-4 w-4" />
+                  Comparativo Mensal
+                </h3>
+                <div className="h-[300px] w-full">
+                  {(() => {
+                    const monthlyData = movements.reduce((acc: any, movement) => {
+                      const date = new Date(movement.date);
+                      const monthKey = `${date.getMonth() + 1}/${date.getFullYear()}`;
+                      const monthLabel = date.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' });
+                      
+                      if (!acc[monthKey]) {
+                        acc[monthKey] = {
+                          month: monthLabel,
+                          entradas: 0,
+                          saidas: 0,
+                          quantidadeEntradas: 0,
+                          quantidadeSaidas: 0
+                        };
+                      }
+                      
+                      if (movement.type === 'entrada') {
+                        acc[monthKey].entradas += movement.total;
+                        acc[monthKey].quantidadeEntradas += movement.quantity;
+                      } else if (movement.type === 'saida') {
+                        acc[monthKey].saidas += movement.total;
+                        acc[monthKey].quantidadeSaidas += movement.quantity;
+                      }
+                      
+                      return acc;
+                    }, {});
+                    
+                    const chartData = Object.entries(monthlyData)
+                      .map(([key, value]: [string, any]) => ({
+                        ...value,
+                        sortKey: key
+                      }))
+                      .sort((a: any, b: any) => {
+                        const [monthA, yearA] = a.sortKey.split('/').map(Number);
+                        const [monthB, yearB] = b.sortKey.split('/').map(Number);
+                        if (yearA !== yearB) return yearA - yearB;
+                        return monthA - monthB;
+                      })
+                      .slice(-6)
+                      .map((item: any) => {
+                        const { sortKey, ...rest } = item;
+                        return rest;
+                      });
+                    
+                    if (chartData.length === 0) {
+                      return (
+                        <div className="flex items-center justify-center h-full text-gray-500">
+                          <div className="text-center">
+                            <BarChart3 className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                            <p className="text-sm">Nenhuma movimentação registrada</p>
+                          </div>
+                        </div>
+                      );
+                    }
+                    
+                    return (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={chartData} barCategoryGap="20%">
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                          <XAxis 
+                            dataKey="month" 
+                            tick={{ fontSize: 12 }}
+                            stroke="#6b7280"
+                          />
+                          <YAxis 
+                            tick={{ fontSize: 12 }}
+                            stroke="#6b7280"
+                            tickFormatter={(value) => `R$ ${(value / 1000).toFixed(0)}k`}
+                          />
+                          <Tooltip 
+                            formatter={(value: number, name: string) => [
+                              `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+                              name === 'entradas' ? 'Entradas (Custos)' : 'Saídas (Receitas)'
+                            ]}
+                            labelFormatter={(label) => `Mês: ${label}`}
+                            contentStyle={{ 
+                              backgroundColor: '#fff', 
+                              border: '1px solid #e5e7eb',
+                              borderRadius: '8px'
+                            }}
+                          />
+                          <Legend 
+                            formatter={(value) => value === 'entradas' ? 'Entradas (Custos)' : 'Saídas (Receitas)'}
+                          />
+                          <Bar 
+                            dataKey="entradas" 
+                            fill="#3b82f6" 
+                            name="entradas"
+                            radius={[4, 4, 0, 0]}
+                          />
+                          <Bar 
+                            dataKey="saidas" 
+                            fill="#10b981" 
+                            name="saidas"
+                            radius={[4, 4, 0, 0]}
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              {/* Cards Comparativos */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card className="border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-blue-800 mb-1 flex items-center gap-2">
+                          <ArrowDownCircle className="h-4 w-4" />
+                          Total Entradas
+                        </p>
+                        <p className="text-2xl font-bold text-blue-900">
+                          R$ {totalEntradas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </p>
+                        <p className="text-xs text-blue-700 mt-1">
+                          {entradas.length} registros
+                        </p>
+                        <p className="text-xs text-blue-600 mt-1">
+                          {entradas.reduce((sum, m) => sum + m.quantity, 0)} unidades compradas
+                        </p>
+                      </div>
+                      <div className="w-12 h-12 bg-blue-200 rounded-full flex items-center justify-center">
+                        <ArrowDownCircle className="w-6 h-6 text-blue-700" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-2 border-green-200 bg-gradient-to-br from-green-50 to-green-100">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-green-800 mb-1 flex items-center gap-2">
+                          <ArrowUpCircle className="h-4 w-4" />
+                          Total Saídas
+                        </p>
+                        <p className="text-2xl font-bold text-green-900">
+                          R$ {totalSaidas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </p>
+                        <p className="text-xs text-green-700 mt-1">
+                          {saidas.length} registros
+                        </p>
+                        <p className="text-xs text-green-600 mt-1">
+                          {saidas.reduce((sum, m) => sum + m.quantity, 0)} unidades vendidas
+                        </p>
+                      </div>
+                      <div className="w-12 h-12 bg-green-200 rounded-full flex items-center justify-center">
+                        <ArrowUpCircle className="w-6 h-6 text-green-700" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className={`border-2 ${saldo >= 0 ? 'border-emerald-300 bg-gradient-to-br from-emerald-50 to-emerald-100' : 'border-red-300 bg-gradient-to-br from-red-50 to-red-100'}`}>
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <p className={`text-sm font-medium mb-1 flex items-center gap-2 ${saldo >= 0 ? 'text-emerald-800' : 'text-red-800'}`}>
+                          <DollarSign className="h-4 w-4" />
+                          Saldo Final
+                        </p>
+                        <p className={`text-2xl font-bold ${saldo >= 0 ? 'text-emerald-900' : 'text-red-900'}`}>
+                          {saldo >= 0 ? '+' : ''}R$ {Math.abs(saldo).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </p>
+                        <p className={`text-xs mt-1 font-semibold ${saldo >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                          {saldo >= 0 ? (
+                            <span className="flex items-center gap-1">
+                              <CheckCircle className="h-3 w-3" />
+                              Lucro
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1">
+                              <AlertTriangle className="h-3 w-3" />
+                              Prejuízo
+                            </span>
+                          )}
+                        </p>
+                        <p className={`text-xs mt-1 ${saldo >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                          {saldo >= 0 
+                            ? `${((saldo / totalSaidas) * 100).toFixed(1)}% de margem`
+                            : `Prejuízo de ${((Math.abs(saldo) / totalEntradas) * 100).toFixed(1)}%`
+                          }
+                        </p>
+                      </div>
+                      <div className={`w-12 h-12 rounded-full flex items-center justify-center ${saldo >= 0 ? 'bg-emerald-200' : 'bg-red-200'}`}>
+                        {saldo >= 0 ? (
+                          <TrendingUp className={`w-6 h-6 ${saldo >= 0 ? 'text-emerald-700' : 'text-red-700'}`} />
+                        ) : (
+                          <TrendingDown className="w-6 h-6 text-red-700" />
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Filtros e Busca */}
+          <Card className="bg-gradient-to-r from-slate-50 to-gray-50 border-slate-200">
+            <CardHeader className="pb-4">
+              <CardTitle className="flex items-center gap-2 text-slate-800">
+                <Filter className="w-5 h-5 text-slate-600" />
+                Filtros e Busca
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-500 w-5 h-5" />
+                  <Input
+                    placeholder="Buscar movimentações..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10 bg-white border-slate-300"
+                  />
+                </div>
+                
+                <Select value={filterType} onValueChange={setFilterType}>
+                  <SelectTrigger className="bg-white border-slate-300">
+                    <SelectValue placeholder="Tipo de movimentação" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos"><span className="flex items-center gap-2"><BarChart3 className="h-4 w-4" /> Todos os tipos</span></SelectItem>
+                    <SelectItem value="entrada"><span className="flex items-center gap-2"><ArrowDownCircle className="h-4 w-4" /> Entradas</span></SelectItem>
+                    <SelectItem value="saida"><span className="flex items-center gap-2"><ArrowUpCircle className="h-4 w-4" /> Saídas</span></SelectItem>
+                    <SelectItem value="ajuste"><span className="flex items-center gap-2"><Settings className="h-4 w-4" /> Ajustes</span></SelectItem>
+                  </SelectContent>
+                </Select>
+                
+                <Select value={filterProduct} onValueChange={setFilterProduct}>
+                  <SelectTrigger className="bg-white border-slate-300">
+                    <SelectValue placeholder="Produto" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos"><span className="flex items-center gap-2"><Package className="h-4 w-4" /> Todos os produtos</span></SelectItem>
+                    {products.map(product => (
+                      <SelectItem key={product.id} value={product.id}>
+                        {product.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Tabela de Movimentações */}
+          <Card className="shadow-lg">
+            <CardHeader className="bg-gradient-to-r from-indigo-50 to-purple-50">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-blue-600" />
+                    Histórico de Movimentações
+                  </CardTitle>
+                  <CardDescription>Visualize todas as movimentações do período</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <div className="rounded-md border border-slate-200 overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-slate-50 hover:bg-slate-100">
+                      <TableHead className="font-semibold text-slate-700"><div className="flex items-center gap-2"><CalendarIcon className="h-4 w-4" /> Data</div></TableHead>
+                      <TableHead className="font-semibold text-slate-700 hidden sm:table-cell"><div className="flex items-center gap-2"><Tag className="h-4 w-4" /> Tipo</div></TableHead>
+                      <TableHead className="font-semibold text-slate-700">Produto</TableHead>
+                      <TableHead className="font-semibold text-slate-700 hidden lg:table-cell"><div className="flex items-center gap-2"><FileText className="h-4 w-4" /> Descrição</div></TableHead>
+                      <TableHead className="font-semibold text-slate-700 hidden md:table-cell"><div className="flex items-center gap-2"><Wallet className="h-4 w-4" /> Pagamento</div></TableHead>
+                      <TableHead className="font-semibold text-slate-700 hidden sm:table-cell"><div className="flex items-center gap-2"><Hash className="h-4 w-4" /> Qtd</div></TableHead>
+                      <TableHead className="font-semibold text-slate-700"><div className="flex items-center gap-2"><DollarSign className="h-4 w-4" /> Valor</div></TableHead>
+                      <TableHead className="font-semibold text-slate-700"><div className="flex items-center gap-2"><FileText className="h-4 w-4" /> Doc</div></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredMovements.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-12">
+                          <div className="flex flex-col items-center gap-3">
+                            <RotateCcw className="w-12 h-12 text-slate-300" />
+                            <div className="text-slate-500">
+                              <p className="font-medium">Nenhuma movimentação encontrada</p>
+                              <p className="text-sm">Comece registrando entradas ou saídas de produtos</p>
+                            </div>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      (showAllMovements ? filteredMovements : filteredMovements.slice(0, 4)).map((movement) => (
+                        <TableRow key={movement.id} className="hover:bg-slate-50 transition-colors">
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <CalendarIcon className="w-4 h-4 text-slate-400" />
+                              <span className="text-sm text-slate-600">
+                                {new Date(movement.date).toLocaleDateString('pt-BR')}
+                              </span>
+                            </div>
+                          </TableCell>
+                          
+                          <TableCell className="hidden sm:table-cell">
+                            <Badge className={`
+                              capitalize
+                              ${movement.type === "entrada" ? "bg-green-100 text-green-800 border-green-300" : 
+                                movement.type === "saida" ? "bg-orange-100 text-orange-800 border-orange-300" : 
+                                "bg-slate-100 text-slate-800 border-slate-300"}
+                            `}>
+                              {movement.type === "entrada" ? <span className="flex items-center gap-1"><ArrowDownCircle className="h-4 w-4" /> Entrada</span> : 
+                               movement.type === "saida" ? <span className="flex items-center gap-1"><ArrowUpCircle className="h-4 w-4" /> Saída</span> : <span className="flex items-center gap-1"><Settings className="h-4 w-4" /> Ajuste</span>}
+                            </Badge>
+                          </TableCell>
+                          
+                          <TableCell>
+                            <div className="font-medium text-slate-900 text-sm">{movement.productName}</div>
+                          </TableCell>
+                          
+                          <TableCell className="hidden lg:table-cell">
+                            <span className="text-sm text-slate-600">{movement.description}</span>
+                          </TableCell>
+                          <TableCell className="hidden md:table-cell">
+                            {movement.paymentMethod ? (
+                              <Badge className="bg-violet-100 text-violet-800 border-violet-300 text-xs">
+                                {movement.paymentMethod.startsWith('parcelado-') ? movement.paymentMethod.replace('parcelado-', '') : movement.paymentMethod}
+                              </Badge>
+                            ) : (
+                              <span className="text-slate-400 text-sm">—</span>
+                            )}
+                          </TableCell>
+                          
+                          <TableCell className="hidden sm:table-cell">
+                            <span className="font-semibold text-slate-900">{movement.quantity}</span>
+                          </TableCell>
+                          
+                          <TableCell>
+                            <span className={`font-bold text-sm ${
+                              movement.type === 'entrada' ? 'text-green-600' : 'text-red-600'
+                            }`}>
+                              R$ {movement.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </span>
+                          </TableCell>
+                          
+                          <TableCell>
+                            {movement.type === 'saida' ? (
+                              <Badge 
+                                className="bg-blue-100 text-blue-800 hover:bg-blue-200 border-blue-300 cursor-pointer transition-all hover:scale-105 text-xs"
+                                onClick={() => openReceipt(movement)}
+                              >
+                                <Receipt className="w-3 h-3 mr-1 hidden sm:inline" />
+                                <span className="hidden sm:inline">Receita</span>
+                                <FileText className="w-3 h-3 sm:hidden" />
+                              </Badge>
+                            ) : movement.type === 'entrada' ? (
+                              <Badge 
+                                className="bg-green-100 text-green-800 hover:bg-green-200 border-green-300 cursor-pointer transition-all hover:scale-105 text-xs"
+                                onClick={() => openPurchase(movement)}
+                              >
+                                <Receipt className="w-3 h-3 mr-1 hidden sm:inline" />
+                                <span className="hidden sm:inline">Compra</span>
+                                <ShoppingCart className="w-3 h-3 sm:hidden" />
+                              </Badge>
+                            ) : (
+                              <span className="text-slate-400 text-sm">—</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+                </div>
+              </div>
+              
+              {/* Botão para mostrar todas as movimentações */}
+              {filteredMovements.length > 4 && (
+                <div className="mt-6 p-4 flex justify-center">
+                  <Button
+                    onClick={() => setShowAllMovements(!showAllMovements)}
+                    variant="outline"
+                    className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white hover:from-indigo-700 hover:to-indigo-800 hover:text-white border-0 shadow-lg"
+                  >
+                    {showAllMovements ? (
+                      <>
+                        <TrendingUp className="mr-2 h-4 w-4" />
+                        Mostrar Menos
+                      </>
+                    ) : (
+                      <>
+                        <TrendingDown className="mr-2 h-4 w-4" />
+                        Mostrar Todas ({filteredMovements.length} movimentações)
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         {/* ABA 2: RESUMO FINANCEIRO */}
         <TabsContent value="resumo" className="space-y-6">
@@ -1029,14 +2334,14 @@ Flexi Gestor - Controle de Estoque
             <div className="group bg-gradient-to-br from-purple-100 to-purple-200 rounded-2xl sm:rounded-3xl p-4 sm:p-6 text-purple-800 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 border border-purple-200/50">
               <div className="flex items-center justify-between mb-3 sm:mb-4">
                 <div className="w-10 h-10 sm:w-12 sm:h-12 bg-purple-300/50 rounded-xl sm:rounded-2xl flex items-center justify-center backdrop-blur-sm">
-                  <Calendar className="w-5 h-5 sm:w-6 sm:h-6 text-purple-700" />
+                  <CalendarIcon className="w-5 h-5 sm:w-6 sm:h-6 text-purple-700" />
                 </div>
                 <div className="text-right">
                   <div className="text-2xl sm:text-3xl font-black">{thisMonthMovements.length}</div>
                   <div className="text-xs sm:text-sm opacity-90">Movimentações</div>
                 </div>
               </div>
-              <h3 className="text-base sm:text-lg font-semibold mb-2 flex items-center gap-2"><Calendar className="h-4 w-4" /> Este Mês</h3>
+              <h3 className="text-base sm:text-lg font-semibold mb-2 flex items-center gap-2"><CalendarIcon className="h-4 w-4" /> Este Mês</h3>
               <p className="text-xs sm:text-sm opacity-80">Movimentações do período</p>
             </div>
 
@@ -1253,7 +2558,7 @@ Flexi Gestor - Controle de Estoque
               {/* Gráfico Comparativo Mensal */}
               <div>
                 <h3 className="text-lg font-semibold mb-4 flex items-center gap-2 text-gray-800">
-                  <Calendar className="h-4 w-4" />
+                  <CalendarIcon className="h-4 w-4" />
                   Comparativo Mensal
                 </h3>
                 <div className="h-[300px] w-full">
@@ -1533,7 +2838,7 @@ Flexi Gestor - Controle de Estoque
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-slate-50 hover:bg-slate-100">
-                      <TableHead className="font-semibold text-slate-700"><div className="flex items-center gap-2"><Calendar className="h-4 w-4" /> Data</div></TableHead>
+                      <TableHead className="font-semibold text-slate-700"><div className="flex items-center gap-2"><CalendarIcon className="h-4 w-4" /> Data</div></TableHead>
                       <TableHead className="font-semibold text-slate-700 hidden sm:table-cell"><div className="flex items-center gap-2"><Tag className="h-4 w-4" /> Tipo</div></TableHead>
                       <TableHead className="font-semibold text-slate-700">Produto</TableHead>
                       <TableHead className="font-semibold text-slate-700 hidden lg:table-cell"><div className="flex items-center gap-2"><FileText className="h-4 w-4" /> Descrição</div></TableHead>
@@ -1561,7 +2866,7 @@ Flexi Gestor - Controle de Estoque
                         <TableRow key={movement.id} className="hover:bg-slate-50 transition-colors">
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              <Calendar className="w-4 h-4 text-slate-400" />
+                              <CalendarIcon className="w-4 h-4 text-slate-400" />
                               <span className="text-sm text-slate-600">
                                 {new Date(movement.date).toLocaleDateString('pt-BR')}
                               </span>
@@ -1662,6 +2967,422 @@ Flexi Gestor - Controle de Estoque
                   </Button>
                 </div>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ABA 3: CONTAS A PAGAR */}
+        <TabsContent value="contas-pagar" className="space-y-6">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <ArrowDownCircle className="h-5 w-5 text-red-600" />
+                Contas a Pagar
+              </CardTitle>
+              <Button onClick={() => {
+                setContaPagarEditando(null);
+                setFornecedorSearchTerm('');
+                setShowFornecedorDropdown(false);
+                setFormContaPagar({
+                  descricao: '',
+                  valor: 0,
+                  data_vencimento: new Date(),
+                  categoria_dre: '' as DRECategory | '',
+                  fornecedor: '',
+                  observacoes: '',
+                  movimento_id: ''
+                });
+                setShowDialogContaPagar(true);
+              }}>
+                <ArrowDownCircle className="h-4 w-4 mr-2" />
+                Nova Conta
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {loadingContas ? (
+                <div className="text-center py-8">Carregando...</div>
+              ) : contasPagar.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <ArrowDownCircle className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                  <p>Nenhuma conta a pagar cadastrada</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Descrição</TableHead>
+                      <TableHead>Fornecedor</TableHead>
+                      <TableHead>Vencimento</TableHead>
+                      <TableHead className="text-right">Valor</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {contasPagar.map(conta => (
+                      <TableRow key={conta.id}>
+                        <TableCell>{conta.descricao}</TableCell>
+                        <TableCell>{conta.fornecedor || '-'}</TableCell>
+                        <TableCell>{conta.data_vencimento.toLocaleDateString('pt-BR')}</TableCell>
+                        <TableCell className="text-right font-semibold">
+                          R$ {conta.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={
+                            conta.status === 'pago' ? 'bg-green-100 text-green-800' :
+                            conta.status === 'vencido' ? 'bg-red-100 text-red-800' :
+                            'bg-yellow-100 text-yellow-800'
+                          }>
+                            {conta.status === 'pago' ? 'Pago' : conta.status === 'vencido' ? 'Vencido' : 'Pendente'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex gap-2 justify-end">
+                            {conta.status !== 'pago' && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => marcarContaComoPaga(conta)}
+                              >
+                                Marcar como Paga
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setContaPagarEditando(conta);
+                                setFornecedorSearchTerm(conta.fornecedor || '');
+                                setShowFornecedorDropdown(false);
+                                setFormContaPagar({
+                                  descricao: conta.descricao,
+                                  valor: conta.valor,
+                                  data_vencimento: conta.data_vencimento,
+                                  categoria_dre: conta.categoria_dre || '' as DRECategory | '',
+                                  fornecedor: conta.fornecedor || '',
+                                  observacoes: conta.observacoes || '',
+                                  movimento_id: conta.movimento_id || ''
+                                });
+                                setShowDialogContaPagar(true);
+                              }}
+                            >
+                              Editar
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => deletarContaPagar(conta.id)}
+                            >
+                              Excluir
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ABA 4: CONTAS A RECEBER */}
+        <TabsContent value="contas-receber" className="space-y-6">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <ArrowUpCircle className="h-5 w-5 text-green-600" />
+                Contas a Receber
+              </CardTitle>
+              <Button onClick={() => {
+                setContaReceberEditando(null);
+                setClienteSearchTerm('');
+                setShowClienteDropdown(false);
+                setFormContaReceber({
+                  descricao: '',
+                  valor: 0,
+                  data_vencimento: new Date(),
+                  categoria_dre: '' as DRECategory | '',
+                  cliente: '',
+                  observacoes: '',
+                  movimento_id: ''
+                });
+                setShowDialogContaReceber(true);
+              }}>
+                <ArrowUpCircle className="h-4 w-4 mr-2" />
+                Nova Conta
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {loadingContas ? (
+                <div className="text-center py-8">Carregando...</div>
+              ) : contasReceber.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <ArrowUpCircle className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                  <p>Nenhuma conta a receber cadastrada</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Descrição</TableHead>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead>Vencimento</TableHead>
+                      <TableHead className="text-right">Valor</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {contasReceber.map(conta => (
+                      <TableRow key={conta.id}>
+                        <TableCell>{conta.descricao}</TableCell>
+                        <TableCell>{conta.cliente || '-'}</TableCell>
+                        <TableCell>{conta.data_vencimento.toLocaleDateString('pt-BR')}</TableCell>
+                        <TableCell className="text-right font-semibold">
+                          R$ {conta.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={
+                            conta.status === 'pago' ? 'bg-green-100 text-green-800' :
+                            conta.status === 'vencido' ? 'bg-red-100 text-red-800' :
+                            'bg-yellow-100 text-yellow-800'
+                          }>
+                            {conta.status === 'pago' ? 'Recebido' : conta.status === 'vencido' ? 'Vencido' : 'Pendente'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex gap-2 justify-end">
+                            {conta.status !== 'pago' && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => marcarContaComoRecebida(conta)}
+                              >
+                                Marcar como Recebida
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setContaReceberEditando(conta);
+                                setClienteSearchTerm(conta.cliente || '');
+                                setShowClienteDropdown(false);
+                                setFormContaReceber({
+                                  descricao: conta.descricao,
+                                  valor: conta.valor,
+                                  data_vencimento: conta.data_vencimento,
+                                  categoria_dre: conta.categoria_dre || '' as DRECategory | '',
+                                  cliente: conta.cliente || '',
+                                  observacoes: conta.observacoes || '',
+                                  movimento_id: conta.movimento_id || ''
+                                });
+                                setShowDialogContaReceber(true);
+                              }}
+                            >
+                              Editar
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => deletarContaReceber(conta.id)}
+                            >
+                              Excluir
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ABA 5: DRE */}
+        <TabsContent value="dre" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5 text-blue-600" />
+                  Demonstração do Resultado do Exercício (DRE)
+                </CardTitle>
+                <Button onClick={exportarDREPDF} className="bg-red-600 hover:bg-red-700 text-white">
+                  <FileText className="h-4 w-4 mr-2" />
+                  Exportar DRE em PDF
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Seleção de Período */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label>Data Início</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-full justify-start text-left font-normal">
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {drePeriodoInicio ? format(drePeriodoInicio, "PPP", { locale: ptBR }) : "Selecione"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <CalendarComponent
+                        mode="single"
+                        selected={drePeriodoInicio}
+                        onSelect={(date) => date && setDrePeriodoInicio(date)}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+                <div>
+                  <Label>Data Fim</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-full justify-start text-left font-normal">
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {drePeriodoFim ? format(drePeriodoFim, "PPP", { locale: ptBR }) : "Selecione"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <CalendarComponent
+                        mode="single"
+                        selected={drePeriodoFim}
+                        onSelect={(date) => date && setDrePeriodoFim(date)}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </div>
+
+              {/* DRE Calculado */}
+              {(() => {
+                const dre = calcularDREAtual();
+                return (
+                  <div className="space-y-4">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-[70%]">Descrição</TableHead>
+                          <TableHead className="text-right">Valor</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        <TableRow className="bg-blue-50 font-bold">
+                          <TableCell>RECEITAS OPERACIONAIS</TableCell>
+                          <TableCell></TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell className="pl-8">Receita Operacional Bruta</TableCell>
+                          <TableCell className="text-right">{formatarMoeda(dre.receita_operacional_bruta)}</TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell className="pl-8">(-) Deduções de Vendas</TableCell>
+                          <TableCell className="text-right">{formatarMoeda(dre.deducoes_vendas)}</TableCell>
+                        </TableRow>
+                        <TableRow className="bg-blue-100 font-bold">
+                          <TableCell>Receita Operacional Líquida</TableCell>
+                          <TableCell className="text-right">{formatarMoeda(dre.receita_operacional_liquida)}</TableCell>
+                        </TableRow>
+                        <TableRow className="bg-red-50 font-bold">
+                          <TableCell>CUSTOS</TableCell>
+                          <TableCell></TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell className="pl-8">(-) Custo do Produto Vendido</TableCell>
+                          <TableCell className="text-right">{formatarMoeda(dre.custo_produto_vendido)}</TableCell>
+                        </TableRow>
+                        <TableRow className="bg-green-100 font-bold">
+                          <TableCell>Lucro Bruto</TableCell>
+                          <TableCell className={`text-right ${dre.lucro_bruto >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {formatarMoeda(dre.lucro_bruto)}
+                          </TableCell>
+                        </TableRow>
+                        <TableRow className="bg-orange-50 font-bold">
+                          <TableCell>DESPESAS OPERACIONAIS</TableCell>
+                          <TableCell></TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell className="pl-8">(-) Despesas Administrativas</TableCell>
+                          <TableCell className="text-right">{formatarMoeda(dre.despesas_operacionais.administrativas)}</TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell className="pl-8">(-) Despesas Comerciais</TableCell>
+                          <TableCell className="text-right">{formatarMoeda(dre.despesas_operacionais.comerciais)}</TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell className="pl-8">(-) Despesas Financeiras</TableCell>
+                          <TableCell className="text-right">{formatarMoeda(dre.despesas_operacionais.financeiras)}</TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell className="pl-8">(-) Outras Despesas Operacionais</TableCell>
+                          <TableCell className="text-right">{formatarMoeda(dre.despesas_operacionais.outras)}</TableCell>
+                        </TableRow>
+                        <TableRow className="bg-orange-100 font-bold">
+                          <TableCell>Total de Despesas Operacionais</TableCell>
+                          <TableCell className="text-right">{formatarMoeda(dre.despesas_operacionais.total)}</TableCell>
+                        </TableRow>
+                        <TableRow className="bg-purple-100 font-bold">
+                          <TableCell>Resultado Operacional</TableCell>
+                          <TableCell className={`text-right ${dre.resultado_operacional >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {formatarMoeda(dre.resultado_operacional)}
+                          </TableCell>
+                        </TableRow>
+                        <TableRow className="bg-yellow-50 font-bold">
+                          <TableCell>RESULTADO FINANCEIRO</TableCell>
+                          <TableCell></TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell className="pl-8">(+) Receitas Financeiras</TableCell>
+                          <TableCell className="text-right">{formatarMoeda(dre.receitas_financeiras)}</TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell className="pl-8">(-) Despesas Financeiras</TableCell>
+                          <TableCell className="text-right">{formatarMoeda(dre.despesas_financeiras)}</TableCell>
+                        </TableRow>
+                        <TableRow className="bg-yellow-100 font-bold">
+                          <TableCell>Resultado Financeiro</TableCell>
+                          <TableCell className={`text-right ${dre.resultado_financeiro >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {formatarMoeda(dre.resultado_financeiro)}
+                          </TableCell>
+                        </TableRow>
+                        <TableRow className="bg-gray-50 font-bold">
+                          <TableCell>OUTRAS RECEITAS E DESPESAS</TableCell>
+                          <TableCell></TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell className="pl-8">(+) Outras Receitas</TableCell>
+                          <TableCell className="text-right">{formatarMoeda(dre.outras_receitas)}</TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell className="pl-8">(-) Outras Despesas</TableCell>
+                          <TableCell className="text-right">{formatarMoeda(dre.outras_despesas)}</TableCell>
+                        </TableRow>
+                        <TableRow className="bg-gray-100 font-bold">
+                          <TableCell>Resultado Antes do Imposto</TableCell>
+                          <TableCell className={`text-right ${dre.resultado_antes_imposto >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {formatarMoeda(dre.resultado_antes_imposto)}
+                          </TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell className="pl-8">(-) Impostos</TableCell>
+                          <TableCell className="text-right">{formatarMoeda(dre.impostos)}</TableCell>
+                        </TableRow>
+                        <TableRow className={`font-bold text-lg ${dre.resultado_liquido >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                          <TableCell>RESULTADO LÍQUIDO DO EXERCÍCIO</TableCell>
+                          <TableCell className="text-right">
+                            {formatarMoeda(dre.resultado_liquido)}
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+                );
+              })()}
             </CardContent>
           </Card>
         </TabsContent>
@@ -1907,6 +3628,305 @@ Flexi Gestor - Controle de Estoque
               </div>
             </div>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Conta a Pagar */}
+      <Dialog open={showDialogContaPagar} onOpenChange={(open) => {
+        setShowDialogContaPagar(open);
+        if (!open) {
+          setContaPagarEditando(null);
+          setFornecedorSearchTerm('');
+          setShowFornecedorDropdown(false);
+        }
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {contaPagarEditando ? 'Editar Conta a Pagar' : 'Nova Conta a Pagar'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label htmlFor="descricao-pagar">Descrição *</Label>
+              <Input
+                id="descricao-pagar"
+                value={formContaPagar.descricao}
+                onChange={(e) => setFormContaPagar({ ...formContaPagar, descricao: e.target.value })}
+                placeholder="Ex: Pagamento de fornecedor"
+              />
+            </div>
+            <div>
+              <Label htmlFor="valor-pagar">Valor *</Label>
+              <Input
+                id="valor-pagar"
+                type="number"
+                step="0.01"
+                min="0"
+                value={formContaPagar.valor}
+                onChange={(e) => setFormContaPagar({ ...formContaPagar, valor: parseFloat(e.target.value) || 0 })}
+                placeholder="0.00"
+              />
+            </div>
+            <div>
+              <Label htmlFor="vencimento-pagar">Data de Vencimento *</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full justify-start text-left font-normal">
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {formContaPagar.data_vencimento ? format(formContaPagar.data_vencimento, "PPP", { locale: ptBR }) : "Selecione a data"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <CalendarComponent
+                    mode="single"
+                    selected={formContaPagar.data_vencimento}
+                    onSelect={(date) => date && setFormContaPagar({ ...formContaPagar, data_vencimento: date })}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div>
+              <Label htmlFor="categoria-pagar">Categoria DRE</Label>
+              <Select
+                value={formContaPagar.categoria_dre}
+                onValueChange={(value) => setFormContaPagar({ ...formContaPagar, categoria_dre: value as DRECategory })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a categoria" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="custo_produto_vendido">Custo do Produto Vendido</SelectItem>
+                  <SelectItem value="despesa_administrativa">Despesa Administrativa</SelectItem>
+                  <SelectItem value="despesa_comercial">Despesa Comercial</SelectItem>
+                  <SelectItem value="despesa_financeira">Despesa Financeira</SelectItem>
+                  <SelectItem value="despesa_operacional">Despesa Operacional</SelectItem>
+                  <SelectItem value="outras_despesas">Outras Despesas</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="fornecedor-pagar">Fornecedor</Label>
+              <div className="relative" ref={fornecedorInputRef}>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                  <Input
+                    id="fornecedor-pagar"
+                    value={formContaPagar.fornecedor}
+                    onChange={(e) => {
+                      setFormContaPagar({ ...formContaPagar, fornecedor: e.target.value });
+                      setFornecedorSearchTerm(e.target.value);
+                      setShowFornecedorDropdown(true);
+                    }}
+                    onFocus={() => {
+                      setShowFornecedorDropdown(true);
+                      setFornecedorSearchTerm(formContaPagar.fornecedor);
+                    }}
+                    placeholder="Buscar ou digitar fornecedor"
+                    className="pl-10"
+                  />
+                </div>
+                {showFornecedorDropdown && (
+                  <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden max-h-60 overflow-y-auto">
+                    {fornecedoresFiltrados.length === 0 ? (
+                      <div className="p-4 text-center text-sm text-gray-500">
+                        {fornecedoresUnicos.length === 0 
+                          ? 'Nenhum fornecedor cadastrado' 
+                          : 'Nenhum fornecedor encontrado'}
+                      </div>
+                    ) : (
+                      fornecedoresFiltrados.map((fornecedor, index) => (
+                        <button
+                          key={index}
+                          type="button"
+                          className="w-full px-4 py-2 text-left hover:bg-gray-100 focus:bg-gray-100 focus:outline-none border-b last:border-b-0 transition-colors"
+                          onClick={() => {
+                            setFormContaPagar({ ...formContaPagar, fornecedor });
+                            setFornecedorSearchTerm('');
+                            setShowFornecedorDropdown(false);
+                          }}
+                        >
+                          <div className="font-medium text-sm">{fornecedor}</div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="observacoes-pagar">Observações</Label>
+              <Textarea
+                id="observacoes-pagar"
+                value={formContaPagar.observacoes}
+                onChange={(e) => setFormContaPagar({ ...formContaPagar, observacoes: e.target.value })}
+                placeholder="Observações adicionais"
+                rows={3}
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => {
+              setShowDialogContaPagar(false);
+              setContaPagarEditando(null);
+              setFornecedorSearchTerm('');
+              setShowFornecedorDropdown(false);
+            }}>
+              Cancelar
+            </Button>
+            <Button onClick={salvarContaPagar} className="bg-blue-600 hover:bg-blue-700 text-white">
+              {contaPagarEditando ? 'Atualizar' : 'Salvar'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Conta a Receber */}
+      <Dialog open={showDialogContaReceber} onOpenChange={(open) => {
+        setShowDialogContaReceber(open);
+        if (!open) {
+          setContaReceberEditando(null);
+          setClienteSearchTerm('');
+          setShowClienteDropdown(false);
+        }
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {contaReceberEditando ? 'Editar Conta a Receber' : 'Nova Conta a Receber'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label htmlFor="descricao-receber">Descrição *</Label>
+              <Input
+                id="descricao-receber"
+                value={formContaReceber.descricao}
+                onChange={(e) => setFormContaReceber({ ...formContaReceber, descricao: e.target.value })}
+                placeholder="Ex: Recebimento de cliente"
+              />
+            </div>
+            <div>
+              <Label htmlFor="valor-receber">Valor *</Label>
+              <Input
+                id="valor-receber"
+                type="number"
+                step="0.01"
+                min="0"
+                value={formContaReceber.valor}
+                onChange={(e) => setFormContaReceber({ ...formContaReceber, valor: parseFloat(e.target.value) || 0 })}
+                placeholder="0.00"
+              />
+            </div>
+            <div>
+              <Label htmlFor="vencimento-receber">Data de Vencimento *</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full justify-start text-left font-normal">
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {formContaReceber.data_vencimento ? format(formContaReceber.data_vencimento, "PPP", { locale: ptBR }) : "Selecione a data"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <CalendarComponent
+                    mode="single"
+                    selected={formContaReceber.data_vencimento}
+                    onSelect={(date) => date && setFormContaReceber({ ...formContaReceber, data_vencimento: date })}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div>
+              <Label htmlFor="categoria-receber">Categoria DRE</Label>
+              <Select
+                value={formContaReceber.categoria_dre}
+                onValueChange={(value) => setFormContaReceber({ ...formContaReceber, categoria_dre: value as DRECategory })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a categoria" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="receita_operacional">Receita Operacional</SelectItem>
+                  <SelectItem value="receita_financeira">Receita Financeira</SelectItem>
+                  <SelectItem value="outras_receitas">Outras Receitas</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="cliente-receber">Cliente</Label>
+              <div className="relative" ref={clienteInputRef}>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                  <Input
+                    id="cliente-receber"
+                    value={formContaReceber.cliente}
+                    onChange={(e) => {
+                      setFormContaReceber({ ...formContaReceber, cliente: e.target.value });
+                      setClienteSearchTerm(e.target.value);
+                      setShowClienteDropdown(true);
+                    }}
+                    onFocus={() => {
+                      setShowClienteDropdown(true);
+                      setClienteSearchTerm(formContaReceber.cliente);
+                    }}
+                    placeholder="Buscar ou digitar cliente"
+                    className="pl-10"
+                  />
+                </div>
+                {showClienteDropdown && (
+                  <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden max-h-60 overflow-y-auto">
+                    {clientesFiltrados.length === 0 ? (
+                      <div className="p-4 text-center text-sm text-gray-500">
+                        {clientesUnicos.length === 0 
+                          ? 'Nenhum cliente cadastrado' 
+                          : 'Nenhum cliente encontrado'}
+                      </div>
+                    ) : (
+                      clientesFiltrados.map((cliente, index) => (
+                        <button
+                          key={index}
+                          type="button"
+                          className="w-full px-4 py-2 text-left hover:bg-gray-100 focus:bg-gray-100 focus:outline-none border-b last:border-b-0 transition-colors"
+                          onClick={() => {
+                            setFormContaReceber({ ...formContaReceber, cliente });
+                            setClienteSearchTerm('');
+                            setShowClienteDropdown(false);
+                          }}
+                        >
+                          <div className="font-medium text-sm">{cliente}</div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="observacoes-receber">Observações</Label>
+              <Textarea
+                id="observacoes-receber"
+                value={formContaReceber.observacoes}
+                onChange={(e) => setFormContaReceber({ ...formContaReceber, observacoes: e.target.value })}
+                placeholder="Observações adicionais"
+                rows={3}
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => {
+              setShowDialogContaReceber(false);
+              setContaReceberEditando(null);
+              setClienteSearchTerm('');
+              setShowClienteDropdown(false);
+            }}>
+              Cancelar
+            </Button>
+            <Button onClick={salvarContaReceber} className="bg-green-600 hover:bg-green-700 text-white">
+              {contaReceberEditando ? 'Atualizar' : 'Salvar'}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

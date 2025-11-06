@@ -379,7 +379,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       try {
         const keys = Object.keys(localStorage);
         keys.forEach(key => {
-          if (key.includes('supabase') || key.includes('auth-token')) {
+          if (key.includes('supabase') || key.includes('auth-token') || key.includes('flexi-sidebar-expanded')) {
             localStorage.removeItem(key);
           }
         });

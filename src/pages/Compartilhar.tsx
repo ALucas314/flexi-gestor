@@ -49,7 +49,7 @@ const PAGINAS_DISPONIVEIS = [
   { id: 'produtos', label: 'Produtos', icon: '📦' },
   { id: 'entradas', label: 'Entradas', icon: '📥' },
   { id: 'saidas', label: 'Saídas', icon: '📤' },
-  { id: 'financeiro', label: 'Financeiro', icon: '💰' },
+  { id: 'financeiro', label: 'Relatórios', icon: '💰' },
   { id: 'fornecedores', label: 'Fornecedores', icon: '🏢' },
   { id: 'clientes', label: 'Clientes', icon: '👤' }
 ];
