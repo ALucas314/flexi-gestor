@@ -318,6 +318,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       // Debounce map para evitar muitas atualizações simultâneas
       const debounceTimers: Map<string, NodeJS.Timeout> = new Map();
       const DEBOUNCE_DELAY = 300; // 300ms de debounce
+      
+      // Flag para evitar remoções recursivas de canais
+      const removingChannels = new Set<string>();
 
       // Função para criar subscription para uma tabela específica
       const createSubscription = (tableName: string, onUpdate: () => Promise<void>) => {
@@ -381,14 +384,26 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
                 lastSuccessfulConnection = Date.now();
                 reconnectAttempts.delete(tableName); // Resetar contador
               } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-                // Remover subscription antiga
-                if (subscriptions.has(tableName)) {
+                // Evitar remoções recursivas
+                if (removingChannels.has(tableName)) {
+                  return;
+                }
+                
+                // Remover subscription antiga (remover do Map ANTES de chamar unsubscribe para evitar loops)
+                const channelToRemove = subscriptions.get(tableName);
+                if (channelToRemove) {
+                  removingChannels.add(tableName); // Marcar como removendo
+                  subscriptions.delete(tableName); // Remover do Map primeiro
                   try {
-                    supabase.removeChannel(subscriptions.get(tableName));
+                    // Usar unsubscribe ao invés de removeChannel para evitar loops infinitos
+                    if (channelToRemove && typeof channelToRemove.unsubscribe === 'function') {
+                      channelToRemove.unsubscribe();
+                    }
                   } catch (e) {
                     // Ignorar erros ao remover
+                  } finally {
+                    removingChannels.delete(tableName); // Remover flag após tentativa
                   }
-                  subscriptions.delete(tableName);
                 }
                 // Incrementar contador de tentativas
                 const currentAttempts = reconnectAttempts.get(tableName) || 0;
@@ -423,14 +438,29 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         });
         debounceTimers.clear();
         
-        subscriptions.forEach((channel, tableName) => {
+        // Criar uma cópia dos canais para evitar modificação durante iteração
+        const channelsToRemove = Array.from(subscriptions.entries());
+        subscriptions.clear(); // Limpar o Map ANTES de remover os canais
+        
+        // Remover cada canal individualmente
+        channelsToRemove.forEach(([tableName, channel]) => {
+          // Evitar remoções recursivas
+          if (removingChannels.has(tableName)) {
+            return;
+          }
+          
+          removingChannels.add(tableName); // Marcar como removendo
           try {
-            supabase.removeChannel(channel);
+            // Usar unsubscribe ao invés de removeChannel para evitar loops
+            if (channel && typeof channel.unsubscribe === 'function') {
+              channel.unsubscribe();
+            }
           } catch (error) {
             // Ignorar erros ao remover
+          } finally {
+            removingChannels.delete(tableName); // Remover flag após tentativa
           }
         });
-        subscriptions.clear();
       };
 
       // Função para reconfigurar todas as subscriptions

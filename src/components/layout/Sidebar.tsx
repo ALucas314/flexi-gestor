@@ -15,7 +15,8 @@ import {
   PinOff,
   ChevronDown,
   ChevronRight,
-  FolderOpen
+  FolderOpen,
+  Wallet
 } from "lucide-react";
 import { useLocation, NavLink } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -88,6 +89,12 @@ const navigationItems: NavigationItem[] = [
         label: "Vendas", 
         path: "/saidas",
         description: "Controle de vendas"
+      },
+      { 
+        icon: Wallet, 
+        label: "Movimentações", 
+        path: "/movimentacoes",
+        description: "Fluxo de caixa"
       },
       { 
         icon: FileText, 

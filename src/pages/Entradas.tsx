@@ -477,6 +477,9 @@ const Entradas = () => {
       const installments = formData.installments || 1;
       const notes = formData.notes || '';
 
+      // Calcular valor total da compra para criar conta a pagar se for parcelado
+      let totalCompra = 0;
+
       for (const item of itemsToProcess) {
         const product = products.find(p => p.id === item.productId);
         if (!product) continue;
@@ -524,7 +527,7 @@ const Entradas = () => {
             .filter((d): d is Date => d !== undefined)
             .sort((a, b) => a.getTime() - b.getTime())[0];
 
-          await addMovement({
+          const movement = await addMovement({
             type: 'entrada',
             productId: item.productId,
             productName: item.productName,
@@ -537,8 +540,12 @@ const Entradas = () => {
             paymentMethod: paymentMethod === "parcelado" ? `parcelado-${installments}x` : paymentMethod,
           });
           
-          // Atualizar preço de venda do produto se houver markup
+          // Calcular total da compra (com markup se houver)
           const markup = formData.markup || 0;
+          const unitCostWithMarkup = markup > 0 ? averageCost * (1 + markup / 100) : averageCost;
+          totalCompra += unitCostWithMarkup * totalQuantity;
+          
+          // Atualizar preço de venda do produto se houver markup
           if (markup > 0 && averageCost > 0) {
             const salePrice = averageCost * (1 + markup / 100);
             await updateProduct(item.productId, { price: salePrice });
@@ -563,7 +570,7 @@ const Entradas = () => {
             description += ` | EXP:${expDate}`;
           }
           
-          await addMovement({
+          const movement = await addMovement({
             type: 'entrada',
             productId: item.productId,
             productName: item.productName,
@@ -574,12 +581,146 @@ const Entradas = () => {
             paymentMethod: paymentMethod === "parcelado" ? `parcelado-${installments}x` : paymentMethod,
           });
           
-          // Atualizar preço de venda do produto se houver markup
+          // Calcular total com markup se houver
           const markup = formData.markup || 0;
+          const unitCostWithMarkup = markup > 0 ? baseUnitCost * (1 + markup / 100) : baseUnitCost;
+          totalCompra += unitCostWithMarkup * item.quantity;
+          
+          // Atualizar preço de venda do produto se houver markup
           if (markup > 0 && baseUnitCost > 0) {
             const salePrice = baseUnitCost * (1 + markup / 100);
             await updateProduct(item.productId, { price: salePrice });
           }
+        }
+      }
+
+      // Criar conta a pagar se o pagamento for parcelado (mesmo com 1 parcela, se marcado como parcelado)
+      if (paymentMethod === "parcelado" && totalCompra > 0 && installments >= 1 && workspaceAtivo?.id && user?.id) {
+        try {
+          // Buscar fornecedor_id se o nome do fornecedor existir
+          let fornecedorId: string | null = null;
+          if (supplier && supplier.trim() !== '') {
+            const { data: fornecedorData } = await supabase
+              .from('fornecedores')
+              .select('id')
+              .eq('nome', supplier.trim())
+              .eq('workspace_id', workspaceAtivo.id)
+              .limit(1)
+              .single();
+            
+            if (fornecedorData) {
+              fornecedorId = fornecedorData.id;
+            }
+          }
+
+          // Calcular valor por parcela
+          const valorParcela = totalCompra / installments;
+          
+          // Data de vencimento da primeira parcela (30 dias a partir da data da entrada)
+          const primeiraVencimento = new Date(entryDate);
+          primeiraVencimento.setDate(primeiraVencimento.getDate() + 30);
+
+          // Criar conta a pagar
+          console.log('💾 Criando conta a pagar (processCartEntry):', {
+            workspaceId: workspaceAtivo.id,
+            userId: user.id,
+            fornecedor: supplier,
+            valorTotal: totalCompra,
+            parcelas: installments
+          });
+          
+          const { data: contaPagar, error: errorConta } = await supabase
+            .from('contas_a_pagar')
+            .insert({
+              lancamento: entryDate.toISOString().split('T')[0],
+              observacoes: `Compra parcelada: ${itemsToProcess.map(i => i.productName).join(', ')}${notes ? ` - ${notes}` : ''}`,
+              forma_pagamento: 'parcelado',
+              conta_origem: 'caixa', // Padrão, pode ser alterado depois
+              centro_custo: '', // Pode ser preenchido depois
+              fornecedor_id: fornecedorId,
+              fornecedor: supplier,
+              valor_total: totalCompra,
+              valor_pago: 0,
+              valor_restante: totalCompra,
+              parcelas: installments,
+              parcelas_pagas: 0,
+              data_vencimento: primeiraVencimento.toISOString().split('T')[0],
+              status_pagamento: 'pendente',
+              workspace_id: workspaceAtivo.id,
+              usuario_id: user.id,
+            })
+            .select()
+            .single();
+
+          console.log('📊 Resultado da criação de conta a pagar (processCartEntry):', {
+            sucesso: !!contaPagar,
+            erro: errorConta?.message || null,
+            contaId: contaPagar?.id || null,
+            workspaceIdSalvo: contaPagar?.workspace_id || null
+          });
+
+          if (errorConta && errorConta.code === '42P01') {
+            // Tabela não existe, tentar tabela antiga
+            const { error: errorOld } = await supabase
+              .from('contas_pagar')
+              .insert({
+                descricao: `Compra parcelada: ${itemsToProcess.map(i => i.productName).join(', ')}${notes ? ` - ${notes}` : ''}`,
+                fornecedor: supplier,
+                valor: totalCompra,
+                valor_pago: 0,
+                valor_restante: totalCompra,
+                data_compra: entryDate.toISOString().split('T')[0],
+                data_registro: entryDate.toISOString().split('T')[0],
+                data_vencimento: primeiraVencimento.toISOString().split('T')[0],
+                forma_pagamento: 'parcelado',
+                numero_parcelas: installments,
+                status: 'pendente',
+                origem_pagamento: 'caixa',
+                workspace_id: workspaceAtivo.id,
+                usuario_id: user.id,
+              });
+            
+            if (errorOld) {
+              console.error('Erro ao criar conta a pagar:', errorOld);
+            }
+          } else if (errorConta) {
+            console.error('Erro ao criar conta a pagar:', errorConta);
+          } else if (contaPagar && installments > 1) {
+            // Criar parcelas individuais
+            const parcelasData = [];
+            for (let i = 1; i <= installments; i++) {
+              const vencimentoParcela = new Date(primeiraVencimento);
+              vencimentoParcela.setMonth(vencimentoParcela.getMonth() + (i - 1));
+              
+              parcelasData.push({
+                conta_pagar_id: contaPagar.id,
+                numero: i,
+                valor: valorParcela,
+                data_vencimento: vencimentoParcela.toISOString().split('T')[0],
+                status: 'pendente',
+                observacoes: `Parcela ${i} de ${installments}`,
+              });
+            }
+
+            if (parcelasData.length > 0) {
+              const { error: errorParcelas } = await supabase
+                .from('parcelas')
+                .insert(parcelasData);
+
+              if (errorParcelas) {
+                console.error('Erro ao criar parcelas:', errorParcelas);
+              }
+            }
+          }
+          
+          // Disparar evento para recarregar contas a pagar
+          if (contaPagar) {
+            console.log('📢 Disparando evento contas-pagar-changed');
+            window.dispatchEvent(new CustomEvent('contas-pagar-changed'));
+          }
+        } catch (error: any) {
+          console.error('Erro ao criar conta a pagar automaticamente:', error);
+          // Não bloquear o processo se houver erro ao criar conta a pagar
         }
       }
 
@@ -1278,6 +1419,136 @@ const Entradas = () => {
           });
         }
 
+        // Criar conta a pagar se o pagamento for parcelado (mesmo com 1 parcela, se marcado como parcelado)
+        if (paymentMethod === "parcelado" && totalCost > 0 && installments >= 1 && workspaceAtivo?.id && user?.id) {
+          try {
+            // Buscar fornecedor_id se o nome do fornecedor existir
+            let fornecedorId: string | null = null;
+            if (data.supplier && data.supplier.trim() !== '') {
+              const { data: fornecedorData } = await supabase
+                .from('fornecedores')
+                .select('id')
+                .eq('nome', data.supplier.trim())
+                .eq('workspace_id', workspaceAtivo.id)
+                .limit(1)
+                .single();
+              
+              if (fornecedorData) {
+                fornecedorId = fornecedorData.id;
+              }
+            }
+
+            // Calcular valor por parcela
+            const valorParcela = totalCost / installments;
+            
+            // Data de vencimento da primeira parcela (30 dias a partir da data da entrada)
+            const primeiraVencimento = new Date(data.entryDate);
+            primeiraVencimento.setDate(primeiraVencimento.getDate() + 30);
+
+            // Criar conta a pagar
+            console.log('💾 Criando conta a pagar (addEntry com lotes):', {
+              workspaceId: workspaceAtivo.id,
+              userId: user.id,
+              fornecedor: data.supplier,
+              valorTotal: totalCost,
+              parcelas: installments
+            });
+            
+            const { data: contaPagar, error: errorConta } = await supabase
+              .from('contas_a_pagar')
+              .insert({
+                lancamento: data.entryDate.toISOString().split('T')[0],
+                observacoes: `Compra parcelada: ${product.name} - ${totalQuantity} unidades em ${selectedBatches.length} lote(s)`,
+                forma_pagamento: 'parcelado',
+                conta_origem: 'caixa',
+                centro_custo: '',
+                fornecedor_id: fornecedorId,
+                fornecedor: data.supplier,
+                valor_total: totalCost,
+                valor_pago: 0,
+                valor_restante: totalCost,
+                parcelas: installments,
+                parcelas_pagas: 0,
+                data_vencimento: primeiraVencimento.toISOString().split('T')[0],
+                status_pagamento: 'pendente',
+                workspace_id: workspaceAtivo.id,
+                usuario_id: user.id,
+              })
+              .select()
+              .single();
+
+            console.log('📊 Resultado da criação de conta a pagar (addEntry com lotes):', {
+              sucesso: !!contaPagar,
+              erro: errorConta?.message || null,
+              contaId: contaPagar?.id || null,
+              workspaceIdSalvo: contaPagar?.workspace_id || null
+            });
+
+            if (errorConta && errorConta.code === '42P01') {
+              // Tabela não existe, tentar tabela antiga
+              const { error: errorOld } = await supabase
+                .from('contas_pagar')
+                .insert({
+                  descricao: `Compra parcelada: ${product.name} - ${totalQuantity} unidades`,
+                  fornecedor: data.supplier,
+                  valor: totalCost,
+                  valor_pago: 0,
+                  valor_restante: totalCost,
+                  data_compra: data.entryDate.toISOString().split('T')[0],
+                  data_registro: data.entryDate.toISOString().split('T')[0],
+                  data_vencimento: primeiraVencimento.toISOString().split('T')[0],
+                  forma_pagamento: 'parcelado',
+                  numero_parcelas: installments,
+                  status: 'pendente',
+                  origem_pagamento: 'caixa',
+                  workspace_id: workspaceAtivo.id,
+                  usuario_id: user.id,
+                });
+              
+              if (errorOld) {
+                console.error('Erro ao criar conta a pagar:', errorOld);
+              }
+            } else if (errorConta) {
+              console.error('Erro ao criar conta a pagar:', errorConta);
+            } else if (contaPagar && installments > 1) {
+              // Criar parcelas individuais
+              const parcelasData = [];
+              for (let i = 1; i <= installments; i++) {
+                const vencimentoParcela = new Date(primeiraVencimento);
+                vencimentoParcela.setMonth(vencimentoParcela.getMonth() + (i - 1));
+                
+                parcelasData.push({
+                  conta_pagar_id: contaPagar.id,
+                  numero: i,
+                  valor: valorParcela,
+                  data_vencimento: vencimentoParcela.toISOString().split('T')[0],
+                  status: 'pendente',
+                  observacoes: `Parcela ${i} de ${installments}`,
+                });
+              }
+
+              if (parcelasData.length > 0) {
+                const { error: errorParcelas } = await supabase
+                  .from('parcelas')
+                  .insert(parcelasData);
+
+                if (errorParcelas) {
+                  console.error('Erro ao criar parcelas:', errorParcelas);
+                }
+              }
+            }
+            
+            // Disparar evento para recarregar contas a pagar
+            if (contaPagar) {
+              console.log('📢 Disparando evento contas-pagar-changed (addEntry com lotes)');
+              window.dispatchEvent(new CustomEvent('contas-pagar-changed'));
+            }
+          } catch (error: any) {
+            console.error('Erro ao criar conta a pagar automaticamente:', error);
+            // Não bloquear o processo se houver erro ao criar conta a pagar
+          }
+        }
+
         setIsAddDialogOpen(false);
         setSelectedBatches([]);
         setSelectedProductId("");
@@ -1350,6 +1621,137 @@ const Entradas = () => {
           description: "O preço de venda não foi atualizado. Informe um percentual de markup para calcular o preço de venda automaticamente.",
           variant: "default",
         });
+      }
+
+      // Criar conta a pagar se o pagamento for parcelado (mesmo com 1 parcela, se marcado como parcelado)
+      const totalCompra = data.quantity * data.unitCost;
+      if (paymentMethod === "parcelado" && totalCompra > 0 && installments >= 1 && workspaceAtivo?.id && user?.id) {
+        try {
+          // Buscar fornecedor_id se o nome do fornecedor existir
+          let fornecedorId: string | null = null;
+          if (data.supplier && data.supplier.trim() !== '') {
+            const { data: fornecedorData } = await supabase
+              .from('fornecedores')
+              .select('id')
+              .eq('nome', data.supplier.trim())
+              .eq('workspace_id', workspaceAtivo.id)
+              .limit(1)
+              .single();
+            
+            if (fornecedorData) {
+              fornecedorId = fornecedorData.id;
+            }
+          }
+
+          // Calcular valor por parcela
+          const valorParcela = totalCompra / installments;
+          
+          // Data de vencimento da primeira parcela (30 dias a partir da data da entrada)
+          const primeiraVencimento = new Date(data.entryDate);
+          primeiraVencimento.setDate(primeiraVencimento.getDate() + 30);
+
+          // Criar conta a pagar
+          console.log('💾 Criando conta a pagar (addEntry sem lotes):', {
+            workspaceId: workspaceAtivo.id,
+            userId: user.id,
+            fornecedor: data.supplier,
+            valorTotal: totalCompra,
+            parcelas: installments
+          });
+          
+          const { data: contaPagar, error: errorConta } = await supabase
+            .from('contas_a_pagar')
+            .insert({
+              lancamento: data.entryDate.toISOString().split('T')[0],
+              observacoes: `Compra parcelada: ${product.name} - ${data.quantity} unidades`,
+              forma_pagamento: 'parcelado',
+              conta_origem: 'caixa',
+              centro_custo: '',
+              fornecedor_id: fornecedorId,
+              fornecedor: data.supplier,
+              valor_total: totalCompra,
+              valor_pago: 0,
+              valor_restante: totalCompra,
+              parcelas: installments,
+              parcelas_pagas: 0,
+              data_vencimento: primeiraVencimento.toISOString().split('T')[0],
+              status_pagamento: 'pendente',
+              workspace_id: workspaceAtivo.id,
+              usuario_id: user.id,
+            })
+            .select()
+            .single();
+
+          console.log('📊 Resultado da criação de conta a pagar (addEntry sem lotes):', {
+            sucesso: !!contaPagar,
+            erro: errorConta?.message || null,
+            contaId: contaPagar?.id || null,
+            workspaceIdSalvo: contaPagar?.workspace_id || null
+          });
+
+          if (errorConta && errorConta.code === '42P01') {
+            // Tabela não existe, tentar tabela antiga
+            const { error: errorOld } = await supabase
+              .from('contas_pagar')
+              .insert({
+                descricao: `Compra parcelada: ${product.name} - ${data.quantity} unidades`,
+                fornecedor: data.supplier,
+                valor: totalCompra,
+                valor_pago: 0,
+                valor_restante: totalCompra,
+                data_compra: data.entryDate.toISOString().split('T')[0],
+                data_registro: data.entryDate.toISOString().split('T')[0],
+                data_vencimento: primeiraVencimento.toISOString().split('T')[0],
+                forma_pagamento: 'parcelado',
+                numero_parcelas: installments,
+                status: 'pendente',
+                origem_pagamento: 'caixa',
+                workspace_id: workspaceAtivo.id,
+                usuario_id: user.id,
+              });
+            
+            if (errorOld) {
+              console.error('Erro ao criar conta a pagar:', errorOld);
+            }
+          } else if (errorConta) {
+            console.error('Erro ao criar conta a pagar:', errorConta);
+          } else if (contaPagar && installments > 1) {
+            // Criar parcelas individuais
+            const parcelasData = [];
+            for (let i = 1; i <= installments; i++) {
+              const vencimentoParcela = new Date(primeiraVencimento);
+              vencimentoParcela.setMonth(vencimentoParcela.getMonth() + (i - 1));
+              
+              parcelasData.push({
+                conta_pagar_id: contaPagar.id,
+                numero: i,
+                valor: valorParcela,
+                data_vencimento: vencimentoParcela.toISOString().split('T')[0],
+                status: 'pendente',
+                observacoes: `Parcela ${i} de ${installments}`,
+              });
+            }
+
+            if (parcelasData.length > 0) {
+              const { error: errorParcelas } = await supabase
+                .from('parcelas')
+                .insert(parcelasData);
+
+              if (errorParcelas) {
+                console.error('Erro ao criar parcelas:', errorParcelas);
+              }
+            }
+          }
+          
+          // Disparar evento para recarregar contas a pagar
+          if (contaPagar) {
+            console.log('📢 Disparando evento contas-pagar-changed (addEntry sem lotes)');
+            window.dispatchEvent(new CustomEvent('contas-pagar-changed'));
+          }
+        } catch (error: any) {
+          console.error('Erro ao criar conta a pagar automaticamente:', error);
+          // Não bloquear o processo se houver erro ao criar conta a pagar
+        }
       }
 
       setIsAddDialogOpen(false);
@@ -1781,7 +2183,7 @@ const Entradas = () => {
                                   </div>
                                   
                                   {((productSearchFocused && productSearchUserClicked) || productSearchTerm.trim() !== '') && (
-                                    <div className="absolute z-50 w-full mt-1 bg-white border-2 border-neutral-200 rounded-xl shadow-lg" style={{ maxHeight: '240px', overflowY: 'auto' }}>
+                                    <div className="absolute z-[100] w-full mt-1 bg-white border-2 border-neutral-200 rounded-xl shadow-lg" style={{ maxHeight: '240px', overflowY: 'auto' }}>
                                       {(() => {
                                         const productsToShow = productSearchTerm.trim() !== '' 
                                           ? filteredProducts 
@@ -1800,7 +2202,13 @@ const Entradas = () => {
                                             key={product.id}
                                             type="button"
                                             className="w-full px-4 py-3 text-left hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus:outline-none border-b last:border-b-0 transition-colors"
-                                            onClick={() => {
+                                            onMouseDown={(e) => {
+                                              e.preventDefault(); // Prevenir que o mousedown feche o dropdown antes do onClick
+                                              e.stopPropagation();
+                                            }}
+                                            onClick={(e) => {
+                                              e.preventDefault();
+                                              e.stopPropagation();
                                               field.onChange(product.id);
                                               loadBatchesForProduct(product.id);
                                               setProductSearchTerm("");
@@ -1889,7 +2297,7 @@ const Entradas = () => {
                                     
                                     if (suppliersToShow.length === 0) {
                                       return (
-                                        <div className="absolute z-50 mt-1 w-full bg-white border border-neutral-200 rounded-lg shadow-lg overflow-hidden">
+                                        <div className="absolute z-[100] mt-1 w-full bg-white border border-neutral-200 rounded-lg shadow-lg overflow-hidden">
                                           <div className="p-4 text-center text-sm text-muted-foreground">
                                             {allSuppliers.length === 0 ? 'Nenhum fornecedor cadastrado' : 'Nenhum fornecedor encontrado'}
                                           </div>
@@ -1898,13 +2306,19 @@ const Entradas = () => {
                                     }
                                     
                                     return (
-                                      <div className="absolute z-50 mt-1 w-full bg-white border border-neutral-200 rounded-lg shadow-lg overflow-hidden" style={{ maxHeight: '240px', overflowY: 'auto' }}>
+                                      <div className="absolute z-[100] mt-1 w-full bg-white border border-neutral-200 rounded-lg shadow-lg overflow-hidden" style={{ maxHeight: '240px', overflowY: 'auto' }}>
                                         {suppliersToShow.slice(0, 50).map((supplier) => (
                                         <button
                                           key={supplier.id}
                                           type="button"
                                           className="w-full px-4 py-3 text-left hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus:outline-none border-b last:border-b-0 transition-colors"
-                                          onClick={() => {
+                                          onMouseDown={(e) => {
+                                            e.preventDefault(); // Prevenir que o mousedown feche o dropdown antes do onClick
+                                            e.stopPropagation();
+                                          }}
+                                          onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
                                             field.onChange(supplier.nome);
                                             setSupplierSearchTerm('');
                                             setShowSupplierDropdown(false);
@@ -3505,7 +3919,7 @@ const Entradas = () => {
                                 
                                 if (suppliersToShow.length === 0) {
                                   return (
-                                    <div className="absolute z-50 mt-1 w-full bg-white border border-neutral-200 rounded-lg shadow-lg overflow-hidden">
+                                    <div className="absolute z-[100] mt-1 w-full bg-white border border-neutral-200 rounded-lg shadow-lg overflow-hidden">
                                       <div className="p-4 text-center text-sm text-muted-foreground">
                                         {allSuppliers.length === 0 ? 'Nenhum fornecedor cadastrado' : 'Nenhum fornecedor encontrado'}
                                       </div>
@@ -3514,13 +3928,19 @@ const Entradas = () => {
                                 }
                                 
                                 return (
-                                  <div className="absolute z-50 mt-1 w-full bg-white border border-neutral-200 rounded-lg shadow-lg overflow-hidden" style={{ maxHeight: '240px', overflowY: 'auto' }}>
+                                  <div className="absolute z-[100] mt-1 w-full bg-white border border-neutral-200 rounded-lg shadow-lg overflow-hidden" style={{ maxHeight: '240px', overflowY: 'auto' }}>
                                     {suppliersToShow.slice(0, 50).map((supplier) => (
                                       <button
                                         key={`edit-${supplier.id}`}
                                         type="button"
                                         className="w-full px-4 py-3 text-left hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus:outline-none border-b last:border-b-0 transition-colors"
-                                        onClick={() => {
+                                        onMouseDown={(e) => {
+                                          e.preventDefault(); // Prevenir que o mousedown feche o dropdown antes do onClick
+                                          e.stopPropagation();
+                                        }}
+                                        onClick={(e) => {
+                                          e.preventDefault();
+                                          e.stopPropagation();
                                           field.onChange(supplier.nome);
                                           setSupplierSearchTerm('');
                                           setShowSupplierDropdown(false);

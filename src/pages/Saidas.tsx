@@ -46,6 +46,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useData } from "@/contexts/DataContext";
 import { getBatchesByProduct, updateBatchQuantity } from "@/lib/batches";
 import { useAuth } from "@/contexts/AuthContext";
+import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { printReceipt, downloadReceipt } from "@/lib/receiptPDF";
 import { StockExitCart } from "@/components/saidas/StockExitCart";
 import { supabase } from "@/lib/supabase";
@@ -113,6 +114,7 @@ const Saidas = () => {
   const { toast } = useToast();
   const { products, movements, addMovement, deleteMovement, addNotification, refreshMovements } = useData();
   const { user } = useAuth();
+  const { workspaceAtivo } = useWorkspace();
 
   // Filtrar apenas as vendas (type 'saida') dos movements
   const exits = movements
@@ -582,6 +584,104 @@ const Saidas = () => {
         });
       }
 
+      // Criar conta a receber se o pagamento for parcelado (mesmo com 1 parcela, se marcado como parcelado)
+      if (paymentMethod === "parcelado" && totalGeral > 0 && installments >= 1 && workspaceAtivo?.id && user?.id) {
+        try {
+          // Buscar cliente_id se o nome do cliente existir
+          let clienteId: string | null = null;
+          if (customer && customer.trim() !== '') {
+            const { data: clienteData } = await supabase
+              .from('clientes')
+              .select('id')
+              .eq('nome', customer.trim())
+              .eq('workspace_id', workspaceAtivo.id)
+              .limit(1)
+              .single();
+            
+            if (clienteData) {
+              clienteId = clienteData.id;
+            }
+          }
+
+          // Calcular valor por parcela
+          const valorParcela = totalGeral / installments;
+          
+          // Data de vencimento da primeira parcela (30 dias a partir da data da venda)
+          const primeiraVencimento = new Date(exitDate);
+          primeiraVencimento.setDate(primeiraVencimento.getDate() + 30);
+
+          // Criar conta a receber
+          console.log('💾 Criando conta a receber:', {
+            workspaceId: workspaceAtivo.id,
+            userId: user.id,
+            cliente: customer,
+            valorTotal: totalGeral,
+            parcelas: installments
+          });
+          
+          const { data: contaReceber, error: errorConta } = await supabase
+            .from('contas_a_receber')
+            .insert({
+              lancamento: exitDate.toISOString().split('T')[0],
+              observacoes: `Venda parcelada: ${productsList}${notes ? ` - ${notes}` : ''}`,
+              forma_recebimento: 'parcelado',
+              conta_destino: 'caixa', // Padrão, pode ser alterado depois
+              centro_custo: '', // Pode ser preenchido depois
+              cliente_id: clienteId,
+              cliente: customer,
+              valor_total: totalGeral,
+              valor_recebido: 0,
+              valor_restante: totalGeral,
+              parcelas: installments,
+              parcelas_recebidas: 0,
+              data_vencimento: primeiraVencimento.toISOString().split('T')[0],
+              status_recebimento: 'pendente',
+              workspace_id: workspaceAtivo.id,
+              usuario_id: user.id,
+            })
+            .select()
+            .single();
+
+          console.log('📊 Resultado da criação de conta a receber:', {
+            sucesso: !!contaReceber,
+            erro: errorConta?.message || null,
+            contaId: contaReceber?.id || null,
+            workspaceIdSalvo: contaReceber?.workspace_id || null
+          });
+
+          if (errorConta && errorConta.code === '42P01') {
+            // Tabela não existe, tentar tabela antiga (se houver)
+            console.log('Tabela contas_a_receber não existe ainda. Execute o script de migração.');
+            toast({
+              title: 'Aviso',
+              description: 'A tabela de contas a receber não existe. Execute o script de migração do banco de dados.',
+              variant: 'default'
+            });
+          } else if (errorConta) {
+            console.error('Erro ao criar conta a receber:', errorConta);
+            toast({
+              title: 'Erro ao criar conta a receber',
+              description: errorConta.message || 'Não foi possível criar a conta a receber automaticamente.',
+              variant: 'destructive'
+            });
+          } else if (contaReceber) {
+            console.log('Conta a receber criada com sucesso:', contaReceber);
+            toast({
+              title: 'Conta a receber criada',
+              description: `Conta parcelada criada automaticamente em ${installments}x parcelas.`,
+              variant: 'default'
+            });
+            
+            // Disparar evento para recarregar contas a receber
+            console.log('📢 Disparando evento contas-receber-changed');
+            window.dispatchEvent(new CustomEvent('contas-receber-changed'));
+          }
+        } catch (error: any) {
+          console.error('Erro ao criar conta a receber automaticamente:', error);
+          // Não bloquear o processo se houver erro ao criar conta a receber
+        }
+      }
+
       // Limpar carrinho e fechar modal
       setCartItems([]);
       setDiscount(0);
@@ -750,6 +850,108 @@ const Saidas = () => {
           status: "confirmado",
           receiptNumber,
         });
+      }
+
+      // Criar conta a receber se o pagamento for parcelado (mesmo com 1 parcela, se marcado como parcelado)
+      const paymentMethod = data.paymentMethod || "avista";
+      const installments = data.installments || 1;
+      if (paymentMethod === "parcelado" && installments >= 1 && workspaceAtivo?.id && user?.id) {
+        try {
+          // Calcular total do carrinho
+          const totalCarrinho = cartItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+          
+          if (totalCarrinho > 0) {
+            // Buscar cliente_id se o nome do cliente existir
+            let clienteId: string | null = null;
+            if (data.customer && data.customer.trim() !== '') {
+              const { data: clienteData } = await supabase
+                .from('clientes')
+                .select('id')
+                .eq('nome', data.customer.trim())
+                .eq('workspace_id', workspaceAtivo.id)
+                .limit(1)
+                .single();
+              
+              if (clienteData) {
+                clienteId = clienteData.id;
+              }
+            }
+
+            // Calcular valor por parcela
+            const valorParcela = totalCarrinho / installments;
+            
+            // Data de vencimento da primeira parcela (30 dias a partir da data da venda)
+            const primeiraVencimento = new Date(data.exitDate);
+            primeiraVencimento.setDate(primeiraVencimento.getDate() + 30);
+
+            // Lista de produtos para descrição
+            const productsList = cartItems.map(item => `${item.quantity}x ${item.productName}`).join(', ');
+
+            // Criar conta a receber
+            console.log('💾 Criando conta a receber (processCartSale):', {
+              workspaceId: workspaceAtivo.id,
+              userId: user.id,
+              cliente: data.customer,
+              valorTotal: totalCarrinho,
+              parcelas: installments
+            });
+            
+            const { data: contaReceber, error: errorConta } = await supabase
+              .from('contas_a_receber')
+              .insert({
+                lancamento: data.exitDate.toISOString().split('T')[0],
+                observacoes: `Venda parcelada: ${productsList}${data.notes ? ` - ${data.notes}` : ''}`,
+                forma_recebimento: 'parcelado',
+                conta_destino: 'caixa',
+                centro_custo: '',
+                cliente_id: clienteId,
+                cliente: data.customer || 'Cliente Genérico',
+                valor_total: totalCarrinho,
+                valor_recebido: 0,
+                valor_restante: totalCarrinho,
+                parcelas: installments,
+                parcelas_recebidas: 0,
+                data_vencimento: primeiraVencimento.toISOString().split('T')[0],
+                status_recebimento: 'pendente',
+                workspace_id: workspaceAtivo.id,
+                usuario_id: user.id,
+              })
+              .select()
+              .single();
+
+            console.log('📊 Resultado da criação de conta a receber (processCartSale):', {
+              sucesso: !!contaReceber,
+              erro: errorConta?.message || null,
+              contaId: contaReceber?.id || null,
+              workspaceIdSalvo: contaReceber?.workspace_id || null
+            });
+
+            if (errorConta && errorConta.code === '42P01') {
+              console.log('Tabela contas_a_receber não existe ainda. Execute o script de migração.');
+              toast({
+                title: 'Aviso',
+                description: 'A tabela de contas a receber não existe. Execute o script de migração do banco de dados.',
+                variant: 'default'
+              });
+            } else if (errorConta) {
+              console.error('Erro ao criar conta a receber:', errorConta);
+              toast({
+                title: 'Erro ao criar conta a receber',
+                description: errorConta.message || 'Não foi possível criar a conta a receber automaticamente.',
+                variant: 'destructive'
+              });
+            } else if (contaReceber) {
+              console.log('Conta a receber criada com sucesso:', contaReceber);
+              toast({
+                title: 'Conta a receber criada',
+                description: `Conta parcelada criada automaticamente em ${installments}x parcelas.`,
+                variant: 'default'
+              });
+            }
+          }
+        } catch (error: any) {
+          console.error('Erro ao criar conta a receber automaticamente:', error);
+        }
       }
 
       setIsAddDialogOpen(false);
@@ -933,6 +1135,104 @@ const Saidas = () => {
       paymentMethod: paymentMethod === "parcelado" ? `parcelado-${installments}x` : paymentMethod,
       status: "confirmado",
     });
+
+    // Criar conta a receber se o pagamento for parcelado (mesmo com 1 parcela, se marcado como parcelado)
+    if (paymentMethod === "parcelado" && totalPrice > 0 && installments >= 1 && workspaceAtivo?.id && user?.id) {
+      try {
+        // Buscar cliente_id se o nome do cliente existir
+        let clienteId: string | null = null;
+        if (data.customer && data.customer.trim() !== '') {
+          const { data: clienteData } = await supabase
+            .from('clientes')
+            .select('id')
+            .eq('nome', data.customer.trim())
+            .eq('workspace_id', workspaceAtivo.id)
+            .limit(1)
+            .single();
+          
+          if (clienteData) {
+            clienteId = clienteData.id;
+          }
+        }
+
+        // Calcular valor por parcela
+        const valorParcela = totalPrice / installments;
+        
+        // Data de vencimento da primeira parcela (30 dias a partir da data da venda)
+        const primeiraVencimento = new Date(data.exitDate);
+        primeiraVencimento.setDate(primeiraVencimento.getDate() + 30);
+
+        // Criar conta a receber
+        console.log('💾 Criando conta a receber (handleAddExit):', {
+          workspaceId: workspaceAtivo.id,
+          userId: user.id,
+          cliente: data.customer,
+          valorTotal: totalPrice,
+          parcelas: installments
+        });
+        
+        const { data: contaReceber, error: errorConta } = await supabase
+          .from('contas_a_receber')
+          .insert({
+            lancamento: data.exitDate.toISOString().split('T')[0],
+            observacoes: `Venda parcelada: ${product.name} - ${totalQuantity} unidades${data.notes ? ` - ${data.notes}` : ''}`,
+            forma_recebimento: 'parcelado',
+            conta_destino: 'caixa', // Padrão, pode ser alterado depois
+            centro_custo: '', // Pode ser preenchido depois
+            cliente_id: clienteId,
+            cliente: data.customer || 'Cliente Genérico',
+            valor_total: totalPrice,
+            valor_recebido: 0,
+            valor_restante: totalPrice,
+            parcelas: installments,
+            parcelas_recebidas: 0,
+            data_vencimento: primeiraVencimento.toISOString().split('T')[0],
+            status_recebimento: 'pendente',
+            workspace_id: workspaceAtivo.id,
+            usuario_id: user.id,
+          })
+          .select()
+          .single();
+
+        console.log('📊 Resultado da criação de conta a receber (handleAddExit):', {
+          sucesso: !!contaReceber,
+          erro: errorConta?.message || null,
+          contaId: contaReceber?.id || null,
+          workspaceIdSalvo: contaReceber?.workspace_id || null
+        });
+
+        if (errorConta && errorConta.code === '42P01') {
+          // Tabela não existe, tentar tabela antiga (se houver)
+          console.log('Tabela contas_a_receber não existe ainda. Execute o script de migração.');
+          toast({
+            title: 'Aviso',
+            description: 'A tabela de contas a receber não existe. Execute o script de migração do banco de dados.',
+            variant: 'default'
+          });
+        } else if (errorConta) {
+          console.error('Erro ao criar conta a receber:', errorConta);
+          toast({
+            title: 'Erro ao criar conta a receber',
+            description: errorConta.message || 'Não foi possível criar a conta a receber automaticamente.',
+            variant: 'destructive'
+          });
+        } else if (contaReceber) {
+          console.log('Conta a receber criada com sucesso:', contaReceber);
+          toast({
+            title: 'Conta a receber criada',
+            description: `Conta parcelada criada automaticamente em ${installments}x parcelas.`,
+            variant: 'default'
+          });
+        }
+      } catch (error: any) {
+        console.error('Erro ao criar conta a receber automaticamente:', error);
+        toast({
+          title: 'Erro ao criar conta a receber',
+          description: error.message || 'Não foi possível criar a conta a receber automaticamente.',
+          variant: 'destructive'
+        });
+      }
+    }
 
     setIsAddDialogOpen(false);
     setSelectedBatches([]);
@@ -1351,7 +1651,7 @@ const Saidas = () => {
                                         </div>
                                         
                                         {((productSearchFocused && productSearchUserClicked) || productSearchTerm.trim() !== '') && (
-                                          <div className="absolute z-50 w-full mt-1 bg-white border-2 border-neutral-200 rounded-xl shadow-lg" style={{ maxHeight: '240px', overflowY: 'auto' }}>
+                                          <div className="absolute z-[100] w-full mt-1 bg-white border-2 border-neutral-200 rounded-xl shadow-lg" style={{ maxHeight: '240px', overflowY: 'auto' }}>
                                             {(() => {
                                               const productsToShow = productSearchTerm.trim() !== '' 
                                                 ? filteredProducts 
@@ -1370,7 +1670,13 @@ const Saidas = () => {
                                                   key={product.id}
                                                   type="button"
                                                   className="w-full px-4 py-3 text-left hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus:outline-none border-b last:border-b-0 transition-colors"
-                                                  onClick={() => {
+                                                  onMouseDown={(e) => {
+                                                    e.preventDefault(); // Prevenir que o mousedown feche o dropdown antes do onClick
+                                                    e.stopPropagation();
+                                                  }}
+                                                  onClick={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
                                                     field.onChange(product.id);
                                                     loadBatchesForProduct(product.id);
                                                     setProductSearchTerm("");
@@ -1486,7 +1792,7 @@ const Saidas = () => {
                                         </div>
                                         
                                         {((customerSearchFocused && customerSearchUserClicked) || customerSearchTerm.trim() !== '') && (
-                                          <div className="absolute z-50 w-full mt-1 bg-white border-2 border-neutral-200 rounded-xl shadow-lg" style={{ maxHeight: '240px', overflowY: 'auto' }}>
+                                          <div className="absolute z-[100] w-full mt-1 bg-white border-2 border-neutral-200 rounded-xl shadow-lg" style={{ maxHeight: '240px', overflowY: 'auto' }}>
                                             {(() => {
                                               const customersToShow = customerSearchTerm.trim() !== '' 
                                                 ? filteredCustomers 
@@ -1505,7 +1811,13 @@ const Saidas = () => {
                                                   key={customer.id}
                                                   type="button"
                                                   className="w-full px-4 py-3 text-left hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus:outline-none border-b last:border-b-0 transition-colors"
-                                                  onClick={() => {
+                                                  onMouseDown={(e) => {
+                                                    e.preventDefault(); // Prevenir que o mousedown feche o dropdown antes do onClick
+                                                    e.stopPropagation();
+                                                  }}
+                                                  onClick={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
                                                     setSelectedCustomerId(customer.id);
                                                     field.onChange(customer.name);
                                                     setCustomerSearchTerm("");

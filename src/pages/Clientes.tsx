@@ -18,7 +18,8 @@ import {
   UserCircle,
   Search,
   Download,
-  FileText
+  FileText,
+  MapPin
 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
@@ -72,12 +73,27 @@ function formatPhoneBR(value: string): string {
   return `(${ddd})`;
 }
 
+function formatCEP(value: string): string {
+  const digits = (value || '').replace(/\D/g, '').slice(0, 8);
+  const part1 = digits.slice(0, 5);
+  const part2 = digits.slice(5, 8);
+  if (!part1) return '';
+  return part2 ? `${part1}-${part2}` : part1;
+}
+
 // Schema de validação do cliente
 const clientSchema = z.object({
   name: z.string().min(1, 'Nome é obrigatório').max(200),
   documentType: z.enum(['cpf', 'cnpj']).optional(),
   cpf: z.string().optional(),
   phone: z.string().optional(),
+  cep: z.string().optional(),
+  rua: z.string().optional(),
+  numero: z.string().optional(),
+  complemento: z.string().optional(),
+  bairro: z.string().optional(),
+  cidade: z.string().optional(),
+  estado: z.string().optional(),
 });
 
 type ClientFormData = z.infer<typeof clientSchema>;
@@ -88,6 +104,13 @@ interface Client {
   name: string;
   cpf?: string | null;
   phone?: string | null;
+  cep?: string | null;
+  rua?: string | null;
+  numero?: string | null;
+  complemento?: string | null;
+  bairro?: string | null;
+  cidade?: string | null;
+  estado?: string | null;
   created_at?: string;
 }
 
@@ -108,7 +131,19 @@ const Clientes = () => {
 
   const form = useForm<ClientFormData>({
     resolver: zodResolver(clientSchema),
-    defaultValues: { name: '', documentType: 'cpf', cpf: '', phone: '' }
+    defaultValues: { 
+      name: '', 
+      documentType: 'cpf', 
+      cpf: '', 
+      phone: '',
+      cep: '',
+      rua: '',
+      numero: '',
+      complemento: '',
+      bairro: '',
+      cidade: '',
+      estado: ''
+    }
   });
 
   // Controlar carregamento inicial com timeout (igual às outras páginas)
@@ -189,6 +224,13 @@ const Clientes = () => {
         name: c.nome ?? c.name,
         cpf: c.cpf,
         phone: c.telefone ?? c.phone,
+        cep: c.cep,
+        rua: c.rua,
+        numero: c.numero,
+        complemento: c.complemento,
+        bairro: c.bairro,
+        cidade: c.cidade,
+        estado: c.estado,
         created_at: c.criado_em ?? c.created_at,
       }));
 
@@ -394,12 +436,27 @@ const Clientes = () => {
   const onOpenAdd = () => {
     setEditing(null);
     setDocumentType('cpf');
-    form.reset({ name: '', documentType: 'cpf', cpf: '', phone: '' });
+    form.reset({ 
+      name: '', 
+      documentType: 'cpf', 
+      cpf: '', 
+      phone: '',
+      cep: '',
+      rua: '',
+      numero: '',
+      complemento: '',
+      bairro: '',
+      cidade: '',
+      estado: ''
+    });
     setIsAddOpen(true);
   };
 
   const handleSave = async (data: ClientFormData) => {
-    if (!user?.id) return;
+    if (!user?.id || !workspaceAtivo?.id) {
+      toast.error('Workspace não encontrado. Tente novamente.');
+      return;
+    }
     try {
       if (!editing) {
         // Gerar próximo código disponível
@@ -408,16 +465,37 @@ const Clientes = () => {
           : 0;
         const nextCodigo = String(maxCodigo + 1);
         
+        // Preparar dados para inserção
+        const insertData: any = {
+          codigo: nextCodigo,
+          nome: data.name,
+          cpf: data.cpf || null,
+          telefone: data.phone || null,
+          cep: data.cep || null,
+          rua: data.rua || null,
+          numero: data.numero || null,
+          complemento: data.complemento || null,
+          bairro: data.bairro || null,
+          cidade: data.cidade || null,
+          estado: data.estado || null,
+          usuario_id: workspaceAtivo.id,
+        };
+
+        // Adicionar workspace_id apenas se a coluna existir (evita erro se a migração não foi executada)
+        // Em caso de erro, o Supabase vai indicar qual coluna está faltando
+        insertData.workspace_id = workspaceAtivo.id;
+        
         const { error } = await supabase
           .from('clientes')
-          .insert({
-            codigo: nextCodigo,
-            nome: data.name,
-            cpf: data.cpf || null,
-            telefone: data.phone || null,
-            usuario_id: workspaceAtivo.id,
-          } as any);
-        if (error) throw error;
+          .insert(insertData);
+        
+        if (error) {
+          // Se o erro for sobre workspace_id não existir, mostrar mensagem mais clara
+          if (error.message?.includes('workspace_id') || error.code === '42703') {
+            throw new Error('A coluna workspace_id não existe na tabela. Por favor, execute o script de migração no Supabase (docs/database/migrations/001-add-workspace-id-fornecedores-clientes.sql)');
+          }
+          throw error;
+        }
         toast.success('Cliente cadastrado');
       } else {
         const { error } = await supabase
@@ -426,6 +504,13 @@ const Clientes = () => {
             nome: data.name,
             cpf: data.cpf || null,
             telefone: data.phone || null,
+            cep: data.cep || null,
+            rua: data.rua || null,
+            numero: data.numero || null,
+            complemento: data.complemento || null,
+            bairro: data.bairro || null,
+            cidade: data.cidade || null,
+            estado: data.estado || null,
           })
           .eq('id', editing.id)
           .eq('usuario_id', workspaceAtivo.id); // Garantir que só atualiza do workspace correto
@@ -449,7 +534,14 @@ const Clientes = () => {
       name: c.name, 
       documentType: detectedType,
       cpf: c.cpf || '', 
-      phone: c.phone || '' 
+      phone: c.phone || '',
+      cep: c.cep || '',
+      rua: c.rua || '',
+      numero: c.numero || '',
+      complemento: c.complemento || '',
+      bairro: c.bairro || '',
+      cidade: c.cidade || '',
+      estado: c.estado || ''
     });
     setIsAddOpen(true);
   };
@@ -480,7 +572,7 @@ const Clientes = () => {
   // Função para exportar clientes em CSV
   const exportToCSV = () => {
     // Cabeçalho do CSV
-    const headers = ['Código', 'Nome', 'CPF/CNPJ', 'Telefone', 'Data de Cadastro'];
+    const headers = ['Código', 'Nome', 'CPF/CNPJ', 'Telefone', 'Rua', 'Número', 'Complemento', 'Bairro', 'Cidade', 'Estado', 'CEP', 'Data de Cadastro'];
     
     // Dados dos clientes (se há termo de busca, usar filtrados, senão usar todos)
     const dataToExport = searchTerm && searchTerm.trim() ? filteredClients : clients;
@@ -501,6 +593,13 @@ const Clientes = () => {
       c.name || '',
       c.cpf || '',
       c.phone || '',
+      c.rua || '',
+      c.numero || '',
+      c.complemento || '',
+      c.bairro || '',
+      c.cidade || '',
+      c.estado || '',
+      c.cep || '',
       formatDateForExcel(c.created_at)
     ]);
     
@@ -622,13 +721,16 @@ const Clientes = () => {
                   <TableHead className="px-4 py-3">Nome</TableHead>
                   <TableHead className="px-4 py-3">CPF/CNPJ</TableHead>
                   <TableHead className="px-4 py-3">Telefone</TableHead>
+                  <TableHead className="px-4 py-3">Endereço</TableHead>
+                  <TableHead className="px-4 py-3">Cidade/UF</TableHead>
+                  <TableHead className="px-4 py-3">CEP</TableHead>
                   <TableHead className="px-4 py-3 text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredClients.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-10 text-neutral-500">
+                    <TableCell colSpan={8} className="text-center py-10 text-neutral-500">
                       {clients.length === 0 ? 'Nenhum cliente cadastrado' : 'Nenhum cliente encontrado'}
                     </TableCell>
                   </TableRow>
@@ -639,6 +741,14 @@ const Clientes = () => {
                       <TableCell className="px-4 py-3">{c.name}</TableCell>
                       <TableCell className="px-4 py-3">{c.cpf || '—'}</TableCell>
                       <TableCell className="px-4 py-3">{c.phone || '—'}</TableCell>
+                      <TableCell className="px-4 py-3">
+                        {c.rua ? `${c.rua}${c.numero ? `, ${c.numero}` : ''}${c.complemento ? ` - ${c.complemento}` : ''}` : '—'}
+                        {c.bairro ? <span className="block text-xs text-muted-foreground">{c.bairro}</span> : null}
+                      </TableCell>
+                      <TableCell className="px-4 py-3">
+                        {c.cidade || c.estado ? `${c.cidade || ''}${c.estado ? `/${c.estado}` : ''}` : '—'}
+                      </TableCell>
+                      <TableCell className="px-4 py-3">{c.cep || '—'}</TableCell>
                       <TableCell className="px-4 py-3 text-right space-x-2">
                         <Button
                           variant="ghost"
@@ -670,13 +780,14 @@ const Clientes = () => {
 
       {/* Modal Add/Edit */}
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent className="max-w-md sm:max-w-lg rounded-2xl">
-          <DialogHeader>
+        <DialogContent className="max-w-2xl max-h-[90vh] rounded-2xl flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>{editing ? 'Editar Cliente' : 'Novo Cliente'}</DialogTitle>
             <DialogDescription>Preencha os dados do cliente</DialogDescription>
           </DialogHeader>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(handleSave)} className="space-y-4">
+            <form onSubmit={form.handleSubmit(handleSave)} className="flex flex-col flex-1 min-h-0">
+              <div className="space-y-4 flex-1 overflow-y-auto pr-2">
               <FormField
                 control={form.control}
                 name="name"
@@ -764,9 +875,113 @@ const Clientes = () => {
                   </FormItem>
                 )}
               />
-              <DialogFooter>
+              <FormField
+                control={form.control}
+                name="cep"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>CEP</FormLabel>
+                    <FormControl>
+                      <div className="relative">
+                        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400" />
+                        <Input
+                          placeholder="00000-000"
+                          value={field.value || ''}
+                          onChange={(e) => field.onChange(formatCEP(e.target.value))}
+                          className="pl-9"
+                        />
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="bairro"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Bairro</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Ex: Centro" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="rua"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Rua / Logradouro</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Ex: Avenida Brasil" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="numero"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Número</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Ex: 456" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="complemento"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Complemento</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Apartamento, bloco, pontos de referência..." {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="cidade"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Cidade</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Ex: São Paulo" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="estado"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Estado (UF)</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Ex: SP"
+                        value={field.value || ''}
+                        onChange={(e) => field.onChange(e.target.value.toUpperCase().slice(0, 2))}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              </div>
+              <DialogFooter className="flex-shrink-0 border-t pt-4 mt-4">
                 <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>Cancelar</Button>
-                <Button type="submit" className="bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-xl sm:rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-200 transform hover:scale-105">
+                <Button type="submit" className="bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white">
                   Salvar
                 </Button>
               </DialogFooter>

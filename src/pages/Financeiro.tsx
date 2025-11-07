@@ -46,7 +46,7 @@ import { toast } from "sonner";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { calcularDRE, formatarMoeda, formatarPercentual, getCategoriaDRETexto } from "@/lib/dre";
 import { exportDREToPDF } from "@/lib/drePDF";
-import type { ContaPagar, ContaReceber, DRECategory, AccountStatus } from "@/types/financial";
+import type { ContaPagar, ContaReceber, DRECategory, AccountStatus, FormaPagamento, Parcela, ParcelaStatus, OrigemPagamento, StatusPagamento, StatusRecebimento } from "@/types/financial";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
@@ -85,22 +85,39 @@ const Financeiro = () => {
   
   // Estados para formulários
   const [formContaPagar, setFormContaPagar] = useState({
+    lancamento: new Date(),
+    observacoes: '',
+    forma_pagamento: '' as FormaPagamento | '',
+    conta_origem: 'caixa' as OrigemPagamento,
+    centro_custo: '',
+    fornecedor: '',
+    valor_total: 0,
+    parcelas: 1,
+    data_vencimento: new Date(),
+    // Campos legados para compatibilidade
     descricao: '',
     valor: 0,
-    data_vencimento: new Date(),
+    data_compra: new Date(),
+    data_registro: new Date(),
     categoria_dre: '' as DRECategory | '',
-    fornecedor: '',
-    observacoes: '',
+    numero_parcelas: 1,
     movimento_id: ''
   });
   
   const [formContaReceber, setFormContaReceber] = useState({
+    lancamento: new Date(),
+    observacoes: '',
+    forma_recebimento: '' as FormaPagamento | '',
+    conta_destino: 'caixa' as OrigemPagamento,
+    centro_custo: '',
+    cliente: '',
+    valor_total: 0,
+    parcelas: 1,
+    data_vencimento: new Date(),
+    // Campos legados para compatibilidade
     descricao: '',
     valor: 0,
-    data_vencimento: new Date(),
     categoria_dre: '' as DRECategory | '',
-    cliente: '',
-    observacoes: '',
     movimento_id: ''
   });
 
@@ -118,6 +135,23 @@ const Financeiro = () => {
   const [showClienteDropdown, setShowClienteDropdown] = useState(false);
   const fornecedorInputRef = useRef<HTMLDivElement>(null);
   const clienteInputRef = useRef<HTMLDivElement>(null);
+  
+  // Estados para filtros de Contas a Pagar
+  const [filtroFornecedor, setFiltroFornecedor] = useState<string>("todos");
+  const [filtroFormaPagamento, setFiltroFormaPagamento] = useState<string>("todos");
+  const [filtroStatus, setFiltroStatus] = useState<string>("todos");
+  const [filtroPeriodo, setFiltroPeriodo] = useState<string>("todos");
+  
+  // Estados para gestão de parcelas
+  const [showDialogParcelas, setShowDialogParcelas] = useState(false);
+  const [contaSelecionadaParcelas, setContaSelecionadaParcelas] = useState<ContaPagar | null>(null);
+  const [parcelas, setParcelas] = useState<Parcela[]>([]);
+  
+  // Estado para finalizar pagamento
+  const [showDialogFinalizarPagamento, setShowDialogFinalizarPagamento] = useState(false);
+  const [contaParaFinalizar, setContaParaFinalizar] = useState<ContaPagar | null>(null);
+  const [dataPagamentoFinal, setDataPagamentoFinal] = useState<Date>(new Date());
+  const [origemPagamentoFinal, setOrigemPagamentoFinal] = useState<OrigemPagamento>('caixa');
 
   // Função para abrir a receita de uma movimentação (saída)
   const openReceipt = (movement: any) => {
@@ -732,35 +766,135 @@ Flexi Gestor - Controle de Estoque
   
   // Carregar Contas a Pagar
   const carregarContasPagar = async () => {
-    if (!user?.id || !workspaceAtivo?.id) return;
+    if (!user?.id || !workspaceAtivo?.id) {
+      console.log('⚠️ Não foi possível carregar contas a pagar:', { userId: user?.id, workspaceId: workspaceAtivo?.id });
+      return;
+    }
     
     setLoadingContas(true);
     try {
+      const workspaceId = workspaceAtivo.id;
+      const userId = user.id;
+      
+      console.log('📥 Carregando contas a pagar:', { 
+        workspaceId, 
+        userId,
+        workspaceNome: workspaceAtivo.nome,
+        workspaceTipo: workspaceAtivo.tipo
+      });
+      
+      // Tentar usar a nova tabela primeiro, se não existir usar a antiga
       const { data, error } = await supabase
-        .from('contas_pagar')
+        .from('contas_a_pagar')
         .select('*')
-        .eq('usuario_id', workspaceAtivo.id)
+        .eq('workspace_id', workspaceId)
         .order('data_vencimento', { ascending: false });
 
+      console.log('📊 Resultado da consulta contas_a_pagar:', { 
+        quantidade: data?.length || 0, 
+        error: error?.message || null,
+        errorCode: error?.code || null,
+        dados: data?.map(c => ({
+          id: c.id,
+          fornecedor: c.fornecedor,
+          valor_total: c.valor_total,
+          workspace_id: c.workspace_id,
+          usuario_id: c.usuario_id,
+          status: c.status_pagamento
+        }))
+      });
+
+      if (error && error.code === '42P01') {
+        // Tabela não existe, tentar tabela antiga
+        console.log('⚠️ Tabela contas_a_pagar não existe, tentando contas_pagar');
+        const { data: dataOld, error: errorOld } = await supabase
+          .from('contas_pagar')
+          .select('*')
+          .eq('workspace_id', workspaceId)
+          .order('data_vencimento', { ascending: false });
+        
+        console.log('📊 Resultado da consulta contas_pagar:', { 
+          quantidade: dataOld?.length || 0, 
+          error: errorOld?.message || null 
+        });
+        
+        if (errorOld) throw errorOld;
+        
+        // Mapear dados antigos para novo formato
+        const contasFormatadas: ContaPagar[] = (dataOld || []).map((c: any) => ({
+          id: c.id,
+          lancamento: c.data_registro ? new Date(c.data_registro) : new Date(c.criado_em),
+          observacoes: c.observacoes || c.descricao || '',
+          forma_pagamento: (c.forma_pagamento || 'dinheiro') as FormaPagamento,
+          conta_origem: (c.origem_pagamento || 'caixa') as OrigemPagamento,
+          centro_custo: c.categoria_dre || '',
+          fornecedor: c.fornecedor || '',
+          valor_total: parseFloat(c.valor) || 0,
+          valor_pago: parseFloat(c.valor_pago) || 0,
+          valor_restante: parseFloat(c.valor_restante) || (parseFloat(c.valor) || 0),
+          parcelas: c.numero_parcelas || 1,
+          parcelas_pagas: c.parcelas_pagas || 0,
+          data_vencimento: new Date(c.data_vencimento),
+          data_pagamento: c.data_pagamento ? new Date(c.data_pagamento) : undefined,
+          status_pagamento: (c.status === 'finalizado' || c.status === 'pago' ? 'pago' : 
+                            c.valor_pago > 0 ? 'parcial' : 'pendente') as StatusPagamento,
+          workspace_id: c.workspace_id,
+          usuario_id: c.usuario_id,
+          criado_em: new Date(c.criado_em),
+          atualizado_em: new Date(c.atualizado_em),
+          // Campos legados
+          descricao: c.descricao || '',
+          data_compra: c.data_compra ? new Date(c.data_compra) : new Date(c.criado_em),
+          data_registro: c.data_registro ? new Date(c.data_registro) : new Date(c.criado_em),
+          status: c.status as AccountStatus,
+          categoria_dre: c.categoria_dre as DRECategory | undefined,
+          origem_pagamento: c.origem_pagamento as OrigemPagamento | undefined,
+          numero_parcelas: c.numero_parcelas || 1,
+          movimento_id: c.movimento_id || '',
+          parcelas: []
+        }));
+        
+        setContasPagar(contasFormatadas);
+        return;
+      }
+      
       if (error) throw error;
 
+      // Mapear dados novos
       const contasFormatadas: ContaPagar[] = (data || []).map((c: any) => ({
         id: c.id,
-        descricao: c.descricao,
-        valor: parseFloat(c.valor) || 0,
+        lancamento: c.lancamento ? new Date(c.lancamento) : new Date(c.criado_em),
+        observacoes: c.observacoes || '',
+        forma_pagamento: c.forma_pagamento as FormaPagamento,
+        conta_origem: c.conta_origem as OrigemPagamento,
+        centro_custo: c.centro_custo || '',
+        fornecedor: c.fornecedor || '',
+        valor_total: parseFloat(c.valor_total) || 0,
+        valor_pago: parseFloat(c.valor_pago) || 0,
+        valor_restante: parseFloat(c.valor_restante) || 0,
+        parcelas: c.parcelas || 1,
+        parcelas_pagas: c.parcelas_pagas || 0,
         data_vencimento: new Date(c.data_vencimento),
         data_pagamento: c.data_pagamento ? new Date(c.data_pagamento) : undefined,
-        status: c.status as AccountStatus,
-        categoria_dre: c.categoria_dre as DRECategory | undefined,
-        fornecedor: c.fornecedor || '',
-        observacoes: c.observacoes || '',
-        movimento_id: c.movimento_id || '',
-        usuario_id: c.usuario_id,
+        status_pagamento: c.status_pagamento as StatusPagamento,
         workspace_id: c.workspace_id,
+        usuario_id: c.usuario_id,
         criado_em: new Date(c.criado_em),
-        atualizado_em: new Date(c.atualizado_em)
+        atualizado_em: new Date(c.atualizado_em),
+        // Campos legados para compatibilidade
+        descricao: c.observacoes || '',
+        data_compra: c.lancamento ? new Date(c.lancamento) : new Date(c.criado_em),
+        data_registro: c.lancamento ? new Date(c.lancamento) : new Date(c.criado_em),
+        status: (c.status_pagamento === 'pago' ? 'pago' : 
+                c.status_pagamento === 'parcial' ? 'pendente' : 'pendente') as AccountStatus,
+        categoria_dre: c.centro_custo as DRECategory | undefined,
+        origem_pagamento: c.conta_origem as OrigemPagamento | undefined,
+        numero_parcelas: c.parcelas || 1,
+        movimento_id: '',
+        parcelas: []
       }));
 
+      console.log('✅ Contas formatadas:', contasFormatadas.length, 'contas');
       setContasPagar(contasFormatadas);
     } catch (error) {
       console.error('Erro ao carregar contas a pagar:', error);
@@ -772,35 +906,125 @@ Flexi Gestor - Controle de Estoque
 
   // Carregar Contas a Receber
   const carregarContasReceber = async () => {
-    if (!user?.id || !workspaceAtivo?.id) return;
+    if (!user?.id || !workspaceAtivo?.id) {
+      console.log('⚠️ Não foi possível carregar contas a receber:', { userId: user?.id, workspaceId: workspaceAtivo?.id });
+      return;
+    }
     
     setLoadingContas(true);
     try {
+      const workspaceId = workspaceAtivo.id;
+      const userId = user.id;
+      
+      console.log('📥 Carregando contas a receber:', { 
+        workspaceId, 
+        userId,
+        workspaceNome: workspaceAtivo.nome,
+        workspaceTipo: workspaceAtivo.tipo
+      });
+      
+      // Tentar usar a nova tabela primeiro, se não existir usar a antiga
       const { data, error } = await supabase
-        .from('contas_receber')
+        .from('contas_a_receber')
         .select('*')
-        .eq('usuario_id', workspaceAtivo.id)
+        .eq('workspace_id', workspaceId)
         .order('data_vencimento', { ascending: false });
 
+      console.log('📊 Resultado da consulta contas_a_receber:', { 
+        quantidade: data?.length || 0, 
+        error: error?.message || null,
+        errorCode: error?.code || null,
+        dados: data?.map(c => ({
+          id: c.id,
+          cliente: c.cliente,
+          valor_total: c.valor_total,
+          workspace_id: c.workspace_id,
+          usuario_id: c.usuario_id,
+          status: c.status_recebimento
+        }))
+      });
+
+      if (error && error.code === '42P01') {
+        // Tabela não existe, tentar tabela antiga
+        console.log('⚠️ Tabela contas_a_receber não existe, tentando contas_receber');
+        const { data: dataOld, error: errorOld } = await supabase
+          .from('contas_receber')
+          .select('*')
+          .eq('workspace_id', workspaceId)
+          .order('data_vencimento', { ascending: false });
+        
+        console.log('📊 Resultado da consulta contas_receber:', { 
+          quantidade: dataOld?.length || 0, 
+          error: errorOld?.message || null 
+        });
+        
+        if (errorOld) throw errorOld;
+        
+        // Mapear dados antigos para novo formato
+        const contasFormatadas: ContaReceber[] = (dataOld || []).map((c: any) => ({
+          id: c.id,
+          lancamento: new Date(c.criado_em),
+          observacoes: c.observacoes || c.descricao || '',
+          forma_recebimento: 'dinheiro' as FormaPagamento,
+          conta_destino: 'caixa' as OrigemPagamento,
+          centro_custo: c.categoria_dre || '',
+          cliente: c.cliente || '',
+          valor_total: parseFloat(c.valor) || 0,
+          valor_recebido: 0,
+          valor_restante: parseFloat(c.valor) || 0,
+          parcelas: 1,
+          parcelas_recebidas: 0,
+          data_vencimento: new Date(c.data_vencimento),
+          data_recebimento: c.data_recebimento ? new Date(c.data_recebimento) : undefined,
+          status_recebimento: (c.status === 'pago' || c.status === 'finalizado' ? 'recebido' : 'pendente') as StatusRecebimento,
+          workspace_id: c.workspace_id,
+          usuario_id: c.usuario_id,
+          criado_em: new Date(c.criado_em),
+          atualizado_em: new Date(c.atualizado_em),
+          // Campos legados
+          descricao: c.descricao || '',
+          valor: parseFloat(c.valor) || 0,
+          status: c.status as AccountStatus,
+          categoria_dre: c.categoria_dre as DRECategory | undefined,
+          movimento_id: c.movimento_id || ''
+        }));
+        
+        setContasReceber(contasFormatadas);
+        return;
+      }
+      
       if (error) throw error;
 
+      // Mapear dados novos
       const contasFormatadas: ContaReceber[] = (data || []).map((c: any) => ({
         id: c.id,
-        descricao: c.descricao,
-        valor: parseFloat(c.valor) || 0,
+        lancamento: c.lancamento ? new Date(c.lancamento) : new Date(c.criado_em),
+        observacoes: c.observacoes || '',
+        forma_recebimento: c.forma_recebimento as FormaPagamento,
+        conta_destino: c.conta_destino as OrigemPagamento,
+        centro_custo: c.centro_custo || '',
+        cliente: c.cliente || '',
+        valor_total: parseFloat(c.valor_total) || 0,
+        valor_recebido: parseFloat(c.valor_recebido) || 0,
+        valor_restante: parseFloat(c.valor_restante) || 0,
+        parcelas: c.parcelas || 1,
+        parcelas_recebidas: c.parcelas_recebidas || 0,
         data_vencimento: new Date(c.data_vencimento),
         data_recebimento: c.data_recebimento ? new Date(c.data_recebimento) : undefined,
-        status: c.status as AccountStatus,
-        categoria_dre: c.categoria_dre as DRECategory | undefined,
-        cliente: c.cliente || '',
-        observacoes: c.observacoes || '',
-        movimento_id: c.movimento_id || '',
-        usuario_id: c.usuario_id,
+        status_recebimento: c.status_recebimento as StatusRecebimento,
         workspace_id: c.workspace_id,
+        usuario_id: c.usuario_id,
         criado_em: new Date(c.criado_em),
-        atualizado_em: new Date(c.atualizado_em)
+        atualizado_em: new Date(c.atualizado_em),
+        // Campos legados para compatibilidade
+        descricao: c.observacoes || '',
+        valor: parseFloat(c.valor_total) || 0,
+        status: (c.status_recebimento === 'recebido' ? 'pago' : 'pendente') as AccountStatus,
+        categoria_dre: c.centro_custo as DRECategory | undefined,
+        movimento_id: ''
       }));
 
+      console.log('✅ Contas formatadas:', contasFormatadas.length, 'contas');
       setContasReceber(contasFormatadas);
     } catch (error) {
       console.error('Erro ao carregar contas a receber:', error);
@@ -817,41 +1041,116 @@ Flexi Gestor - Controle de Estoque
       return;
     }
 
-    if (!formContaPagar.descricao || formContaPagar.valor <= 0) {
+    // Validar campos obrigatórios (usar novos campos ou legados)
+    const observacoes = formContaPagar.observacoes || formContaPagar.descricao || '';
+    const valorTotal = formContaPagar.valor_total || formContaPagar.valor || 0;
+    const fornecedor = formContaPagar.fornecedor || '';
+    
+    if (!observacoes || valorTotal <= 0 || !fornecedor) {
       toast.error('Preencha todos os campos obrigatórios');
       return;
     }
 
     try {
-      const dadosConta = {
-        descricao: formContaPagar.descricao,
-        valor: formContaPagar.valor,
+      const numeroParcelas = formContaPagar.parcelas || formContaPagar.numero_parcelas || 1;
+      const lancamento = formContaPagar.lancamento || formContaPagar.data_registro || new Date();
+      
+      // Tentar usar nova tabela primeiro
+      const dadosContaNovo = {
+        lancamento: lancamento.toISOString().split('T')[0],
+        observacoes: observacoes,
+        forma_pagamento: formContaPagar.forma_pagamento || 'dinheiro',
+        conta_origem: formContaPagar.conta_origem || 'caixa',
+        centro_custo: formContaPagar.centro_custo || formContaPagar.categoria_dre || null,
+        fornecedor: fornecedor,
+        valor_total: valorTotal,
+        valor_pago: contaPagarEditando?.valor_pago || 0,
+        valor_restante: valorTotal - (contaPagarEditando?.valor_pago || 0),
+        parcelas: numeroParcelas,
+        parcelas_pagas: contaPagarEditando?.parcelas_pagas || 0,
+        data_vencimento: formContaPagar.data_vencimento.toISOString().split('T')[0],
+        data_pagamento: contaPagarEditando?.data_pagamento ? formContaPagar.data_vencimento.toISOString().split('T')[0] : null,
+        status_pagamento: contaPagarEditando?.status_pagamento || 'pendente',
+        workspace_id: workspaceAtivo.id,
+        usuario_id: user.id
+      };
+
+      // Dados legados para fallback
+      const dadosContaLegado = {
+        descricao: observacoes,
+        valor: valorTotal,
+        valor_pago: contaPagarEditando?.valor_pago || 0,
+        valor_restante: valorTotal - (contaPagarEditando?.valor_pago || 0),
+        data_compra: lancamento.toISOString(),
+        data_registro: lancamento.toISOString(),
         data_vencimento: formContaPagar.data_vencimento.toISOString(),
         status: 'pendente' as AccountStatus,
         categoria_dre: formContaPagar.categoria_dre || null,
-        fornecedor: formContaPagar.fornecedor || null,
-        observacoes: formContaPagar.observacoes || null,
+        fornecedor: fornecedor,
+        forma_pagamento: formContaPagar.forma_pagamento || null,
+        numero_parcelas: numeroParcelas,
+        observacoes: observacoes,
         movimento_id: formContaPagar.movimento_id || null,
         usuario_id: workspaceAtivo.id,
         workspace_id: workspaceAtivo.id
       };
 
-      if (contaPagarEditando) {
-        // Atualizar
-        const { error } = await supabase
-          .from('contas_pagar')
-          .update(dadosConta)
-          .eq('id', contaPagarEditando.id);
+      let contaId: string;
+      let usarTabelaNova = true;
 
-        if (error) throw error;
+      if (contaPagarEditando) {
+        // Tentar atualizar na nova tabela
+        const { data, error } = await supabase
+          .from('contas_a_pagar')
+          .update(dadosContaNovo)
+          .eq('id', contaPagarEditando.id)
+          .select()
+          .single();
+
+        if (error && error.code === '42P01') {
+          // Tabela não existe, usar legada
+          usarTabelaNova = false;
+          const { data: dataOld, error: errorOld } = await supabase
+            .from('contas_pagar')
+            .update(dadosContaLegado)
+            .eq('id', contaPagarEditando.id)
+            .select()
+            .single();
+          
+          if (errorOld) throw errorOld;
+          contaId = dataOld.id;
+        } else if (error) {
+          throw error;
+        } else {
+          contaId = data.id;
+        }
+        
         toast.success('Conta a pagar atualizada com sucesso!');
       } else {
-        // Criar
-        const { error } = await supabase
-          .from('contas_pagar')
-          .insert([dadosConta]);
+        // Tentar criar na nova tabela
+        const { data, error } = await supabase
+          .from('contas_a_pagar')
+          .insert([dadosContaNovo])
+          .select()
+          .single();
 
-        if (error) throw error;
+        if (error && error.code === '42P01') {
+          // Tabela não existe, usar legada
+          usarTabelaNova = false;
+          const { data: dataOld, error: errorOld } = await supabase
+            .from('contas_pagar')
+            .insert([dadosContaLegado])
+            .select()
+            .single();
+          
+          if (errorOld) throw errorOld;
+          contaId = dataOld.id;
+        } else if (error) {
+          throw error;
+        } else {
+          contaId = data.id;
+        }
+        
         toast.success('Conta a pagar criada com sucesso!');
       }
 
@@ -863,9 +1162,13 @@ Flexi Gestor - Controle de Estoque
       setFormContaPagar({
         descricao: '',
         valor: 0,
+        data_compra: new Date(),
+        data_registro: new Date(),
         data_vencimento: new Date(),
         categoria_dre: '' as DRECategory | '',
         fornecedor: '',
+        forma_pagamento: '' as FormaPagamento | '',
+        numero_parcelas: 1,
         observacoes: '',
         movimento_id: ''
       });
@@ -1012,13 +1315,172 @@ Flexi Gestor - Controle de Estoque
     }
   };
 
-  // Carregar contas ao montar componente
-  useEffect(() => {
-    if (user?.id && workspaceAtivo?.id) {
-      carregarContasPagar();
-      carregarContasReceber();
+  // Carregar parcelas de uma conta
+  const carregarParcelas = async (contaId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('parcelas')
+        .select('*')
+        .eq('conta_pagar_id', contaId)
+        .order('numero', { ascending: true });
+
+      if (error) throw error;
+
+      const parcelasFormatadas: Parcela[] = (data || []).map((p: any) => ({
+        id: p.id,
+        conta_pagar_id: p.conta_pagar_id,
+        numero: p.numero,
+        valor: parseFloat(p.valor) || 0,
+        data_vencimento: new Date(p.data_vencimento),
+        data_pagamento: p.data_pagamento ? new Date(p.data_pagamento) : undefined,
+        status: p.status as ParcelaStatus,
+        observacoes: p.observacoes || '',
+        criado_em: new Date(p.criado_em),
+        atualizado_em: new Date(p.atualizado_em)
+      }));
+
+      setParcelas(parcelasFormatadas);
+      return parcelasFormatadas;
+    } catch (error: any) {
+      console.error('Erro ao carregar parcelas:', error);
+      toast.error('Erro ao carregar parcelas');
+      return [];
     }
-  }, [user?.id, workspaceAtivo?.id]);
+  };
+
+  // Marcar parcela como paga
+  const marcarParcelaComoPaga = async (parcela: Parcela) => {
+    try {
+      const { error } = await supabase
+        .from('parcelas')
+        .update({
+          status: 'pago',
+          data_pagamento: new Date().toISOString()
+        })
+        .eq('id', parcela.id);
+
+      if (error) throw error;
+
+      // Atualizar valores da conta
+      const conta = contasPagar.find(c => c.id === parcela.conta_pagar_id);
+      if (conta) {
+        const parcelasAtualizadas = await carregarParcelas(conta.id);
+        const valorPago = parcelasAtualizadas
+          .filter(p => p.status === 'pago')
+          .reduce((sum, p) => sum + p.valor, 0);
+        const valorRestante = conta.valor - valorPago;
+        const todasPagas = parcelasAtualizadas.every(p => p.status === 'pago');
+
+        await supabase
+          .from('contas_pagar')
+          .update({
+            valor_pago: valorPago,
+            valor_restante: valorRestante,
+            status: todasPagas ? 'finalizado' : 'pendente',
+            data_pagamento: todasPagas ? new Date().toISOString() : null
+          })
+          .eq('id', conta.id);
+      }
+
+      toast.success('Parcela marcada como paga!');
+      await carregarContasPagar();
+      if (contaSelecionadaParcelas) {
+        await carregarParcelas(contaSelecionadaParcelas.id);
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Erro ao marcar parcela como paga');
+    }
+  };
+
+  // Finalizar pagamento completo
+  const finalizarPagamento = async () => {
+    if (!contaParaFinalizar) return;
+
+    try {
+      const { error } = await supabase
+        .from('contas_pagar')
+        .update({
+          status: 'finalizado',
+          data_pagamento: dataPagamentoFinal.toISOString(),
+          valor_pago: contaParaFinalizar.valor,
+          valor_restante: 0,
+          origem_pagamento: origemPagamentoFinal
+        })
+        .eq('id', contaParaFinalizar.id);
+
+      if (error) throw error;
+
+      // Marcar todas as parcelas como pagas
+      if (contaParaFinalizar.parcelas && contaParaFinalizar.parcelas.length > 0) {
+        await supabase
+          .from('parcelas')
+          .update({
+            status: 'pago',
+            data_pagamento: dataPagamentoFinal.toISOString()
+          })
+          .eq('conta_pagar_id', contaParaFinalizar.id)
+          .eq('status', 'pendente');
+      }
+
+      toast.success(`Pagamento finalizado com sucesso! Debitado do ${origemPagamentoFinal === 'caixa' ? 'Caixa' : 'Banco'}.`);
+      setShowDialogFinalizarPagamento(false);
+      setContaParaFinalizar(null);
+      setOrigemPagamentoFinal('caixa'); // Reset para padrão
+      await carregarContasPagar();
+    } catch (error: any) {
+      toast.error(error.message || 'Erro ao finalizar pagamento');
+    }
+  };
+
+  // Filtrar contas a pagar
+  const contasPagarFiltradas = useMemo(() => {
+    let filtradas = [...contasPagar];
+
+    // Filtro por fornecedor
+    if (filtroFornecedor !== 'todos') {
+      filtradas = filtradas.filter(c => c.fornecedor === filtroFornecedor);
+    }
+
+    // Filtro por forma de pagamento
+    if (filtroFormaPagamento !== 'todos') {
+      filtradas = filtradas.filter(c => c.forma_pagamento === filtroFormaPagamento);
+    }
+
+    // Filtro por status
+    if (filtroStatus !== 'todos') {
+      filtradas = filtradas.filter(c => c.status === filtroStatus);
+    }
+
+    // Filtro por período
+    if (filtroPeriodo !== 'todos') {
+      const now = new Date();
+      filtradas = filtradas.filter(c => {
+        const dataVencimento = new Date(c.data_vencimento);
+        if (filtroPeriodo === 'mes') {
+          return dataVencimento.getMonth() === now.getMonth() && 
+                 dataVencimento.getFullYear() === now.getFullYear();
+        } else if (filtroPeriodo === 'ano') {
+          return dataVencimento.getFullYear() === now.getFullYear();
+        }
+        return true;
+      });
+    }
+
+    return filtradas;
+  }, [contasPagar, filtroFornecedor, filtroFormaPagamento, filtroStatus, filtroPeriodo]);
+
+  // Calcular totais
+  const totaisContasPagar = useMemo(() => {
+    const totalGeral = contasPagarFiltradas.reduce((sum, c) => sum + c.valor, 0);
+    const totalPago = contasPagarFiltradas
+      .filter(c => c.status === 'pago' || c.status === 'finalizado')
+      .reduce((sum, c) => sum + c.valor_pago, 0);
+    const totalPendente = contasPagarFiltradas
+      .filter(c => c.status === 'pendente' || c.status === 'vencido')
+      .reduce((sum, c) => sum + c.valor_restante, 0);
+
+    return { totalGeral, totalPago, totalPendente };
+  }, [contasPagarFiltradas]);
 
   // Extrair lista única de fornecedores das contas a pagar
   const fornecedoresUnicos = useMemo(() => {
@@ -1027,6 +1489,54 @@ Flexi Gestor - Controle de Estoque
       .filter((f): f is string => !!f && f.trim() !== '');
     return [...new Set(fornecedores)].sort();
   }, [contasPagar]);
+
+  // Carregar contas ao montar componente e quando workspace mudar
+  useEffect(() => {
+    if (user?.id && workspaceAtivo?.id) {
+      console.log('🔄 Recarregando contas devido a mudança de workspace/usuário:', {
+        userId: user.id,
+        workspaceId: workspaceAtivo.id,
+        workspaceNome: workspaceAtivo.nome
+      });
+      carregarContasPagar();
+      carregarContasReceber();
+    }
+  }, [user?.id, workspaceAtivo?.id]);
+
+  // Listener para mudanças de workspace via evento customizado
+  useEffect(() => {
+    const handleWorkspaceChange = (event: CustomEvent) => {
+      console.log('📡 Evento de mudança de workspace detectado:', event.detail);
+      if (user?.id && workspaceAtivo?.id) {
+        carregarContasPagar();
+        carregarContasReceber();
+      }
+    };
+
+    const handleContasPagarChanged = () => {
+      console.log('📡 Evento contas-pagar-changed detectado, recarregando...');
+      if (user?.id && workspaceAtivo?.id) {
+        carregarContasPagar();
+      }
+    };
+
+    const handleContasReceberChanged = () => {
+      console.log('📡 Evento contas-receber-changed detectado, recarregando...');
+      if (user?.id && workspaceAtivo?.id) {
+        carregarContasReceber();
+      }
+    };
+
+    window.addEventListener('workspace-changed', handleWorkspaceChange as EventListener);
+    window.addEventListener('contas-pagar-changed', handleContasPagarChanged);
+    window.addEventListener('contas-receber-changed', handleContasReceberChanged);
+    
+    return () => {
+      window.removeEventListener('workspace-changed', handleWorkspaceChange as EventListener);
+      window.removeEventListener('contas-pagar-changed', handleContasPagarChanged);
+      window.removeEventListener('contas-receber-changed', handleContasReceberChanged);
+    };
+  }, [user?.id, workspaceAtivo?.id]);
 
   // Extrair lista única de clientes das contas a receber
   const clientesUnicos = useMemo(() => {
@@ -1466,6 +1976,7 @@ Flexi Gestor - Controle de Estoque
             </div>
           </CardContent>
         </Card>
+
       </div>
 
       {/* Conteúdo das Abas */}
@@ -2312,9 +2823,13 @@ Flexi Gestor - Controle de Estoque
                 setFormContaPagar({
                   descricao: '',
                   valor: 0,
+                  data_compra: new Date(),
+                  data_registro: new Date(),
                   data_vencimento: new Date(),
                   categoria_dre: '' as DRECategory | '',
                   fornecedor: '',
+                  forma_pagamento: '' as FormaPagamento | '',
+                  numero_parcelas: 1,
                   observacoes: '',
                   movimento_id: ''
                 });
@@ -2324,89 +2839,277 @@ Flexi Gestor - Controle de Estoque
                 Nova Conta
               </Button>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-6">
+              {/* Filtros */}
+              <Card className="bg-gradient-to-r from-slate-50 to-gray-50 border-slate-200">
+                <CardHeader className="pb-4">
+                  <CardTitle className="flex items-center gap-2 text-slate-800">
+                    <Filter className="w-5 h-5 text-slate-600" />
+                    Filtros
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {/* Filtro por Fornecedor */}
+                    <Select value={filtroFornecedor} onValueChange={setFiltroFornecedor}>
+                      <SelectTrigger className="bg-white border-slate-300">
+                        <SelectValue placeholder="Fornecedor" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todos">Todos os fornecedores</SelectItem>
+                        {fornecedoresUnicos.map(fornecedor => (
+                          <SelectItem key={fornecedor} value={fornecedor}>
+                            {fornecedor}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    {/* Filtro por Forma de Pagamento */}
+                    <Select value={filtroFormaPagamento} onValueChange={setFiltroFormaPagamento}>
+                      <SelectTrigger className="bg-white border-slate-300">
+                        <SelectValue placeholder="Forma de Pagamento" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todos">Todas as formas</SelectItem>
+                        <SelectItem value="cartao">Cartão</SelectItem>
+                        <SelectItem value="boleto">Boleto</SelectItem>
+                        <SelectItem value="transferencia">Transferência</SelectItem>
+                        <SelectItem value="pix">PIX</SelectItem>
+                        <SelectItem value="parcelado">Parcelado</SelectItem>
+                        <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                        <SelectItem value="cheque">Cheque</SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    {/* Filtro por Status */}
+                    <Select value={filtroStatus} onValueChange={setFiltroStatus}>
+                      <SelectTrigger className="bg-white border-slate-300">
+                        <SelectValue placeholder="Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todos">Todos os status</SelectItem>
+                        <SelectItem value="pendente">Pendente</SelectItem>
+                        <SelectItem value="pago">Pago</SelectItem>
+                        <SelectItem value="vencido">Vencido</SelectItem>
+                        <SelectItem value="finalizado">Finalizado</SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    {/* Filtro por Período */}
+                    <Select value={filtroPeriodo} onValueChange={setFiltroPeriodo}>
+                      <SelectTrigger className="bg-white border-slate-300">
+                        <SelectValue placeholder="Período" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todos">Todos os períodos</SelectItem>
+                        <SelectItem value="mes">Este mês</SelectItem>
+                        <SelectItem value="ano">Este ano</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Tabela de Contas a Pagar */}
               {loadingContas ? (
                 <div className="text-center py-8">Carregando...</div>
-              ) : contasPagar.length === 0 ? (
+              ) : contasPagarFiltradas.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
                   <ArrowDownCircle className="h-12 w-12 mx-auto mb-3 text-gray-300" />
-                  <p>Nenhuma conta a pagar cadastrada</p>
+                  <p>Nenhuma conta a pagar encontrada</p>
                 </div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Descrição</TableHead>
-                      <TableHead>Fornecedor</TableHead>
-                      <TableHead>Vencimento</TableHead>
-                      <TableHead className="text-right">Valor</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {contasPagar.map(conta => (
-                      <TableRow key={conta.id}>
-                        <TableCell>{conta.descricao}</TableCell>
-                        <TableCell>{conta.fornecedor || '-'}</TableCell>
-                        <TableCell>{conta.data_vencimento.toLocaleDateString('pt-BR')}</TableCell>
-                        <TableCell className="text-right font-semibold">
-                          R$ {conta.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={
-                            conta.status === 'pago' ? 'bg-green-100 text-green-800' :
-                            conta.status === 'vencido' ? 'bg-red-100 text-red-800' :
-                            'bg-yellow-100 text-yellow-800'
-                          }>
-                            {conta.status === 'pago' ? 'Pago' : conta.status === 'vencido' ? 'Vencido' : 'Pendente'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex gap-2 justify-end">
-                            {conta.status !== 'pago' && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => marcarContaComoPaga(conta)}
-                              >
-                                Marcar como Paga
-                              </Button>
-                            )}
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                setContaPagarEditando(conta);
-                                setFornecedorSearchTerm(conta.fornecedor || '');
-                                setShowFornecedorDropdown(false);
-                                setFormContaPagar({
-                                  descricao: conta.descricao,
-                                  valor: conta.valor,
-                                  data_vencimento: conta.data_vencimento,
-                                  categoria_dre: conta.categoria_dre || '' as DRECategory | '',
-                                  fornecedor: conta.fornecedor || '',
-                                  observacoes: conta.observacoes || '',
-                                  movimento_id: conta.movimento_id || ''
-                                });
-                                setShowDialogContaPagar(true);
-                              }}
-                            >
-                              Editar
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => deletarContaPagar(conta.id)}
-                            >
-                              Excluir
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                <>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-slate-50">
+                          <TableHead className="font-semibold">Data da Compra</TableHead>
+                          <TableHead className="font-semibold">Data de Registro</TableHead>
+                          <TableHead className="font-semibold">Descrição</TableHead>
+                          <TableHead className="font-semibold">Fornecedor</TableHead>
+                          <TableHead className="font-semibold">Forma de Pagamento</TableHead>
+                          <TableHead className="font-semibold text-right">Valor Total</TableHead>
+                          <TableHead className="font-semibold">Vencimento</TableHead>
+                          <TableHead className="font-semibold">Pagamento / Parcelas</TableHead>
+                          <TableHead className="font-semibold">Status</TableHead>
+                          <TableHead className="font-semibold text-right">Ações</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {contasPagarFiltradas.map(conta => {
+                          const proximaParcela = conta.parcelas && conta.parcelas.length > 0
+                            ? conta.parcelas.find(p => p.status === 'pendente')
+                            : null;
+                          const vencimento = proximaParcela ? proximaParcela.data_vencimento : conta.data_vencimento;
+                          const parcelasPendentes = conta.parcelas?.filter(p => p.status === 'pendente').length || 0;
+                          const parcelasPagas = conta.parcelas?.filter(p => p.status === 'pago').length || 0;
+                          
+                          return (
+                            <TableRow key={conta.id} className="hover:bg-slate-50">
+                              <TableCell className="text-sm">
+                                {conta.data_compra.toLocaleDateString('pt-BR')}
+                              </TableCell>
+                              <TableCell className="text-sm">
+                                {conta.data_registro.toLocaleDateString('pt-BR')}
+                              </TableCell>
+                              <TableCell>
+                                <div className="font-medium">{conta.descricao}</div>
+                                {conta.observacoes && (
+                                  <div className="text-xs text-gray-500 mt-1">{conta.observacoes}</div>
+                                )}
+                              </TableCell>
+                              <TableCell>{conta.fornecedor || '-'}</TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="text-xs">
+                                  {conta.forma_pagamento === 'cartao' ? 'Cartão' :
+                                   conta.forma_pagamento === 'boleto' ? 'Boleto' :
+                                   conta.forma_pagamento === 'transferencia' ? 'Transferência' :
+                                   conta.forma_pagamento === 'pix' ? 'PIX' :
+                                   conta.forma_pagamento === 'parcelado' ? 'Parcelado' :
+                                   conta.forma_pagamento === 'dinheiro' ? 'Dinheiro' :
+                                   conta.forma_pagamento === 'cheque' ? 'Cheque' : '-'}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-right font-semibold">
+                                R$ {conta.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </TableCell>
+                              <TableCell className="text-sm">
+                                {vencimento.toLocaleDateString('pt-BR')}
+                              </TableCell>
+                              <TableCell>
+                                {conta.numero_parcelas && conta.numero_parcelas > 1 ? (
+                                  <div className="flex flex-col gap-1">
+                                    <Badge 
+                                      variant="outline" 
+                                      className="cursor-pointer hover:bg-blue-50"
+                                      onClick={() => {
+                                        setContaSelecionadaParcelas(conta);
+                                        carregarParcelas(conta.id);
+                                        setShowDialogParcelas(true);
+                                      }}
+                                    >
+                                      {parcelasPagas}/{conta.numero_parcelas} parcelas
+                                    </Badge>
+                                    <span className="text-xs text-gray-500">
+                                      {parcelasPendentes} pendente{parcelasPendentes !== 1 ? 's' : ''}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <Badge variant="outline">À vista</Badge>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <Badge className={
+                                  conta.status === 'finalizado' || conta.status === 'pago' ? 'bg-green-100 text-green-800' :
+                                  conta.status === 'vencido' ? 'bg-red-100 text-red-800' :
+                                  'bg-yellow-100 text-yellow-800'
+                                }>
+                                  {conta.status === 'finalizado' ? 'Finalizado' :
+                                   conta.status === 'pago' ? 'Pago' :
+                                   conta.status === 'vencido' ? 'Vencido' : 'Pendente'}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex gap-2 justify-end">
+                                  {conta.status !== 'finalizado' && conta.status !== 'pago' && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="bg-green-50 hover:bg-green-100 text-green-700 border-green-300"
+                                      onClick={() => {
+                                        setContaParaFinalizar(conta);
+                                        setDataPagamentoFinal(new Date());
+                                        setOrigemPagamentoFinal('caixa'); // Reset para padrão
+                                        setShowDialogFinalizarPagamento(true);
+                                      }}
+                                    >
+                                      <CheckCircle className="h-4 w-4 mr-1" />
+                                      Finalizar
+                                    </Button>
+                                  )}
+                                  {conta.numero_parcelas && conta.numero_parcelas > 1 && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => {
+                                        setContaSelecionadaParcelas(conta);
+                                        carregarParcelas(conta.id);
+                                        setShowDialogParcelas(true);
+                                      }}
+                                    >
+                                      <Hash className="h-4 w-4 mr-1" />
+                                      Parcelas
+                                    </Button>
+                                  )}
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setContaPagarEditando(conta);
+                                      setFornecedorSearchTerm(conta.fornecedor || '');
+                                      setShowFornecedorDropdown(false);
+                                      setFormContaPagar({
+                                        descricao: conta.descricao,
+                                        valor: conta.valor,
+                                        data_compra: conta.data_compra,
+                                        data_registro: conta.data_registro,
+                                        data_vencimento: conta.data_vencimento,
+                                        categoria_dre: conta.categoria_dre || '' as DRECategory | '',
+                                        fornecedor: conta.fornecedor || '',
+                                        forma_pagamento: conta.forma_pagamento || '' as FormaPagamento | '',
+                                        numero_parcelas: conta.numero_parcelas || 1,
+                                        observacoes: conta.observacoes || '',
+                                        movimento_id: conta.movimento_id || ''
+                                      });
+                                      setShowDialogContaPagar(true);
+                                    }}
+                                  >
+                                    Editar
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    onClick={() => deletarContaPagar(conta.id)}
+                                  >
+                                    Excluir
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  {/* Totais no Rodapé */}
+                  <Card className="bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200">
+                    <CardContent className="p-4">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="text-center">
+                          <p className="text-sm text-gray-600 mb-1">Total Geral</p>
+                          <p className="text-2xl font-bold text-indigo-900">
+                            R$ {totaisContasPagar.totalGeral.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-sm text-gray-600 mb-1">Total Pago</p>
+                          <p className="text-2xl font-bold text-green-600">
+                            R$ {totaisContasPagar.totalPago.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-sm text-gray-600 mb-1">Total Pendente</p>
+                          <p className="text-2xl font-bold text-red-600">
+                            R$ {totaisContasPagar.totalPendente.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </>
               )}
             </CardContent>
           </Card>
@@ -2712,6 +3415,269 @@ Flexi Gestor - Controle de Estoque
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* ABA 6: MOVIMENTAÇÕES */}
+        <TabsContent value="caixa-banco" className="space-y-6">
+          <Card className="bg-gradient-to-br from-cyan-50 to-blue-50 border-cyan-200 shadow-lg">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-cyan-900">
+                <Wallet className="h-6 w-6 text-cyan-600" />
+                Movimentações
+              </CardTitle>
+              <CardDescription className="text-cyan-700">
+                Visão consolidada do fluxo de caixa e lucro do período
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Seção CAIXA */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-1 h-8 bg-blue-500 rounded-full"></div>
+                  <h2 className="text-2xl font-bold text-blue-900">Caixa</h2>
+                  <Badge variant="outline" className="ml-2 text-blue-700 border-blue-300">
+                    Movimentações
+                  </Badge>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Card Entradas */}
+                  <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-green-200 shadow-md hover:shadow-lg transition-shadow">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="flex items-center gap-2 text-green-900 text-lg">
+                        <TrendingUp className="h-5 w-5 text-green-600" />
+                        Entradas
+                      </CardTitle>
+                      <CardDescription className="text-green-700">
+                        Total de compras realizadas
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        <div className="text-3xl font-bold text-green-700">
+                          R$ {totalEntradas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </div>
+                        <div className="flex items-center gap-2 text-sm text-green-600">
+                          <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300">
+                            {entradas.length} registro{entradas.length !== 1 ? 's' : ''}
+                          </Badge>
+                        </div>
+                        <div className="text-xs text-green-600 mt-2">
+                          <p className="font-medium">Custos de compra</p>
+                          <p className="opacity-75">Valor total investido em produtos</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Card Saídas */}
+                  <Card className="bg-gradient-to-br from-orange-50 to-amber-50 border-orange-200 shadow-md hover:shadow-lg transition-shadow">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="flex items-center gap-2 text-orange-900 text-lg">
+                        <TrendingDown className="h-5 w-5 text-orange-600" />
+                        Saídas
+                      </CardTitle>
+                      <CardDescription className="text-orange-700">
+                        Total de vendas realizadas
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        <div className="text-3xl font-bold text-orange-700">
+                          R$ {totalSaidas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </div>
+                        <div className="flex items-center gap-2 text-sm text-orange-600">
+                          <Badge variant="outline" className="bg-orange-100 text-orange-800 border-orange-300">
+                            {saidas.length} registro{saidas.length !== 1 ? 's' : ''}
+                          </Badge>
+                        </div>
+                        <div className="text-xs text-orange-600 mt-2">
+                          <p className="font-medium">Receitas de venda</p>
+                          <p className="opacity-75">Valor total recebido com vendas</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Card Total Caixa */}
+                  <Card className={`bg-gradient-to-br ${
+                    saldo >= 0 
+                      ? 'from-blue-50 to-indigo-50 border-blue-200' 
+                      : 'from-red-50 to-rose-50 border-red-200'
+                  } shadow-md hover:shadow-lg transition-shadow border-2`}>
+                    <CardHeader className="pb-3">
+                      <CardTitle className={`flex items-center gap-2 text-lg ${
+                        saldo >= 0 ? 'text-blue-900' : 'text-red-900'
+                      }`}>
+                        <DollarSign className={`h-5 w-5 ${
+                          saldo >= 0 ? 'text-blue-600' : 'text-red-600'
+                        }`} />
+                        Total Caixa
+                      </CardTitle>
+                      <CardDescription className={saldo >= 0 ? 'text-blue-700' : 'text-red-700'}>
+                        Saldo do período
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        <div className={`text-3xl font-bold ${
+                          saldo >= 0 ? 'text-blue-700' : 'text-red-700'
+                        }`}>
+                          {saldo >= 0 ? '+' : ''}R$ {Math.abs(saldo).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </div>
+                        <div className="flex items-center gap-2 text-sm">
+                          <Badge className={
+                            saldo >= 0 
+                              ? 'bg-green-100 text-green-800 border-green-300' 
+                              : 'bg-red-100 text-red-800 border-red-300'
+                          }>
+                            {saldo >= 0 ? 'Positivo' : 'Negativo'}
+                          </Badge>
+                        </div>
+                        <div className={`text-xs mt-2 ${
+                          saldo >= 0 ? 'text-blue-600' : 'text-red-600'
+                        }`}>
+                          <p className="font-medium">
+                            {saldo >= 0 ? 'Receitas superam custos' : 'Custos superam receitas'}
+                          </p>
+                          <p className="opacity-75">
+                            {saldo >= 0 
+                              ? 'Fluxo de caixa positivo' 
+                              : 'Atenção: fluxo negativo'}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+
+              {/* Divisor */}
+              <div className="border-t border-cyan-200 my-6"></div>
+
+              {/* Seção BANCO */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-1 h-8 bg-cyan-500 rounded-full"></div>
+                  <h2 className="text-2xl font-bold text-cyan-900">Banco</h2>
+                  <Badge variant="outline" className="ml-2 text-cyan-700 border-cyan-300">
+                    Lucro Líquido
+                  </Badge>
+                </div>
+
+                <Card className={`bg-gradient-to-br ${
+                  saldo >= 0 
+                    ? 'from-emerald-50 to-green-50 border-emerald-200' 
+                    : 'from-red-50 to-rose-50 border-red-200'
+                } shadow-xl border-2`}>
+                  <CardHeader className="pb-4">
+                    <CardTitle className={`flex items-center gap-2 text-2xl ${
+                      saldo >= 0 ? 'text-emerald-900' : 'text-red-900'
+                    }`}>
+                      {saldo >= 0 ? (
+                        <CheckCircle className="h-7 w-7 text-emerald-600" />
+                      ) : (
+                        <AlertTriangle className="h-7 w-7 text-red-600" />
+                      )}
+                      Lucro Líquido
+                    </CardTitle>
+                    <CardDescription className={saldo >= 0 ? 'text-emerald-700' : 'text-red-700'}>
+                      Resultado financeiro do período (Receitas - Custos)
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-6">
+                      {/* Valor Principal */}
+                      <div className="text-center py-6 bg-white/60 rounded-xl border-2 border-dashed border-emerald-300">
+                        <div className={`text-5xl font-black mb-2 ${
+                          saldo >= 0 ? 'text-emerald-600' : 'text-red-600'
+                        }`}>
+                          {saldo >= 0 ? '+' : ''}R$ {Math.abs(saldo).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </div>
+                        <Badge className={`text-lg px-4 py-2 ${
+                          saldo >= 0 
+                            ? 'bg-emerald-100 text-emerald-800 border-emerald-300' 
+                            : 'bg-red-100 text-red-800 border-red-300'
+                        }`}>
+                          {saldo >= 0 ? 'Lucro' : 'Prejuízo'}
+                        </Badge>
+                      </div>
+
+                      {/* Detalhamento */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="bg-white/60 rounded-lg p-4 border border-emerald-200">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium text-emerald-700">Receitas (Vendas)</span>
+                            <TrendingDown className="h-4 w-4 text-emerald-600" />
+                          </div>
+                          <div className="text-2xl font-bold text-emerald-700">
+                            R$ {totalSaidas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </div>
+                        </div>
+
+                        <div className="bg-white/60 rounded-lg p-4 border border-red-200">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium text-red-700">Custos (Compras)</span>
+                            <TrendingUp className="h-4 w-4 text-red-600" />
+                          </div>
+                          <div className="text-2xl font-bold text-red-700">
+                            R$ {totalEntradas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Margem de Lucro */}
+                      {totalSaidas > 0 && (
+                        <div className="bg-white/60 rounded-lg p-4 border border-cyan-200">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-cyan-700">Margem de Lucro</span>
+                            <BarChart3 className="h-4 w-4 text-cyan-600" />
+                          </div>
+                          <div className={`text-2xl font-bold mt-2 ${
+                            saldo >= 0 ? 'text-emerald-700' : 'text-red-700'
+                          }`}>
+                            {((saldo / totalSaidas) * 100).toFixed(2)}%
+                          </div>
+                          <p className="text-xs text-cyan-600 mt-1 opacity-75">
+                            Percentual de lucro sobre as receitas
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Resumo Visual */}
+              <Card className="bg-gradient-to-r from-slate-50 to-gray-50 border-slate-200">
+                <CardHeader>
+                  <CardTitle className="text-slate-800 text-lg">Resumo do Período</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="text-center p-4 bg-white rounded-lg border border-green-200">
+                      <p className="text-sm text-gray-600 mb-1">Total de Movimentações</p>
+                      <p className="text-2xl font-bold text-gray-900">{totalMovements}</p>
+                    </div>
+                    <div className="text-center p-4 bg-white rounded-lg border border-blue-200">
+                      <p className="text-sm text-gray-600 mb-1">Produtos Movimentados</p>
+                      <p className="text-2xl font-bold text-gray-900">{productosMovimentados}</p>
+                    </div>
+                    <div className={`text-center p-4 bg-white rounded-lg border-2 ${
+                      saldo >= 0 ? 'border-emerald-300' : 'border-red-300'
+                    }`}>
+                      <p className="text-sm text-gray-600 mb-1">Resultado Final</p>
+                      <p className={`text-2xl font-bold ${
+                        saldo >= 0 ? 'text-emerald-700' : 'text-red-700'
+                      }`}>
+                        {saldo >= 0 ? 'Lucro' : 'Prejuízo'}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       {/* Modal de Receita (Saída) */}
@@ -2983,8 +3949,51 @@ Flexi Gestor - Controle de Estoque
                 placeholder="Ex: Pagamento de fornecedor"
               />
             </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="data-compra-pagar">Data da Compra *</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-full justify-start text-left font-normal">
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {formContaPagar.data_compra ? format(formContaPagar.data_compra, "PPP", { locale: ptBR }) : "Selecione"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <CalendarComponent
+                      mode="single"
+                      selected={formContaPagar.data_compra}
+                      onSelect={(date) => date && setFormContaPagar({ ...formContaPagar, data_compra: date })}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+              
+              <div>
+                <Label htmlFor="data-registro-pagar">Data de Registro *</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-full justify-start text-left font-normal">
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {formContaPagar.data_registro ? format(formContaPagar.data_registro, "PPP", { locale: ptBR }) : "Selecione"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <CalendarComponent
+                      mode="single"
+                      selected={formContaPagar.data_registro}
+                      onSelect={(date) => date && setFormContaPagar({ ...formContaPagar, data_registro: date })}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </div>
+            
             <div>
-              <Label htmlFor="valor-pagar">Valor *</Label>
+              <Label htmlFor="valor-pagar">Valor Total *</Label>
               <Input
                 id="valor-pagar"
                 type="number"
@@ -2995,6 +4004,54 @@ Flexi Gestor - Controle de Estoque
                 placeholder="0.00"
               />
             </div>
+            
+            <div>
+              <Label htmlFor="forma-pagamento-pagar">Forma de Pagamento *</Label>
+              <Select
+                value={formContaPagar.forma_pagamento}
+                onValueChange={(value) => {
+                  setFormContaPagar({ 
+                    ...formContaPagar, 
+                    forma_pagamento: value as FormaPagamento,
+                    numero_parcelas: value === 'parcelado' ? formContaPagar.numero_parcelas : 1
+                  });
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a forma de pagamento" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cartao">Cartão</SelectItem>
+                  <SelectItem value="boleto">Boleto</SelectItem>
+                  <SelectItem value="transferencia">Transferência</SelectItem>
+                  <SelectItem value="pix">PIX</SelectItem>
+                  <SelectItem value="parcelado">Parcelado</SelectItem>
+                  <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                  <SelectItem value="cheque">Cheque</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {formContaPagar.forma_pagamento === 'parcelado' && (
+              <div>
+                <Label htmlFor="numero-parcelas-pagar">Número de Parcelas *</Label>
+                <Input
+                  id="numero-parcelas-pagar"
+                  type="number"
+                  min="1"
+                  max="24"
+                  value={formContaPagar.numero_parcelas}
+                  onChange={(e) => setFormContaPagar({ ...formContaPagar, numero_parcelas: parseInt(e.target.value) || 1 })}
+                  placeholder="Ex: 3"
+                />
+                {formContaPagar.valor > 0 && formContaPagar.numero_parcelas > 0 && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Valor por parcela: R$ {(formContaPagar.valor / formContaPagar.numero_parcelas).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </p>
+                )}
+              </div>
+            )}
+            
             <div>
               <Label htmlFor="vencimento-pagar">Data de Vencimento *</Label>
               <Popover>
@@ -3014,6 +4071,7 @@ Flexi Gestor - Controle de Estoque
                 </PopoverContent>
               </Popover>
             </div>
+            
             <div>
               <Label htmlFor="categoria-pagar">Categoria DRE</Label>
               <Select
@@ -3033,6 +4091,7 @@ Flexi Gestor - Controle de Estoque
                 </SelectContent>
               </Select>
             </div>
+            
             <div>
               <Label htmlFor="fornecedor-pagar">Fornecedor</Label>
               <div className="relative" ref={fornecedorInputRef}>
@@ -3055,7 +4114,7 @@ Flexi Gestor - Controle de Estoque
                   />
                 </div>
                 {showFornecedorDropdown && (
-                  <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden max-h-60 overflow-y-auto">
+                  <div className="absolute z-[100] mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden max-h-60 overflow-y-auto">
                     {fornecedoresFiltrados.length === 0 ? (
                       <div className="p-4 text-center text-sm text-gray-500">
                         {fornecedoresUnicos.length === 0 
@@ -3068,7 +4127,13 @@ Flexi Gestor - Controle de Estoque
                           key={index}
                           type="button"
                           className="w-full px-4 py-2 text-left hover:bg-gray-100 focus:bg-gray-100 focus:outline-none border-b last:border-b-0 transition-colors"
-                          onClick={() => {
+                          onMouseDown={(e) => {
+                            e.preventDefault(); // Prevenir que o mousedown feche o dropdown antes do onClick
+                            e.stopPropagation();
+                          }}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
                             setFormContaPagar({ ...formContaPagar, fornecedor });
                             setFornecedorSearchTerm('');
                             setShowFornecedorDropdown(false);
@@ -3082,13 +4147,14 @@ Flexi Gestor - Controle de Estoque
                 )}
               </div>
             </div>
+            
             <div>
               <Label htmlFor="observacoes-pagar">Observações</Label>
               <Textarea
                 id="observacoes-pagar"
                 value={formContaPagar.observacoes}
                 onChange={(e) => setFormContaPagar({ ...formContaPagar, observacoes: e.target.value })}
-                placeholder="Observações adicionais"
+                placeholder="Observações adicionais (ex: número da nota, descrição da compra)"
                 rows={3}
               />
             </div>
@@ -3109,7 +4175,182 @@ Flexi Gestor - Controle de Estoque
         </DialogContent>
       </Dialog>
 
-      {/* Modal de Conta a Receber */}
+      {/* Dialog de Gestão de Parcelas */}
+      <Dialog open={showDialogParcelas} onOpenChange={setShowDialogParcelas}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Hash className="h-5 w-5" />
+              Gestão de Parcelas
+            </DialogTitle>
+            {contaSelecionadaParcelas && (
+              <CardDescription>
+                {contaSelecionadaParcelas.descricao} - Total: R$ {contaSelecionadaParcelas.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              </CardDescription>
+            )}
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {parcelas.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <Hash className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                <p>Nenhuma parcela encontrada</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {parcelas.map(parcela => (
+                  <Card key={parcela.id} className={parcela.status === 'pago' ? 'bg-green-50 border-green-200' : ''}>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3">
+                            <Badge variant="outline" className="text-sm font-semibold">
+                              Parcela {parcela.numero}
+                            </Badge>
+                            <div>
+                              <p className="font-semibold text-sm">
+                                R$ {parcela.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                Vencimento: {parcela.data_vencimento.toLocaleDateString('pt-BR')}
+                              </p>
+                              {parcela.data_pagamento && (
+                                <p className="text-xs text-green-600">
+                                  Pago em: {parcela.data_pagamento.toLocaleDateString('pt-BR')}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge className={
+                            parcela.status === 'pago' ? 'bg-green-100 text-green-800' :
+                            parcela.status === 'vencido' ? 'bg-red-100 text-red-800' :
+                            'bg-yellow-100 text-yellow-800'
+                          }>
+                            {parcela.status === 'pago' ? 'Pago' : parcela.status === 'vencido' ? 'Vencido' : 'Pendente'}
+                          </Badge>
+                          {parcela.status !== 'pago' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="bg-green-50 hover:bg-green-100 text-green-700 border-green-300"
+                              onClick={() => marcarParcelaComoPaga(parcela)}
+                            >
+                              <CheckCircle className="h-4 w-4 mr-1" />
+                              Marcar como Paga
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => {
+              setShowDialogParcelas(false);
+              setContaSelecionadaParcelas(null);
+              setParcelas([]);
+            }}>
+              Fechar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Finalizar Pagamento */}
+      <Dialog open={showDialogFinalizarPagamento} onOpenChange={setShowDialogFinalizarPagamento}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-green-600" />
+              Finalizar Pagamento
+            </DialogTitle>
+            {contaParaFinalizar && (
+              <CardDescription>
+                {contaParaFinalizar.descricao} - Valor: R$ {contaParaFinalizar.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              </CardDescription>
+            )}
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label htmlFor="data-pagamento-final">Data de Pagamento *</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full justify-start text-left font-normal">
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {dataPagamentoFinal ? format(dataPagamentoFinal, "PPP", { locale: ptBR }) : "Selecione a data"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <CalendarComponent
+                    mode="single"
+                    selected={dataPagamentoFinal}
+                    onSelect={(date) => date && setDataPagamentoFinal(date)}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div>
+              <Label htmlFor="origem-pagamento">Origem do Pagamento *</Label>
+              <Select value={origemPagamentoFinal} onValueChange={(value) => setOrigemPagamentoFinal(value as OrigemPagamento)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Selecione a origem" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="caixa">
+                    <div className="flex items-center gap-2">
+                      <DollarSign className="h-4 w-4 text-blue-600" />
+                      <span>Caixa</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="banco">
+                    <div className="flex items-center gap-2">
+                      <Wallet className="h-4 w-4 text-green-600" />
+                      <span>Banco</span>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-gray-500 mt-1">
+                Selecione de onde o valor será debitado ao finalizar o pagamento
+              </p>
+            </div>
+            {contaParaFinalizar && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-sm text-blue-800 mb-2">
+                  <strong>Atenção:</strong> Ao finalizar o pagamento:
+                </p>
+                <ul className="text-xs text-blue-700 space-y-1 list-disc list-inside">
+                  <li>Todas as parcelas pendentes serão marcadas como pagas</li>
+                  <li>A conta será atualizada para status "Finalizado"</li>
+                  <li>O valor será debitado do {origemPagamentoFinal === 'caixa' ? 'Caixa' : 'Banco'}</li>
+                  <li>Uma nota de quitação será gerada automaticamente</li>
+                </ul>
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => {
+              setShowDialogFinalizarPagamento(false);
+              setContaParaFinalizar(null);
+              setOrigemPagamentoFinal('caixa'); // Reset para padrão
+            }}>
+              Cancelar
+            </Button>
+            <Button 
+              onClick={finalizarPagamento} 
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              <CheckCircle className="h-4 w-4 mr-2" />
+              Finalizar Pagamento
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <Dialog open={showDialogContaReceber} onOpenChange={(open) => {
         setShowDialogContaReceber(open);
         if (!open) {
@@ -3203,7 +4444,7 @@ Flexi Gestor - Controle de Estoque
                   />
                 </div>
                 {showClienteDropdown && (
-                  <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden max-h-60 overflow-y-auto">
+                  <div className="absolute z-[100] mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden max-h-60 overflow-y-auto">
                     {clientesFiltrados.length === 0 ? (
                       <div className="p-4 text-center text-sm text-gray-500">
                         {clientesUnicos.length === 0 
@@ -3216,7 +4457,13 @@ Flexi Gestor - Controle de Estoque
                           key={index}
                           type="button"
                           className="w-full px-4 py-2 text-left hover:bg-gray-100 focus:bg-gray-100 focus:outline-none border-b last:border-b-0 transition-colors"
-                          onClick={() => {
+                          onMouseDown={(e) => {
+                            e.preventDefault(); // Prevenir que o mousedown feche o dropdown antes do onClick
+                            e.stopPropagation();
+                          }}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
                             setFormContaReceber({ ...formContaReceber, cliente });
                             setClienteSearchTerm('');
                             setShowClienteDropdown(false);
