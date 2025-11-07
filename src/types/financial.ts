@@ -78,6 +78,7 @@ export interface ContaPagar {
   atualizado_em: Date;
   
   // Campos legados para compatibilidade
+  valor?: number; // Alias legado para valor_total
   descricao?: string; // Mapeado de observacoes
   data_compra?: Date; // Mapeado de lancamento
   data_registro?: Date; // Mapeado de lancamento
@@ -86,7 +87,7 @@ export interface ContaPagar {
   origem_pagamento?: OrigemPagamento; // Mapeado de conta_origem
   numero_parcelas?: number; // Mapeado de parcelas
   movimento_id?: string;
-  parcelas?: Parcela[]; // Array de parcelas detalhadas (quando necessário)
+  parcelasDetalhes?: Parcela[]; // Array de parcelas detalhadas (quando necessário)
 }
 
 /**
@@ -119,6 +120,8 @@ export interface ContaReceber {
   status?: AccountStatus; // Mapeado de status_recebimento
   categoria_dre?: DRECategory; // Mapeado de centro_custo
   movimento_id?: string;
+  numero_parcelas?: number; // Alias legado
+  parcelasDetalhes?: Parcela[]; // Detalhes de parcelas derivadas
 }
 
 /**

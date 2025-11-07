@@ -19,7 +19,7 @@ import { useData } from "@/contexts/DataContext";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
-import type { ContaPagar, OrigemPagamento } from "@/types/financial";
+import type { ContaPagar, ContaReceber, OrigemPagamento } from "@/types/financial";
 
 const Movimentacoes = () => {
   const { movements } = useData();
@@ -28,24 +28,83 @@ const Movimentacoes = () => {
   const [period, setPeriod] = useState<string>("todos");
   const [contasPagar, setContasPagar] = useState<ContaPagar[]>([]);
   const [loadingContas, setLoadingContas] = useState(false);
+  const [contasReceber, setContasReceber] = useState<ContaReceber[]>([]);
+  const [loadingReceber, setLoadingReceber] = useState(false);
+
+  // 👉 Determina se devemos tentar usar a tabela legada quando a nova não existir
+  const erroIndicaTabelaLegada = (error: any) => {
+    if (!error) return false;
+    return error.code === '42P01' || error.code === 'PGRST116' || error?.message?.includes('404');
+  };
 
   // Carregar contas a pagar para calcular saldos
   useEffect(() => {
+    if (!user?.id || !workspaceAtivo?.id) {
+      return;
+    }
+
+    // 👉 Busca contas pagas para debitar do caixa ou banco
     const carregarContasPagar = async () => {
-      if (!user?.id || !workspaceAtivo?.id) return;
-      
       setLoadingContas(true);
       try {
-        const { data, error } = await supabase
+        const contasMapeadas = new Map<string, ContaPagar>();
+
+        // ✅ Tenta carregar a nova tabela primeiro
+        const { data: dataNova, error: erroNova } = await supabase
+          .from('contas_a_pagar')
+          .select('*')
+          .eq('workspace_id', workspaceAtivo.id)
+          .order('data_pagamento', { ascending: false });
+
+        if (erroNova && !erroIndicaTabelaLegada(erroNova)) {
+          throw erroNova;
+        }
+
+        if (!erroNova) {
+          const contasNovas: ContaPagar[] = (dataNova || [])
+            .filter((c: any) => (c.status_pagamento === 'pago') || parseFloat(c.valor_pago) > 0)
+            .map((c: any) => ({
+              id: c.id,
+              descricao: c.observacoes || '',
+              valor: parseFloat(c.valor_total) || 0,
+              valor_pago: parseFloat(c.valor_pago) || 0,
+              valor_restante: parseFloat(c.valor_restante) || 0,
+              data_compra: c.lancamento ? new Date(c.lancamento) : new Date(c.criado_em),
+              data_registro: c.lancamento ? new Date(c.lancamento) : new Date(c.criado_em),
+              data_vencimento: new Date(c.data_vencimento),
+              data_pagamento: c.data_pagamento ? new Date(c.data_pagamento) : undefined,
+              status: c.status_pagamento === 'pago' ? 'finalizado' : 'pendente',
+              categoria_dre: c.centro_custo,
+              fornecedor: c.fornecedor || '',
+              forma_pagamento: c.forma_pagamento,
+              origem_pagamento: (c.conta_origem || c.origem_pagamento) as OrigemPagamento | undefined,
+              numero_parcelas: c.parcelas || 1,
+              observacoes: c.observacoes || '',
+              movimento_id: c.movimento_id || '',
+              usuario_id: c.usuario_id,
+              workspace_id: c.workspace_id,
+              criado_em: new Date(c.criado_em),
+              atualizado_em: new Date(c.atualizado_em)
+            }));
+
+          contasNovas.forEach((conta) => {
+            contasMapeadas.set(conta.id, conta);
+          });
+        }
+
+        // ✅ Carrega dados da tabela legada para garantir compatibilidade
+        const { data: dataLegada, error: erroLegado } = await supabase
           .from('contas_pagar')
           .select('*')
           .eq('workspace_id', workspaceAtivo.id)
           .in('status', ['pago', 'finalizado'])
           .order('data_pagamento', { ascending: false });
 
-        if (error) throw error;
+        if (erroLegado) {
+          throw erroLegado;
+        }
 
-        const contasFormatadas: ContaPagar[] = (data || []).map((c: any) => ({
+        const contasLegadas: ContaPagar[] = (dataLegada || []).map((c: any) => ({
           id: c.id,
           descricao: c.descricao,
           valor: parseFloat(c.valor) || 0,
@@ -59,7 +118,7 @@ const Movimentacoes = () => {
           categoria_dre: c.categoria_dre,
           fornecedor: c.fornecedor || '',
           forma_pagamento: c.forma_pagamento,
-          origem_pagamento: c.origem_pagamento as OrigemPagamento | undefined,
+          origem_pagamento: (c.origem_pagamento || c.conta_origem) as OrigemPagamento | undefined,
           numero_parcelas: c.numero_parcelas || 1,
           observacoes: c.observacoes || '',
           movimento_id: c.movimento_id || '',
@@ -69,7 +128,13 @@ const Movimentacoes = () => {
           atualizado_em: new Date(c.atualizado_em)
         }));
 
-        setContasPagar(contasFormatadas);
+        contasLegadas.forEach((conta) => {
+          if (!contasMapeadas.has(conta.id)) {
+            contasMapeadas.set(conta.id, conta);
+          }
+        });
+
+        setContasPagar(Array.from(contasMapeadas.values()));
       } catch (error) {
         console.error('Erro ao carregar contas a pagar:', error);
       } finally {
@@ -77,7 +142,111 @@ const Movimentacoes = () => {
       }
     };
 
+    // 👉 Busca contas recebidas para creditar no caixa ou banco
+    const carregarContasReceber = async () => {
+      setLoadingReceber(true);
+      try {
+        const contasMapeadas = new Map<string, ContaReceber>();
+
+        const { data: dataNova, error: erroNova } = await supabase
+          .from('contas_a_receber')
+          .select('*')
+          .eq('workspace_id', workspaceAtivo.id)
+          .order('data_recebimento', { ascending: false });
+
+        if (erroNova && !erroIndicaTabelaLegada(erroNova)) {
+          throw erroNova;
+        }
+
+        if (!erroNova) {
+          const contasNovas: ContaReceber[] = (dataNova || [])
+            .filter((c: any) => (c.status_recebimento === 'recebido') || parseFloat(c.valor_recebido) > 0)
+            .map((c: any) => ({
+              id: c.id,
+              lancamento: c.lancamento ? new Date(c.lancamento) : new Date(c.criado_em),
+              observacoes: c.observacoes || '',
+              forma_recebimento: c.forma_recebimento,
+              conta_destino: (c.conta_destino || c.origem_pagamento || 'caixa') as OrigemPagamento,
+              centro_custo: c.centro_custo || '',
+              cliente: c.cliente || '',
+              valor_total: parseFloat(c.valor_total) || 0,
+              valor_recebido: parseFloat(c.valor_recebido) || 0,
+              valor_restante: parseFloat(c.valor_restante) || 0,
+              parcelas: c.parcelas || 1,
+              parcelas_recebidas: c.parcelas_recebidas || 0,
+              data_vencimento: new Date(c.data_vencimento),
+              data_recebimento: c.data_recebimento ? new Date(c.data_recebimento) : undefined,
+              status_recebimento: c.status_recebimento,
+              workspace_id: c.workspace_id,
+              usuario_id: c.usuario_id,
+              criado_em: new Date(c.criado_em),
+              atualizado_em: new Date(c.atualizado_em),
+              descricao: c.observacoes || '',
+              valor: parseFloat(c.valor_total) || 0,
+              status: c.status_recebimento === 'recebido' ? 'pago' : 'pendente',
+              movimento_id: c.movimento_id || '',
+              numero_parcelas: c.parcelas || 1
+            }));
+
+          contasNovas.forEach(conta => {
+            contasMapeadas.set(conta.id, conta);
+          });
+        }
+
+        const { data: dataLegada, error: erroLegado } = await supabase
+          .from('contas_receber')
+          .select('*')
+          .eq('workspace_id', workspaceAtivo.id)
+          .in('status', ['pago', 'finalizado'])
+          .order('data_recebimento', { ascending: false });
+
+        if (erroLegado) {
+          throw erroLegado;
+        }
+
+        const contasLegadas: ContaReceber[] = (dataLegada || []).map((c: any) => ({
+          id: c.id,
+          lancamento: new Date(c.criado_em),
+          observacoes: c.observacoes || c.descricao || '',
+          forma_recebimento: 'dinheiro',
+          conta_destino: (c.origem_pagamento || 'caixa') as OrigemPagamento,
+          centro_custo: c.categoria_dre || '',
+          cliente: c.cliente || '',
+          valor_total: parseFloat(c.valor) || 0,
+          valor_recebido: parseFloat(c.valor) || 0,
+          valor_restante: 0,
+          parcelas: 1,
+          parcelas_recebidas: 1,
+          data_vencimento: new Date(c.data_vencimento),
+          data_recebimento: c.data_recebimento ? new Date(c.data_recebimento) : undefined,
+          status_recebimento: 'recebido',
+          workspace_id: c.workspace_id,
+          usuario_id: c.usuario_id,
+          criado_em: new Date(c.criado_em),
+          atualizado_em: new Date(c.atualizado_em),
+          descricao: c.descricao || '',
+          valor: parseFloat(c.valor) || 0,
+          status: 'pago',
+          movimento_id: c.movimento_id || '',
+          numero_parcelas: 1
+        }));
+
+        contasLegadas.forEach(conta => {
+          if (!contasMapeadas.has(conta.id)) {
+            contasMapeadas.set(conta.id, conta);
+          }
+        });
+
+        setContasReceber(Array.from(contasMapeadas.values()));
+      } catch (error) {
+        console.error('Erro ao carregar contas a receber:', error);
+      } finally {
+        setLoadingReceber(false);
+      }
+    };
+
     carregarContasPagar();
+    carregarContasReceber();
   }, [user?.id, workspaceAtivo?.id]);
 
   // Função para filtrar movimentações por período
@@ -129,6 +298,24 @@ const Movimentacoes = () => {
     });
   }, [contasPagar, period]);
 
+  const contasRecebidasPeriodo = useMemo(() => {
+    if (period === "todos") return contasReceber;
+
+    const now = new Date();
+    return contasReceber.filter(c => {
+      if (!c.data_recebimento) return false;
+      const dataRecebimento = new Date(c.data_recebimento);
+
+      if (period === "mes") {
+        return dataRecebimento.getMonth() === now.getMonth() &&
+               dataRecebimento.getFullYear() === now.getFullYear();
+      } else if (period === "ano") {
+        return dataRecebimento.getFullYear() === now.getFullYear();
+      }
+      return true;
+    });
+  }, [contasReceber, period]);
+
   // Calcular valores debitados do caixa e banco
   const totalDebitadoCaixa = useMemo(() => {
     return contasPagasPeriodo
@@ -142,12 +329,24 @@ const Movimentacoes = () => {
       .reduce((sum, c) => sum + c.valor_pago, 0);
   }, [contasPagasPeriodo]);
 
+  const totalRecebidoCaixa = useMemo(() => {
+    return contasRecebidasPeriodo
+      .filter(c => c.conta_destino === 'caixa')
+      .reduce((sum, c) => sum + c.valor_recebido, 0);
+  }, [contasRecebidasPeriodo]);
+
+  const totalRecebidoBanco = useMemo(() => {
+    return contasRecebidasPeriodo
+      .filter(c => c.conta_destino === 'banco')
+      .reduce((sum, c) => sum + c.valor_recebido, 0);
+  }, [contasRecebidasPeriodo]);
+
   // Calcular saldos reais
   // Caixa: Receitas de vendas - Contas pagas do caixa
-  const saldoCaixa = totalSaidas - totalDebitadoCaixa;
+  const saldoCaixa = (totalSaidas + totalRecebidoCaixa) - totalDebitadoCaixa;
   
   // Banco: Lucro líquido - Contas pagas do banco
-  const saldoBanco = lucroBruto - totalDebitadoBanco;
+  const saldoBanco = (lucroBruto + totalRecebidoBanco) - totalDebitadoBanco;
 
   // Estatísticas
   const totalMovements = periodMovements.length;
@@ -297,7 +496,8 @@ const Movimentacoes = () => {
                       </Badge>
                     </div>
                     <div className="text-xs text-gray-600 mt-2 space-y-1">
-                      <p className="font-medium">Receitas: R$ {totalSaidas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                      <p className="font-medium">Receitas registradas: R$ {totalSaidas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                      <p className="font-medium">Recebimentos de contas: R$ {totalRecebidoCaixa.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                       <p className="opacity-75">Pagamentos do Caixa: R$ {totalDebitadoCaixa.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                     </div>
                   </div>
@@ -358,7 +558,7 @@ const Movimentacoes = () => {
                   </div>
 
                   {/* Detalhamento */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="bg-white/60 rounded-lg p-4 border border-emerald-200">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-sm font-medium text-emerald-700">Lucro Líquido</span>
@@ -382,6 +582,18 @@ const Movimentacoes = () => {
                       </div>
                       <p className="text-xs text-gray-600 mt-1">
                         Contas pagas do banco
+                      </p>
+                    </div>
+                    <div className="bg-white/60 rounded-lg p-4 border border-blue-200">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-blue-700">Recebimentos no Banco</span>
+                        <TrendingUp className="h-4 w-4 text-blue-600" />
+                      </div>
+                      <div className="text-2xl font-bold text-blue-700">
+                        R$ {totalRecebidoBanco.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </div>
+                      <p className="text-xs text-gray-600 mt-1">
+                        Contas recebidas creditadas no banco
                       </p>
                     </div>
                   </div>

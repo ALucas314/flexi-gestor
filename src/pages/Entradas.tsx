@@ -527,13 +527,14 @@ const Entradas = () => {
             .filter((d): d is Date => d !== undefined)
             .sort((a, b) => a.getTime() - b.getTime())[0];
 
+          // 👉 Incluímos o nome do produto na descrição para facilitar a identificação da movimentação
           const movement = await addMovement({
             type: 'entrada',
             productId: item.productId,
             productName: item.productName,
             quantity: totalQuantity,
             unitPrice: averageCost,
-            description: `Entrada de ${totalQuantity} unidades em ${item.batches.length} lote(s) - ${supplier}` 
+            description: `Entrada de ${totalQuantity} unidades de ${item.productName} em ${item.batches.length} lote(s) - ${supplier}` 
               + (minManu ? ` | FAB:${minManu.toISOString().split('T')[0]}` : '')
               + (minExpiry ? ` | EXP:${minExpiry.toISOString().split('T')[0]}` : ''),
             date: entryDate,
@@ -560,7 +561,8 @@ const Entradas = () => {
           const manufactureDate = item.manufactureDate || formData.manufactureDate;
           const expiryDate = item.expiryDate || formData.expiryDate;
           
-          let description = `Entrada de ${item.quantity} unidades - ${supplier}`;
+          // 👉 Descrição agora inclui nome do produto quando não há lotes vinculados
+          let description = `Entrada de ${item.quantity} unidades de ${item.productName} - ${supplier}`;
           if (manufactureDate) {
             const fabDate = manufactureDate instanceof Date ? manufactureDate.toISOString().split('T')[0] : manufactureDate;
             description += ` | FAB:${fabDate}`;

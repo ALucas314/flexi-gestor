@@ -20,14 +20,39 @@ body {
   }
 }
 
-/* Esconder scrollbar em todos os elementos */
-* {
+/* Esconder scrollbar em todos os elementos, exceto quando usarmos a classe de exibição */
+*:not(.show-scrollbar) {
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* Internet Explorer 10+ */
 }
 
-*::-webkit-scrollbar {
+*:not(.show-scrollbar)::-webkit-scrollbar {
   display: none; /* Chrome, Safari, Opera */
+}
+
+/* Classe utilitária para centralizar a rolagem horizontal quando quisermos mostrar a barra */
+.show-scrollbar {
+  scrollbar-width: thin; /* Reabilita a scrollbar em Firefox */
+  -ms-overflow-style: auto; /* Reabilita a scrollbar em Edge/IE */
+}
+
+.show-scrollbar::-webkit-scrollbar {
+  display: block; /* Garante que a barra reapareça em navegadores WebKit */
+  height: 8px; /* Altura da barra horizontal */
+}
+
+.show-scrollbar::-webkit-scrollbar-track {
+  background: rgba(148, 163, 184, 0.15); /* Fundo suave do trilho */
+  border-radius: 9999px;
+}
+
+.show-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(71, 85, 105, 0.45); /* Cor do puxador */
+  border-radius: 9999px;
+}
+
+.show-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: rgba(71, 85, 105, 0.65); /* Destaque no hover */
 }
 
 /* CSS Custom Properties para personalização - Design System DigitalCraft */
