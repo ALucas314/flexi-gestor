@@ -4403,7 +4403,7 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
                 </div>
               ) : (
                 <>
-                  <div className="flex items-center gap-2 text-xs text-slate-500 mb-2">
+                  <div className="flex items-center justify-between gap-2 text-xs text-slate-500 mb-2">
                     <div className="flex items-center gap-2">
                       <ArrowRightLeft className="h-4 w-4" />
                       <span>Use as setas para navegar pelas colunas disponíveis.</span>
