@@ -36,7 +36,9 @@ import {
   Tag,
   ShoppingCart,
   FileText,
-  ArrowRightLeft
+  ArrowRightLeft,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import { useData } from "@/contexts/DataContext";
 import { useResponsive } from "@/hooks/use-responsive";
@@ -137,13 +139,143 @@ const Financeiro = () => {
   const [contaReceberEditando, setContaReceberEditando] = useState<ContaReceber | null>(null);
 
   // 👉 Referências para sincronizar rolagem horizontal das tabelas com barra superior
-  const scrollContasPagarTopRef = useRef<HTMLDivElement | null>(null);
   const scrollContasPagarBodyRef = useRef<HTMLDivElement | null>(null);
   const sincronizandoContasPagar = useRef(false);
 
-  const scrollContasReceberTopRef = useRef<HTMLDivElement | null>(null);
   const scrollContasReceberBodyRef = useRef<HTMLDivElement | null>(null);
   const sincronizandoContasReceber = useRef(false);
+  const [contasPagarOverflowing, setContasPagarOverflowing] = useState(false);
+  const [contasReceberOverflowing, setContasReceberOverflowing] = useState(false);
+
+  const scrollToTableEdge = useCallback((container: HTMLDivElement | null, position: 'start' | 'end') => {
+    if (!container) return;
+
+    const selector =
+      position === 'end'
+        ? 'table thead tr th:last-child, table tbody tr td:last-child'
+        : 'table thead tr th:first-child, table tbody tr td:first-child';
+
+    const targetCell = container.querySelector<HTMLElement>(selector);
+    if (targetCell) {
+      targetCell.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+        inline: position === 'end' ? 'end' : 'start',
+      });
+      return;
+    }
+
+    const goal = position === 'end'
+      ? Math.max(container.scrollWidth - container.clientWidth, 0)
+      : 0;
+
+    container.scrollTo({
+      left: goal,
+      behavior: 'smooth',
+    });
+  }, []);
+
+  useEffect(() => {
+    const bodyEl = scrollContasPagarBodyRef.current;
+    if (!bodyEl) {
+      return;
+    }
+
+    let frameId: number | null = null;
+
+    const updateMetrics = () => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+      frameId = window.requestAnimationFrame(() => {
+        const scrollWidth = bodyEl.scrollWidth;
+        const clientWidth = bodyEl.clientWidth;
+        const isOverflowing = scrollWidth - clientWidth > 1;
+        setContasPagarOverflowing(isOverflowing);
+      });
+    };
+
+    const handleBodyScroll = () => {
+      if (sincronizandoContasPagar.current) return;
+      sincronizandoContasPagar.current = true;
+      sincronizandoContasPagar.current = false;
+    };
+
+    bodyEl.addEventListener('scroll', handleBodyScroll);
+
+    updateMetrics();
+
+    let resizeObserver: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => updateMetrics());
+      resizeObserver.observe(bodyEl);
+    } else {
+      window.addEventListener('resize', updateMetrics);
+    }
+
+    return () => {
+      bodyEl.removeEventListener('scroll', handleBodyScroll);
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      } else {
+        window.removeEventListener('resize', updateMetrics);
+      }
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+    };
+  }, [contasPagar, isMobile]);
+
+  useEffect(() => {
+    const bodyEl = scrollContasReceberBodyRef.current;
+    if (!bodyEl) {
+      return;
+    }
+
+    let frameId: number | null = null;
+
+    const updateMetrics = () => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+      frameId = window.requestAnimationFrame(() => {
+        const scrollWidth = bodyEl.scrollWidth;
+        const clientWidth = bodyEl.clientWidth;
+        const isOverflowing = scrollWidth - clientWidth > 1;
+        setContasReceberOverflowing(isOverflowing);
+      });
+    };
+
+    const handleBodyScroll = () => {
+      if (sincronizandoContasReceber.current) return;
+      sincronizandoContasReceber.current = true;
+      sincronizandoContasReceber.current = false;
+    };
+
+    bodyEl.addEventListener('scroll', handleBodyScroll);
+
+    updateMetrics();
+
+    let resizeObserver: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => updateMetrics());
+      resizeObserver.observe(bodyEl);
+    } else {
+      window.addEventListener('resize', updateMetrics);
+    }
+
+    return () => {
+      bodyEl.removeEventListener('scroll', handleBodyScroll);
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      } else {
+        window.removeEventListener('resize', updateMetrics);
+      }
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+    };
+  }, [contasReceber, isMobile]);
   
   const createInitialFormContaPagar = (): FormContaPagarState => ({
     lancamento: new Date(),
@@ -224,6 +356,13 @@ const Financeiro = () => {
   const [contaParaFinalizar, setContaParaFinalizar] = useState<ContaPagar | null>(null);
   const [dataPagamentoFinal, setDataPagamentoFinal] = useState<Date>(new Date());
   const [origemPagamentoFinal, setOrigemPagamentoFinal] = useState<OrigemPagamento>('caixa');
+
+  // Estado para confirmação de recebimento
+  const [showDialogReceberConta, setShowDialogReceberConta] = useState(false);
+  const [contaParaReceber, setContaParaReceber] = useState<ContaReceber | null>(null);
+  const [dataRecebimentoFinal, setDataRecebimentoFinal] = useState<Date>(new Date());
+  const [contaDestinoRecebimento, setContaDestinoRecebimento] = useState<OrigemPagamento>('caixa');
+  const [valorRecebimentoFinal, setValorRecebimentoFinal] = useState<number>(0);
 
   // Função para abrir a receita de uma movimentação (saída)
   const openReceipt = (movement: any) => {
@@ -957,7 +1096,7 @@ Flexi Gestor - Controle de Estoque
   // 👉 Determina se o erro retornado pelo Supabase indica a necessidade de tentar a tabela legada
   const erroIndicaTabelaLegada = (error: any) => {
     if (!error) return false;
-    return error.code === '42P01' || error.code === 'PGRST116' || error?.message?.includes('404');
+    return error.code === '42P01' || error.code === 'PGRST116' || error.code === 'PGRST301' || error?.message?.includes('404') || error?.message?.toLowerCase?.().includes('schema cache');
   };
 
   // 👉 Atualiza uma conta a pagar respeitando a coexistência das tabelas nova (contas_a_pagar) e legada (contas_pagar)
@@ -1020,6 +1159,11 @@ Flexi Gestor - Controle de Estoque
     return conta.id?.startsWith('mov-');
   };
 
+  const isContaReceberDerivada = (conta?: ContaReceber | null) => {
+    if (!conta) return false;
+    return conta.id?.startsWith('mov-');
+  };
+
   // 👉 Cria uma conta real no banco a partir de uma conta derivada das movimentações
   const criarContaPagarReal = async (conta: ContaPagar): Promise<ContaPagar> => {
     if (!user?.id || !workspaceAtivo?.id) {
@@ -1061,6 +1205,7 @@ Flexi Gestor - Controle de Estoque
       status_pagamento: conta.status_pagamento || 'pendente',
       workspace_id: workspaceAtivo.id,
       usuario_id: user.id,
+      movimento_id: conta.movimento_id || null,
     };
 
     const dadosContaLegado = {
@@ -1110,6 +1255,7 @@ Flexi Gestor - Controle de Estoque
           status: conta.status || 'pendente',
           conta_origem: dadosContaNovo.conta_origem,
           origem_pagamento: dadosContaLegado.origem_pagamento as OrigemPagamento,
+          movimento_id: conta.movimento_id,
         } satisfies ContaPagar;
       }
     } catch (error) {
@@ -1142,7 +1288,132 @@ Flexi Gestor - Controle de Estoque
       status: conta.status || 'pendente',
       conta_origem: dadosContaLegado.origem_pagamento as OrigemPagamento,
       origem_pagamento: dadosContaLegado.origem_pagamento as OrigemPagamento,
+      movimento_id: conta.movimento_id,
     } satisfies ContaPagar;
+  };
+
+  const criarContaReceberReal = async (conta: ContaReceber): Promise<ContaReceber> => {
+    if (!user?.id || !workspaceAtivo?.id) {
+      throw new Error('Não foi possível identificar o usuário ou o workspace ativo para salvar a conta.');
+    }
+
+    const descricao = conta.observacoes || conta.descricao || 'Conta gerada a partir das movimentações de estoque';
+    const valorTotal = conta.valor_total ?? conta.valor ?? 0;
+    const valorRecebido = conta.valor_recebido ?? 0;
+    const valorRestante = conta.valor_restante ?? Math.max(valorTotal - valorRecebido, 0);
+    const numeroParcelas = conta.parcelas || conta.numero_parcelas || 1;
+
+    const obterData = (valor: any, fallback: Date) => {
+      if (valor instanceof Date) return valor;
+      if (!valor) return fallback;
+      const data = new Date(valor);
+      return Number.isNaN(data.getTime()) ? fallback : data;
+    };
+
+    const dataLancamento = obterData(conta.lancamento, new Date());
+    const dataVencimento = obterData(conta.data_vencimento, dataLancamento);
+    const dataRecebimentoExistente = conta.data_recebimento ? obterData(conta.data_recebimento, dataVencimento) : null;
+
+    const dadosContaNovo = {
+      lancamento: dataLancamento.toISOString().split('T')[0],
+      observacoes: descricao,
+      forma_recebimento: conta.forma_recebimento || 'dinheiro',
+      conta_destino: conta.conta_destino || 'caixa',
+      centro_custo: conta.centro_custo || conta.categoria_dre || null,
+      cliente: conta.cliente || '',
+      valor_total: valorTotal,
+      valor_recebido: valorRecebido,
+      valor_restante: valorRestante,
+      parcelas: numeroParcelas,
+      parcelas_recebidas: conta.parcelas_recebidas || 0,
+      data_vencimento: dataVencimento.toISOString().split('T')[0],
+      data_recebimento: dataRecebimentoExistente ? dataRecebimentoExistente.toISOString().split('T')[0] : null,
+      status_recebimento: conta.status_recebimento || 'pendente',
+      workspace_id: workspaceAtivo.id,
+      usuario_id: user.id,
+      movimento_id: conta.movimento_id || null,
+    };
+
+    const dadosContaLegado = {
+      descricao,
+      valor: valorTotal,
+      valor_recebido: valorRecebido,
+      valor_restante: valorRestante,
+      data_vencimento: dataVencimento.toISOString(),
+      status: conta.status || 'pendente',
+      categoria_dre: conta.categoria_dre || conta.centro_custo || null,
+      cliente: conta.cliente || '',
+      observacoes: descricao,
+      movimento_id: conta.movimento_id || null,
+      usuario_id: workspaceAtivo.id,
+      workspace_id: workspaceAtivo.id
+    };
+
+    try {
+      const { data, error } = await supabase
+        .from('contas_a_receber')
+        .insert([dadosContaNovo])
+        .select()
+        .single();
+
+      if (error) {
+        if (!erroIndicaTabelaLegada(error)) {
+          throw error;
+        }
+      } else if (data) {
+        return {
+          ...conta,
+          id: data.id,
+          valor_total: valorTotal,
+          valor: valorTotal,
+          valor_recebido: valorRecebido,
+          valor_restante: valorRestante,
+          parcelas: numeroParcelas,
+          parcelas_recebidas: conta.parcelas_recebidas || 0,
+          data_vencimento: dataVencimento,
+          data_recebimento: dataRecebimentoExistente || undefined,
+          status_recebimento: dadosContaNovo.status_recebimento,
+          status: conta.status || 'pendente',
+          conta_destino: dadosContaNovo.conta_destino,
+          workspace_id: workspaceAtivo.id,
+          usuario_id: user.id,
+          movimento_id: conta.movimento_id,
+        } satisfies ContaReceber;
+      }
+    } catch (error) {
+      console.error('Erro ao inserir conta na tabela contas_a_receber:', error);
+      throw error;
+    }
+
+    const { data: dataLegado, error: erroLegado } = await supabase
+      .from('contas_receber')
+      .insert([dadosContaLegado])
+      .select()
+      .single();
+
+    if (erroLegado) {
+      console.error('Erro ao inserir conta na tabela contas_receber:', erroLegado);
+      throw erroLegado;
+    }
+
+    return {
+      ...conta,
+      id: dataLegado.id,
+      valor_total: valorTotal,
+      valor: valorTotal,
+      valor_recebido: valorRecebido,
+      valor_restante: valorRestante,
+      parcelas: numeroParcelas,
+      parcelas_recebidas: conta.parcelas_recebidas || 0,
+      data_vencimento: dataVencimento,
+      data_recebimento: dataRecebimentoExistente || undefined,
+      status_recebimento: conta.status_recebimento || 'pendente',
+      status: conta.status || 'pendente',
+      conta_destino: conta.conta_destino || 'caixa',
+      workspace_id: workspaceAtivo.id,
+      usuario_id: user.id,
+      movimento_id: conta.movimento_id,
+    } satisfies ContaReceber;
   };
 
   const criarChaveConta = (descricao: string | undefined, valorTotal: number, dataVencimento: Date) => {
@@ -1223,14 +1494,19 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
     const parcelasDetalhadas = gerarParcelasPlaceholder(contaId, valorTotal, parcelas, baseDate);
     const primeiroVencimento = parcelasDetalhadas.length > 0 ? parcelasDetalhadas[0].data_vencimento : baseDate;
 
+    const produto = mov.productName || 'Produto';
+    const fornecedor = extrairTextoFinal(mov.description) || 'Fornecedor';
+    const descricaoConta = `Compra parcelada - ${produto}`;
+    const observacoesConta = mov.description || `Compra parcelada de ${mov.quantity} unidade(s) de ${produto} com ${fornecedor}`;
+
     return {
       id: contaId,
       lancamento: baseDate,
-      observacoes: mov.description || `Compra parcelada vinculada ao movimento ${mov.id}`,
+      observacoes: observacoesConta,
       forma_pagamento: 'parcelado',
       conta_origem: 'caixa',
       centro_custo: '',
-      fornecedor: extrairTextoFinal(mov.description) || 'Fornecedor não informado',
+      fornecedor: fornecedor || 'Fornecedor não informado',
       valor_total: valorTotal,
       valor: valorTotal,
       valor_pago: 0,
@@ -1244,7 +1520,7 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
       usuario_id: user?.id || 'usuario-local',
       criado_em: baseDate,
       atualizado_em: baseDate,
-      descricao: mov.description || `Compra parcelada - ${mov.productName || 'Produto'}`,
+      descricao: descricaoConta,
       data_compra: baseDate,
       data_registro: baseDate,
       status: 'pendente',
@@ -1267,10 +1543,15 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
     const primeiroVencimento = new Date(baseDate);
     primeiroVencimento.setMonth(primeiroVencimento.getMonth());
 
+    const produto = mov.productName || 'Produto';
+    const cliente = extrairTextoFinal(mov.description) || 'Cliente';
+    const descricaoConta = `Venda parcelada - ${produto}`;
+    const observacoesConta = mov.description || `Venda parcelada de ${mov.quantity} unidade(s) de ${produto} para ${cliente}`;
+
     return {
       id: `mov-${mov.id}`,
       lancamento: baseDate,
-      observacoes: mov.description || `Venda parcelada vinculada ao movimento ${mov.id}`,
+      observacoes: observacoesConta,
       forma_recebimento: 'parcelado',
       conta_destino: 'caixa',
       centro_custo: '',
@@ -1288,7 +1569,7 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
       usuario_id: user?.id || 'usuario-local',
       criado_em: baseDate,
       atualizado_em: baseDate,
-      descricao: mov.description || `Venda parcelada - ${mov.productName || 'Produto'}`,
+      descricao: descricaoConta,
       status: 'pendente',
       categoria_dre: undefined,
       movimento_id: mov.id,
@@ -1306,6 +1587,10 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
         const chave = criarChaveConta(conta.descricao, conta.valor_total ?? conta.valor ?? 0, conta.data_vencimento);
         chavesExistentes.add(chave);
       }
+      if (conta.fornecedor && conta.data_vencimento) {
+        const chaveFornecedor = `${conta.fornecedor.trim().toLowerCase()}|${Number((conta.valor_total ?? conta.valor ?? 0).toFixed(2))}|${conta.data_vencimento.toISOString().split('T')[0]}`;
+        chavesExistentes.add(chaveFornecedor);
+      }
     });
 
     const derivadas: ContaPagar[] = [];
@@ -1319,10 +1604,20 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
 
         const chaveMovimento = `mov-${contaDerivada.movimento_id}`;
         const chaveDescricao = criarChaveConta(contaDerivada.descricao, contaDerivada.valor_total, contaDerivada.data_vencimento);
+        const chaveFornecedor = contaDerivada.fornecedor && contaDerivada.data_vencimento
+          ? `${contaDerivada.fornecedor.trim().toLowerCase()}|${Number((contaDerivada.valor_total ?? contaDerivada.valor ?? 0).toFixed(2))}|${contaDerivada.data_vencimento.toISOString().split('T')[0]}`
+          : null;
 
-        if (!chavesExistentes.has(chaveMovimento) && !chavesExistentes.has(chaveDescricao)) {
+        if (
+          !chavesExistentes.has(chaveMovimento) &&
+          !chavesExistentes.has(chaveDescricao) &&
+          (!chaveFornecedor || !chavesExistentes.has(chaveFornecedor))
+        ) {
           chavesExistentes.add(chaveMovimento);
           chavesExistentes.add(chaveDescricao);
+          if (chaveFornecedor) {
+            chavesExistentes.add(chaveFornecedor);
+          }
           derivadas.push(contaDerivada);
         }
       });
@@ -1344,6 +1639,10 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
         const chave = criarChaveConta(conta.descricao, conta.valor_total ?? conta.valor ?? 0, conta.data_vencimento);
         chavesExistentes.add(chave);
       }
+      if (conta.cliente && conta.data_vencimento) {
+        const chaveCliente = `${conta.cliente.trim().toLowerCase()}|${Number((conta.valor_total ?? conta.valor ?? 0).toFixed(2))}|${conta.data_vencimento.toISOString().split('T')[0]}`;
+        chavesExistentes.add(chaveCliente);
+      }
     });
 
     const derivadas: ContaReceber[] = [];
@@ -1357,10 +1656,20 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
 
         const chaveMovimento = `mov-${contaDerivada.movimento_id}`;
         const chaveDescricao = criarChaveConta(contaDerivada.descricao, contaDerivada.valor_total, contaDerivada.data_vencimento);
+        const chaveCliente = contaDerivada.cliente && contaDerivada.data_vencimento
+          ? `${contaDerivada.cliente.trim().toLowerCase()}|${Number((contaDerivada.valor_total ?? contaDerivada.valor ?? 0).toFixed(2))}|${contaDerivada.data_vencimento.toISOString().split('T')[0]}`
+          : null;
 
-        if (!chavesExistentes.has(chaveMovimento) && !chavesExistentes.has(chaveDescricao)) {
+        if (
+          !chavesExistentes.has(chaveMovimento) &&
+          !chavesExistentes.has(chaveDescricao) &&
+          (!chaveCliente || !chavesExistentes.has(chaveCliente))
+        ) {
           chavesExistentes.add(chaveMovimento);
           chavesExistentes.add(chaveDescricao);
+          if (chaveCliente) {
+            chavesExistentes.add(chaveCliente);
+          }
           derivadas.push(contaDerivada);
         }
       });
@@ -1511,7 +1820,7 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
         categoria_dre: c.centro_custo as DRECategory | undefined,
         origem_pagamento: c.conta_origem as OrigemPagamento | undefined,
         numero_parcelas: c.parcelas || 1,
-        movimento_id: '',
+        movimento_id: c.movimento_id || '',
         parcelasDetalhes: []
       }));
 
@@ -1646,7 +1955,7 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
         valor: parseFloat(c.valor_total) || 0,
         status: (c.status_recebimento === 'recebido' ? 'pago' : 'pendente') as AccountStatus,
         categoria_dre: c.centro_custo as DRECategory | undefined,
-        movimento_id: ''
+        movimento_id: c.movimento_id || ''
       }));
 
       console.log('✅ Contas formatadas:', contasFormatadas.length, 'contas');
@@ -1891,21 +2200,148 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
     }
   };
 
-  const marcarContaComoRecebida = async (conta: ContaReceber) => {
-    try {
-      const { error } = await supabase
-        .from('contas_receber')
-        .update({ 
-          status: 'pago',
-          data_recebimento: new Date().toISOString()
-        })
-        .eq('id', conta.id);
+  const marcarContaComoRecebida = async (
+    conta: ContaReceber,
+    dataRecebimento: Date,
+    contaDestino: OrigemPagamento,
+    valorRecebido: number
+  ) => {
+    let contaProcessada = conta;
 
-      if (error) throw error;
+    if (isContaReceberDerivada(conta)) {
+      contaProcessada = await criarContaReceberReal(conta);
+    }
+
+    if (contaProcessada.status_recebimento === 'recebido') {
+      toast.error('Esta conta já está marcada como recebida.');
+      return;
+    }
+
+    try {
+      if (!dataRecebimento || Number.isNaN(dataRecebimento.getTime())) {
+        throw new Error('Informe uma data de recebimento válida.');
+      }
+
+      const valorEfetivo = valorRecebido > 0 ? valorRecebido : (contaProcessada.valor_total || contaProcessada.valor || 0);
+      if (valorEfetivo <= 0) {
+        throw new Error('Informe um valor recebido maior que zero.');
+      }
+
+      const dadosAtualizacaoNova = {
+        status_recebimento: 'recebido',
+        data_recebimento: dataRecebimento.toISOString().split('T')[0],
+        valor_recebido: valorEfetivo,
+        valor_restante: 0,
+        parcelas_recebidas: contaProcessada.parcelas || contaProcessada.numero_parcelas || 1,
+        conta_destino: contaDestino || contaProcessada.conta_destino || 'caixa'
+      };
+
+      const dadosAtualizacaoLegado = {
+        status: 'pago' as AccountStatus,
+        data_recebimento: dataRecebimento.toISOString(),
+        valor: valorEfetivo,
+        valor_recebido: valorEfetivo,
+        valor_restante: 0,
+        origem_pagamento: contaDestino || contaProcessada.conta_destino || 'caixa'
+      };
+
+      let atualizado = false;
+
+      const atualizarTabela = async (tableName: string, dados: Record<string, any>) => {
+        const usarWorkspace = contaProcessada.workspace_id ? true : false;
+        const equivalenciaValor = dados.valor_total ?? dados.valor ?? valorEfetivo;
+
+        const filtros = usarWorkspace
+          ? [
+              supabase.from(tableName).update(dados).eq('id', contaProcessada.id).eq('workspace_id', contaProcessada.workspace_id)
+            ]
+          : [
+              supabase.from(tableName).update(dados).eq('id', contaProcessada.id),
+              supabase.from(tableName).update(dados).eq('workspace_id', workspaceAtivo?.id || '').eq('valor_total', equivalenciaValor).eq('descricao', contaProcessada.descricao || contaProcessada.observacoes || '')
+            ];
+
+        for (const consulta of filtros) {
+          const { error, data } = await consulta.select().maybeSingle();
+
+          if (!error && data) {
+            atualizado = true;
+            return;
+          }
+
+          if (error) {
+            if (erroIndicaTabelaLegada(error) || error.code === '42P01') {
+              return 'missing_table';
+            }
+
+            if (error.message?.includes('workspace_id') || error.code === '42703') {
+              // repetir usando usuario_id
+              const { error: fallbackError, data: fallbackData } = await supabase
+                .from(tableName)
+                .update(dados)
+                .eq('id', contaProcessada.id)
+                .eq('usuario_id', contaProcessada.usuario_id || workspaceAtivo?.id || user?.id || '');
+
+              if (!fallbackError && fallbackData) {
+                atualizado = true;
+                return;
+              }
+
+              if (fallbackError && (erroIndicaTabelaLegada(fallbackError) || fallbackError.code === '42P01')) {
+                return 'missing_table';
+              }
+
+              if (fallbackError) {
+                throw fallbackError;
+              }
+
+              return;
+            }
+
+            throw error;
+          }
+        }
+      };
+
+      // Tenta atualizar tabela nova
+      const resultadoNova = await atualizarTabela('contas_a_receber', dadosAtualizacaoNova);
+
+      if (resultadoNova === 'missing_table' || !atualizado) {
+        const resultadoLegado = await atualizarTabela('contas_receber', dadosAtualizacaoLegado);
+        if (resultadoLegado === 'missing_table' && !atualizado) {
+          throw new Error('Nenhuma tabela de contas a receber disponível para atualização.');
+        }
+      }
+
+      if (!atualizado) {
+        throw new Error('Não foi possível atualizar a conta a receber.');
+      }
+
       toast.success('Conta marcada como recebida!');
       await carregarContasReceber();
     } catch (error: any) {
+      console.error('Erro ao marcar conta como recebida:', error);
       toast.error(error.message || 'Erro ao marcar conta como recebida');
+    }
+  };
+
+  const confirmarRecebimento = async () => {
+    if (!contaParaReceber) return;
+
+    try {
+      await marcarContaComoRecebida(
+        contaParaReceber,
+        dataRecebimentoFinal,
+        contaDestinoRecebimento,
+        valorRecebimentoFinal
+      );
+      setShowDialogReceberConta(false);
+      setContaParaReceber(null);
+      setValorRecebimentoFinal(0);
+      setDataRecebimentoFinal(new Date());
+      setContaDestinoRecebimento('caixa');
+    } catch (error: any) {
+      // toast já tratado na função, apenas garantir que o estado não feche se falhar
+      console.error('Erro ao confirmar recebimento:', error);
     }
   };
 
@@ -3692,14 +4128,46 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
                 </div>
               ) : (
                 <>
-                  <div className="flex items-center gap-2 text-xs text-slate-500 mb-2">
-                    <ArrowRightLeft className="h-4 w-4" />
-                    <span>Os detalhes extras aparecem na coluna "Detalhes" em telas menores.</span>
+                  <div className="flex items-center justify-between gap-2 text-xs text-slate-500 mb-2">
+                    <div className="flex items-center gap-2">
+                      <ArrowRightLeft className="h-4 w-4" />
+                      <span>
+                        Use as setas para navegar pelas colunas. Os detalhes extras aparecem na coluna "Detalhes" em telas menores.
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        className="h-9 w-9 rounded-full border-slate-300 text-slate-500 hover:text-slate-700 hover:border-slate-400 transition-colors"
+                        onClick={() => {
+                          scrollToTableEdge(scrollContasPagarBodyRef.current, 'start');
+                        }}
+                        aria-label="Mostrar início da tabela"
+                      >
+                        <ChevronLeft className="h-5 w-5" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        className="h-9 w-9 rounded-full border-slate-300 text-slate-500 hover:text-slate-700 hover:border-slate-400 transition-colors"
+                        onClick={() => {
+                          scrollToTableEdge(scrollContasPagarBodyRef.current, 'end');
+                        }}
+                        aria-label="Mostrar final da tabela"
+                      >
+                        <ChevronRight className="h-5 w-5" />
+                      </Button>
+                    </div>
                   </div>
                   {/* 👉 Container principal da tabela; agora priorizamos o ajuste fluido ao invés da rolagem horizontal */}
-                  <div className="overflow-x-auto">
+                  <div className="flex flex-col gap-2">
+                    <div
+                      ref={scrollContasPagarBodyRef}
+                      className="overflow-x-auto rounded-lg border border-slate-200 horizontal-scroll-area"
+                    >
                     {/* 👉 Tabela adaptativa: usamos largura total e regras responsivas nas colunas para evitar scroll horizontal */}
-                    <Table className="w-full">
+                    <Table className="w-full min-w-[960px]">
                       <TableHeader>
                         <TableRow className="bg-slate-50">
                           <TableHead className="font-semibold">Data de Registro</TableHead>
@@ -3896,6 +4364,7 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
                         })}
                       </TableBody>
                     </Table>
+                    </div>
                   </div>
 
                   {/* Totais no Rodapé */}
@@ -3935,12 +4404,42 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
               ) : (
                 <>
                   <div className="flex items-center gap-2 text-xs text-slate-500 mb-2">
-                    <ArrowRightLeft className="h-4 w-4" />
-                    <span>Arraste para o lado para visualizar todas as colunas</span>
+                    <div className="flex items-center gap-2">
+                      <ArrowRightLeft className="h-4 w-4" />
+                      <span>Use as setas para navegar pelas colunas disponíveis.</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        className="h-9 w-9 rounded-full border-slate-300 text-slate-500 hover:text-slate-700 hover:border-slate-400 transition-colors"
+                        onClick={() => {
+                          scrollToTableEdge(scrollContasReceberBodyRef.current, 'start');
+                        }}
+                        aria-label="Mostrar início da tabela"
+                      >
+                        <ChevronLeft className="h-5 w-5" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        className="h-9 w-9 rounded-full border-slate-300 text-slate-500 hover:text-slate-700 hover:border-slate-400 transition-colors"
+                        onClick={() => {
+                          scrollToTableEdge(scrollContasReceberBodyRef.current, 'end');
+                        }}
+                        aria-label="Mostrar final da tabela"
+                      >
+                        <ChevronRight className="h-5 w-5" />
+                      </Button>
+                    </div>
                   </div>
-                  <div className="overflow-x-auto">
+                  <div className="flex flex-col gap-2">
+                    <div
+                      ref={scrollContasReceberBodyRef}
+                      className="overflow-x-auto rounded-lg border border-slate-200 horizontal-scroll-area"
+                    >
                     {/* Tabela de contas a receber com rolagem horizontal para evitar corte das colunas */}
-                    <Table className="min-w-[720px]">
+                    <Table className="w-full min-w-[720px]">
                     <TableHeader>
                       <TableRow>
                         <TableHead>Descrição</TableHead>
@@ -3986,7 +4485,16 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => marcarContaComoRecebida(conta)}
+                                  onClick={() => {
+                                    setContaParaReceber(conta);
+                                    setDataRecebimentoFinal(conta.data_recebimento || new Date());
+                                    setContaDestinoRecebimento(conta.conta_destino || 'caixa');
+                                    const valorBase = conta.valor_restante && conta.valor_restante > 0
+                                      ? conta.valor_restante
+                                      : (conta.valor_total ?? conta.valor ?? 0);
+                                    setValorRecebimentoFinal(Number(valorBase) || 0);
+                                    setShowDialogReceberConta(true);
+                                  }}
                                 >
                                   Marcar como Recebida
                                 </Button>
@@ -4032,6 +4540,7 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
                       ))}
                     </TableBody>
                     </Table>
+                    </div>
                   </div>
                 </>
               )}
@@ -5206,6 +5715,114 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
             >
               <CheckCircle className="h-4 w-4 mr-2" />
               Finalizar Pagamento
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Recebimento de Conta */}
+      <Dialog open={showDialogReceberConta} onOpenChange={(open) => {
+        setShowDialogReceberConta(open);
+        if (!open) {
+          setContaParaReceber(null);
+          setValorRecebimentoFinal(0);
+          setDataRecebimentoFinal(new Date());
+          setContaDestinoRecebimento('caixa');
+        }
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-emerald-600" />
+              Confirmar Recebimento
+            </DialogTitle>
+            {contaParaReceber && (
+              <CardDescription>
+                {contaParaReceber.descricao || 'Conta sem descrição'} • Valor total:{" "}
+                {formatarMoeda(contaParaReceber.valor_total ?? contaParaReceber.valor ?? 0)}
+              </CardDescription>
+            )}
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label htmlFor="data-recebimento-final">Data de Recebimento *</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full justify-start text-left font-normal">
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {dataRecebimentoFinal ? format(dataRecebimentoFinal, "PPP", { locale: ptBR }) : "Selecione a data"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <CalendarComponent
+                    mode="single"
+                    selected={dataRecebimentoFinal}
+                    onSelect={(date) => date && setDataRecebimentoFinal(date)}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="valor-recebimento-final">Valor Recebido *</Label>
+              <Input
+                id="valor-recebimento-final"
+                type="number"
+                min="0"
+                step="0.01"
+                value={valorRecebimentoFinal}
+                onChange={(e) => setValorRecebimentoFinal(parseFloat(e.target.value) || 0)}
+                placeholder="0,00"
+              />
+              {contaParaReceber && contaParaReceber.valor_restante !== undefined && contaParaReceber.valor_restante > 0 && (
+                <p className="text-xs text-slate-500">
+                  Restante: {formatarMoeda(contaParaReceber.valor_restante)}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label>Conta de destino *</Label>
+              <Select
+                value={contaDestinoRecebimento}
+                onValueChange={(value) => setContaDestinoRecebimento(value as OrigemPagamento)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a conta" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="caixa">Caixa</SelectItem>
+                  <SelectItem value="banco">Banco</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDialogReceberConta(false);
+                setContaParaReceber(null);
+                setValorRecebimentoFinal(0);
+                setDataRecebimentoFinal(new Date());
+                setContaDestinoRecebimento('caixa');
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={confirmarRecebimento}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              disabled={
+                !contaParaReceber ||
+                !dataRecebimentoFinal ||
+                Number.isNaN(dataRecebimentoFinal.getTime()) ||
+                !valorRecebimentoFinal ||
+                valorRecebimentoFinal <= 0
+              }
+            >
+              Confirmar Recebimento
             </Button>
           </div>
         </DialogContent>

@@ -1,7 +1,7 @@
 // Página de Movimentações
 // Visão consolidada do fluxo de caixa e lucro
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -34,7 +34,7 @@ const Movimentacoes = () => {
   // 👉 Determina se devemos tentar usar a tabela legada quando a nova não existir
   const erroIndicaTabelaLegada = (error: any) => {
     if (!error) return false;
-    return error.code === '42P01' || error.code === 'PGRST116' || error?.message?.includes('404');
+    return error.code === '42P01' || error.code === 'PGRST116' || error.code === 'PGRST301' || error?.message?.includes('404') || error?.message?.toLowerCase?.().includes('schema cache');
   };
 
   // Carregar contas a pagar para calcular saldos
@@ -49,90 +49,102 @@ const Movimentacoes = () => {
       try {
         const contasMapeadas = new Map<string, ContaPagar>();
 
-        // ✅ Tenta carregar a nova tabela primeiro
-        const { data: dataNova, error: erroNova } = await supabase
-          .from('contas_a_pagar')
-          .select('*')
-          .eq('workspace_id', workspaceAtivo.id)
-          .order('data_pagamento', { ascending: false });
-
-        if (erroNova && !erroIndicaTabelaLegada(erroNova)) {
-          throw erroNova;
-        }
-
-        if (!erroNova) {
-          const contasNovas: ContaPagar[] = (dataNova || [])
-            .filter((c: any) => (c.status_pagamento === 'pago') || parseFloat(c.valor_pago) > 0)
-            .map((c: any) => ({
-              id: c.id,
-              descricao: c.observacoes || '',
-              valor: parseFloat(c.valor_total) || 0,
-              valor_pago: parseFloat(c.valor_pago) || 0,
-              valor_restante: parseFloat(c.valor_restante) || 0,
-              data_compra: c.lancamento ? new Date(c.lancamento) : new Date(c.criado_em),
-              data_registro: c.lancamento ? new Date(c.lancamento) : new Date(c.criado_em),
-              data_vencimento: new Date(c.data_vencimento),
-              data_pagamento: c.data_pagamento ? new Date(c.data_pagamento) : undefined,
-              status: c.status_pagamento === 'pago' ? 'finalizado' : 'pendente',
-              categoria_dre: c.centro_custo,
-              fornecedor: c.fornecedor || '',
-              forma_pagamento: c.forma_pagamento,
-              origem_pagamento: (c.conta_origem || c.origem_pagamento) as OrigemPagamento | undefined,
-              numero_parcelas: c.parcelas || 1,
-              observacoes: c.observacoes || '',
-              movimento_id: c.movimento_id || '',
-              usuario_id: c.usuario_id,
-              workspace_id: c.workspace_id,
-              criado_em: new Date(c.criado_em),
-              atualizado_em: new Date(c.atualizado_em)
-            }));
-
-          contasNovas.forEach((conta) => {
-            contasMapeadas.set(conta.id, conta);
-          });
-        }
-
-        // ✅ Carrega dados da tabela legada para garantir compatibilidade
-        const { data: dataLegada, error: erroLegado } = await supabase
-          .from('contas_pagar')
-          .select('*')
-          .eq('workspace_id', workspaceAtivo.id)
-          .in('status', ['pago', 'finalizado'])
-          .order('data_pagamento', { ascending: false });
-
-        if (erroLegado) {
-          throw erroLegado;
-        }
-
-        const contasLegadas: ContaPagar[] = (dataLegada || []).map((c: any) => ({
-          id: c.id,
-          descricao: c.descricao,
-          valor: parseFloat(c.valor) || 0,
-          valor_pago: parseFloat(c.valor_pago) || 0,
-          valor_restante: parseFloat(c.valor_restante) || 0,
-          data_compra: c.data_compra ? new Date(c.data_compra) : new Date(c.criado_em),
-          data_registro: c.data_registro ? new Date(c.data_registro) : new Date(c.criado_em),
-          data_vencimento: new Date(c.data_vencimento),
-          data_pagamento: c.data_pagamento ? new Date(c.data_pagamento) : undefined,
-          status: c.status,
-          categoria_dre: c.categoria_dre,
-          fornecedor: c.fornecedor || '',
-          forma_pagamento: c.forma_pagamento,
-          origem_pagamento: (c.origem_pagamento || c.conta_origem) as OrigemPagamento | undefined,
-          numero_parcelas: c.numero_parcelas || 1,
-          observacoes: c.observacoes || '',
-          movimento_id: c.movimento_id || '',
-          usuario_id: c.usuario_id,
-          workspace_id: c.workspace_id,
-          criado_em: new Date(c.criado_em),
-          atualizado_em: new Date(c.atualizado_em)
-        }));
-
-        contasLegadas.forEach((conta) => {
-          if (!contasMapeadas.has(conta.id)) {
-            contasMapeadas.set(conta.id, conta);
+        const carregarTabela = async (tableName: string, statusField: string, statusPago: string[], origemField: 'conta_origem' | 'origem_pagamento') => {
+          if (tabelasIndisponiveis.current.has(tableName)) {
+            return { registros: [] as ContaPagar[], missing: true };
           }
-        });
+
+          const resultados: any[] = [];
+          let missingTable = false;
+          let teveSucesso = false;
+
+          const tentarConsulta = async (column: 'workspace_id' | 'usuario_id', value?: string | null) => {
+            if (!value || missingTable) return;
+
+            const { data, error } = await supabase
+              .from(tableName)
+              .select('*')
+              .eq(column, value)
+              .in(statusField, statusPago)
+              .order('data_pagamento', { ascending: false });
+
+            if (error) {
+              if (erroIndicaTabelaLegada(error)) {
+                tabelasIndisponiveis.current.add(tableName);
+                missingTable = true;
+                return 'missing_table';
+              }
+
+              if (error.message?.includes(column) || error.code === '42703') {
+                return 'missing_column';
+              }
+
+              throw error;
+            }
+
+            (data || []).forEach((registro: any) => {
+              if (!resultados.find(r => r.id === registro.id)) {
+                resultados.push(registro);
+              }
+            });
+            teveSucesso = true;
+            return 'ok';
+          };
+
+          const resultadoWorkspace = await tentarConsulta('workspace_id', workspaceAtivo?.id);
+
+          if (resultadoWorkspace !== 'missing_table') {
+            await tentarConsulta('usuario_id', user?.id);
+          }
+
+          if (missingTable && !teveSucesso) {
+            return { registros: [] as ContaPagar[], missing: true };
+          }
+
+          const registros = resultados.map((c: any) => ({
+            id: c.id,
+            descricao: c.observacoes || c.descricao || '',
+            valor: parseFloat(c.valor_total ?? c.valor ?? 0) || 0,
+            valor_pago: parseFloat(c.valor_pago ?? c.valor ?? 0) || 0,
+            valor_restante: parseFloat(c.valor_restante ?? 0) || 0,
+            data_compra: c.lancamento ? new Date(c.lancamento) : (c.data_compra ? new Date(c.data_compra) : new Date(c.criado_em)),
+            data_registro: c.lancamento ? new Date(c.lancamento) : (c.data_registro ? new Date(c.data_registro) : new Date(c.criado_em)),
+            data_vencimento: c.data_vencimento ? new Date(c.data_vencimento) : undefined,
+            data_pagamento: c.data_pagamento ? new Date(c.data_pagamento) : undefined,
+            status: c.status ?? (c.status_pagamento === 'pago' ? 'finalizado' : 'pendente'),
+            status_pagamento: c.status_pagamento ?? (c.status === 'pago' || c.status === 'finalizado' ? 'pago' : 'pendente'),
+            categoria_dre: c.centro_custo ?? c.categoria_dre,
+            fornecedor: c.fornecedor || '',
+            forma_pagamento: c.forma_pagamento ?? c.forma_pagamento_legado,
+            conta_origem: (c[origemField] || c.origem_pagamento || c.conta_origem || 'caixa') as OrigemPagamento,
+            origem_pagamento: (c[origemField] || c.origem_pagamento || c.conta_origem || 'caixa') as OrigemPagamento,
+            numero_parcelas: c.parcelas ?? c.numero_parcelas ?? 1,
+            observacoes: c.observacoes || c.descricao || '',
+            movimento_id: c.movimento_id || '',
+            usuario_id: c.usuario_id ?? user.id,
+            workspace_id: c.workspace_id ?? workspaceAtivo.id,
+            criado_em: c.criado_em ? new Date(c.criado_em) : new Date(),
+            atualizado_em: c.atualizado_em ? new Date(c.atualizado_em) : new Date()
+          })) as ContaPagar[];
+
+          return { registros, missing: false };
+        };
+
+        const contasNovas = await carregarTabela('contas_a_pagar', 'status_pagamento', ['pago', 'parcial'], 'conta_origem');
+        contasNovas.registros
+          .filter(conta => conta.valor_pago > 0)
+          .forEach(conta => contasMapeadas.set(conta.id, conta));
+
+        if (contasNovas.missing) {
+          const contasLegadas = await carregarTabela('contas_pagar', 'status', ['pago', 'finalizado'], 'origem_pagamento');
+          contasLegadas.registros
+            .filter(conta => conta.valor_pago > 0)
+            .forEach(conta => {
+              if (!contasMapeadas.has(conta.id)) {
+                contasMapeadas.set(conta.id, conta);
+              }
+            });
+        }
 
         setContasPagar(Array.from(contasMapeadas.values()));
       } catch (error) {
@@ -148,94 +160,103 @@ const Movimentacoes = () => {
       try {
         const contasMapeadas = new Map<string, ContaReceber>();
 
-        const { data: dataNova, error: erroNova } = await supabase
-          .from('contas_a_receber')
-          .select('*')
-          .eq('workspace_id', workspaceAtivo.id)
-          .order('data_recebimento', { ascending: false });
-
-        if (erroNova && !erroIndicaTabelaLegada(erroNova)) {
-          throw erroNova;
-        }
-
-        if (!erroNova) {
-          const contasNovas: ContaReceber[] = (dataNova || [])
-            .filter((c: any) => (c.status_recebimento === 'recebido') || parseFloat(c.valor_recebido) > 0)
-            .map((c: any) => ({
-              id: c.id,
-              lancamento: c.lancamento ? new Date(c.lancamento) : new Date(c.criado_em),
-              observacoes: c.observacoes || '',
-              forma_recebimento: c.forma_recebimento,
-              conta_destino: (c.conta_destino || c.origem_pagamento || 'caixa') as OrigemPagamento,
-              centro_custo: c.centro_custo || '',
-              cliente: c.cliente || '',
-              valor_total: parseFloat(c.valor_total) || 0,
-              valor_recebido: parseFloat(c.valor_recebido) || 0,
-              valor_restante: parseFloat(c.valor_restante) || 0,
-              parcelas: c.parcelas || 1,
-              parcelas_recebidas: c.parcelas_recebidas || 0,
-              data_vencimento: new Date(c.data_vencimento),
-              data_recebimento: c.data_recebimento ? new Date(c.data_recebimento) : undefined,
-              status_recebimento: c.status_recebimento,
-              workspace_id: c.workspace_id,
-              usuario_id: c.usuario_id,
-              criado_em: new Date(c.criado_em),
-              atualizado_em: new Date(c.atualizado_em),
-              descricao: c.observacoes || '',
-              valor: parseFloat(c.valor_total) || 0,
-              status: c.status_recebimento === 'recebido' ? 'pago' : 'pendente',
-              movimento_id: c.movimento_id || '',
-              numero_parcelas: c.parcelas || 1
-            }));
-
-          contasNovas.forEach(conta => {
-            contasMapeadas.set(conta.id, conta);
-          });
-        }
-
-        const { data: dataLegada, error: erroLegado } = await supabase
-          .from('contas_receber')
-          .select('*')
-          .eq('workspace_id', workspaceAtivo.id)
-          .in('status', ['pago', 'finalizado'])
-          .order('data_recebimento', { ascending: false });
-
-        if (erroLegado) {
-          throw erroLegado;
-        }
-
-        const contasLegadas: ContaReceber[] = (dataLegada || []).map((c: any) => ({
-          id: c.id,
-          lancamento: new Date(c.criado_em),
-          observacoes: c.observacoes || c.descricao || '',
-          forma_recebimento: 'dinheiro',
-          conta_destino: (c.origem_pagamento || 'caixa') as OrigemPagamento,
-          centro_custo: c.categoria_dre || '',
-          cliente: c.cliente || '',
-          valor_total: parseFloat(c.valor) || 0,
-          valor_recebido: parseFloat(c.valor) || 0,
-          valor_restante: 0,
-          parcelas: 1,
-          parcelas_recebidas: 1,
-          data_vencimento: new Date(c.data_vencimento),
-          data_recebimento: c.data_recebimento ? new Date(c.data_recebimento) : undefined,
-          status_recebimento: 'recebido',
-          workspace_id: c.workspace_id,
-          usuario_id: c.usuario_id,
-          criado_em: new Date(c.criado_em),
-          atualizado_em: new Date(c.atualizado_em),
-          descricao: c.descricao || '',
-          valor: parseFloat(c.valor) || 0,
-          status: 'pago',
-          movimento_id: c.movimento_id || '',
-          numero_parcelas: 1
-        }));
-
-        contasLegadas.forEach(conta => {
-          if (!contasMapeadas.has(conta.id)) {
-            contasMapeadas.set(conta.id, conta);
+        const carregarTabela = async (tableName: string, statusField: string, statusPago: string[], destinoField: 'conta_destino' | 'origem_pagamento') => {
+          if (tabelasIndisponiveis.current.has(tableName)) {
+            return { registros: [] as ContaReceber[], missing: true };
           }
-        });
+
+          const resultados: any[] = [];
+          let missingTable = false;
+          let teveSucesso = false;
+
+          const tentarConsulta = async (column: 'workspace_id' | 'usuario_id', value?: string | null) => {
+            if (!value || missingTable) return;
+
+            const { data, error } = await supabase
+              .from(tableName)
+              .select('*')
+              .eq(column, value)
+              .in(statusField, statusPago)
+              .order('data_recebimento', { ascending: false });
+
+            if (error) {
+              if (erroIndicaTabelaLegada(error)) {
+                tabelasIndisponiveis.current.add(tableName);
+                missingTable = true;
+                return 'missing_table';
+              }
+
+              if (error.message?.includes(column) || error.code === '42703') {
+                return 'missing_column';
+              }
+
+              throw error;
+            }
+
+            (data || []).forEach((registro: any) => {
+              if (!resultados.find(r => r.id === registro.id)) {
+                resultados.push(registro);
+              }
+            });
+            teveSucesso = true;
+            return 'ok';
+          };
+
+          const resultadoWorkspace = await tentarConsulta('workspace_id', workspaceAtivo?.id);
+
+          if (resultadoWorkspace !== 'missing_table') {
+            await tentarConsulta('usuario_id', user?.id);
+          }
+
+          if (missingTable && !teveSucesso) {
+            return { registros: [] as ContaReceber[], missing: true };
+          }
+
+          const registros = resultados.map((c: any) => ({
+            id: c.id,
+            lancamento: c.lancamento ? new Date(c.lancamento) : new Date(c.criado_em),
+            observacoes: c.observacoes || c.descricao || '',
+            forma_recebimento: c.forma_recebimento ?? 'dinheiro',
+            conta_destino: (c[destinoField] || c.conta_destino || c.origem_pagamento || 'caixa') as OrigemPagamento,
+            centro_custo: c.centro_custo || c.categoria_dre || '',
+            cliente: c.cliente || '',
+            valor_total: parseFloat(c.valor_total ?? c.valor ?? 0) || 0,
+            valor_recebido: parseFloat(c.valor_recebido ?? c.valor ?? 0) || 0,
+            valor_restante: parseFloat(c.valor_restante ?? 0) || 0,
+            parcelas: c.parcelas ?? c.numero_parcelas ?? 1,
+            parcelas_recebidas: c.parcelas_recebidas ?? c.numero_parcelas ?? 0,
+            data_vencimento: c.data_vencimento ? new Date(c.data_vencimento) : undefined,
+            data_recebimento: c.data_recebimento ? new Date(c.data_recebimento) : undefined,
+            status_recebimento: c.status_recebimento ?? (c.status === 'pago' || c.status === 'finalizado' ? 'recebido' : 'pendente'),
+            workspace_id: c.workspace_id ?? workspaceAtivo.id,
+            usuario_id: c.usuario_id ?? user.id,
+            criado_em: c.criado_em ? new Date(c.criado_em) : new Date(),
+            atualizado_em: c.atualizado_em ? new Date(c.atualizado_em) : new Date(),
+            descricao: c.observacoes || c.descricao || '',
+            valor: parseFloat(c.valor_total ?? c.valor ?? 0) || 0,
+            status: c.status ?? (c.status_recebimento === 'recebido' ? 'pago' : 'pendente'),
+            movimento_id: c.movimento_id || '',
+            numero_parcelas: c.parcelas ?? c.numero_parcelas ?? 1
+          })) as ContaReceber[];
+
+          return { registros, missing: false };
+        };
+
+        const contasNovas = await carregarTabela('contas_a_receber', 'status_recebimento', ['recebido', 'parcial'], 'conta_destino');
+        contasNovas.registros
+          .filter(conta => conta.valor_recebido > 0)
+          .forEach(conta => contasMapeadas.set(conta.id, conta));
+
+        if (contasNovas.missing) {
+          const contasLegadas = await carregarTabela('contas_receber', 'status', ['pago', 'finalizado'], 'origem_pagamento');
+          contasLegadas.registros
+            .filter(conta => conta.valor_recebido > 0)
+            .forEach(conta => {
+              if (!contasMapeadas.has(conta.id)) {
+                contasMapeadas.set(conta.id, conta);
+              }
+            });
+        }
 
         setContasReceber(Array.from(contasMapeadas.values()));
       } catch (error) {
