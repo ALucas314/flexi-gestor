@@ -38,7 +38,8 @@ import {
   FileText,
   ArrowRightLeft,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Banknote
 } from "lucide-react";
 import { useData } from "@/contexts/DataContext";
 import { useResponsive } from "@/hooks/use-responsive";
@@ -463,7 +464,12 @@ const Financeiro = () => {
 
       const valorTotal = Number(conta.valor_total ?? conta.valor ?? 0);
       const restante = Number(conta.valor_restante ?? Math.max(valorTotal - Number(conta.valor_pago ?? 0), 0));
-      const valorPago = Math.max(valorTotal - restante, 0);
+      let valorPago = Math.max(valorTotal - restante, 0);
+
+      if ((!valorPago || Number.isNaN(valorPago) || valorPago <= 0) && (conta.status_pagamento === 'pago' || conta.status === 'pago')) {
+        valorPago = valorTotal;
+      }
+
       if (!valorPago || Number.isNaN(valorPago) || valorPago <= 0) return;
 
       const dataReferencia = conta.data_pagamento ?? conta.atualizado_em ?? conta.data_vencimento ?? conta.lancamento;
@@ -486,7 +492,12 @@ const Financeiro = () => {
 
       const valorTotal = Number(conta.valor_total ?? conta.valor ?? 0);
       const restante = Number(conta.valor_restante ?? Math.max(valorTotal - Number(conta.valor_recebido ?? 0), 0));
-      const valorRecebido = Math.max(valorTotal - restante, 0);
+      let valorRecebido = Math.max(valorTotal - restante, 0);
+
+      if ((!valorRecebido || Number.isNaN(valorRecebido) || valorRecebido <= 0) && (conta.status_recebimento === 'recebido' || conta.status === 'pago')) {
+        valorRecebido = valorTotal;
+      }
+
       if (!valorRecebido || Number.isNaN(valorRecebido) || valorRecebido <= 0) return;
 
       const dataReferencia = conta.data_recebimento ?? conta.atualizado_em ?? conta.data_vencimento ?? conta.lancamento;
@@ -512,7 +523,8 @@ const Financeiro = () => {
   const recebimentosCaixa = recebimentosPorOrigem.caixa ?? 0;
   const recebimentosBanco = recebimentosPorOrigem.banco ?? 0;
   const saldoCaixa = totalSaidas + recebimentosCaixa - pagamentosCaixa;
-  const saldoBanco = (saldo + recebimentosBanco) - pagamentosBanco;
+  const saldoBanco = recebimentosBanco - pagamentosBanco;
+  const saldoConsolidado = saldoCaixa + saldoBanco;
 
   // Calcular lucro por produto (considerando apenas o custo das unidades vendidas)
   const profitByProduct = products.map(product => {
@@ -651,8 +663,9 @@ const Financeiro = () => {
         })
         .slice(-6)
         .map((item: any) => {
-          const { sortKey, ...rest } = item;
-          return rest;
+          const { sortKey, month, entradas, saidas } = item;
+          const difference = saidas - entradas;
+          return { month, entradas, saidas, difference };
         });
 
       // Preparar produtos com estoque baixo
@@ -777,6 +790,55 @@ const Financeiro = () => {
     const periodText = period === 'todos' ? 'TODOS OS PERIODOS' : 
                       period === 'mes' ? 'ESTE MES' : 
                       period === 'trimestre' ? 'ESTE TRIMESTRE' : 'ESTE ANO';
+    const formatCurrencyBR = (value: number) =>
+      `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const formatCurrencyWithSign = (value: number) => {
+      const sign = value >= 0 ? '+' : '-';
+      const absoluteValue = Math.abs(value);
+      return `${sign}${formatCurrencyBR(absoluteValue)}`;
+    };
+
+    const monthlyDataMap = movements.reduce((acc: Record<string, { month: string; entradas: number; saidas: number }>, movement) => {
+      const date = new Date(movement.date);
+      const monthKey = `${date.getMonth() + 1}/${date.getFullYear()}`;
+      const monthLabel = date.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' });
+
+      if (!acc[monthKey]) {
+        acc[monthKey] = {
+          month: monthLabel,
+          entradas: 0,
+          saidas: 0,
+        };
+      }
+
+      if (movement.type === 'entrada') {
+        acc[monthKey].entradas += movement.total;
+      } else if (movement.type === 'saida') {
+        acc[monthKey].saidas += movement.total;
+      }
+
+      return acc;
+    }, {});
+
+    const monthlyData = Object.entries(monthlyDataMap)
+      .map(([key, value]) => ({
+        ...value,
+        sortKey: key,
+      }))
+      .sort((a, b) => {
+        const [monthA, yearA] = a.sortKey.split('/').map(Number);
+        const [monthB, yearB] = b.sortKey.split('/').map(Number);
+        if (yearA !== yearB) return yearA - yearB;
+        return monthA - monthB;
+      })
+      .slice(-6)
+      .map(item => {
+        const { sortKey, month, entradas, saidas } = item;
+        const difference = saidas - entradas;
+        return { month, entradas, saidas, difference };
+      });
+
+    const totalMonthlyDifference = monthlyData.reduce((sum, item) => sum + item.difference, 0);
     
     const csvRows = [
       ['FLEXI GESTOR - SISTEMA DE GESTAO EMPRESARIAL'],
@@ -888,6 +950,31 @@ const Financeiro = () => {
       totalEntradas > totalSaidas ? 'Mais Investimento' : totalSaidas > totalEntradas ? 'Mais Vendas' : 'Equilibrado'
     ]);
 
+    if (monthlyData.length > 0) {
+      csvRows.push([''], ['COMPRAS VS VENDAS POR MÊS (DIFERENÇA)', '', '', '', '', '', '']);
+      csvRows.push(['Mês', 'Compras (Entradas)', 'Vendas (Saídas)', 'Diferença', '', '', '']);
+      monthlyData.forEach(item => {
+        csvRows.push([
+          item.month,
+          formatCurrencyBR(item.entradas),
+          formatCurrencyBR(item.saidas),
+          formatCurrencyWithSign(item.difference),
+          '',
+          '',
+          ''
+        ]);
+      });
+      csvRows.push([
+        'TOTAL DA DIFERENÇA',
+        '',
+        '',
+        formatCurrencyWithSign(totalMonthlyDifference),
+        '',
+        '',
+        ''
+      ]);
+    }
+
     // RODAPÉ CORPORATIVO EM TABELA
     csvRows.push([''], ['INFORMAÇÕES DO SISTEMA', '', '', '', '', '', '']);
     csvRows.push(['Campo', 'Valor', '', '', '', '', '']);
@@ -927,6 +1014,9 @@ const Financeiro = () => {
         return '\n' + row.map(field => `"${field}"`).join(';') + '\n' + '-'.repeat(60);
       }
       if (row[0] && row[0].includes('ANÁLISE COMPARATIVA')) {
+        return '\n' + row.map(field => `"${field}"`).join(';') + '\n' + '-'.repeat(60);
+      }
+      if (row[0] && row[0].includes('COMPRAS VS VENDAS POR MÊS')) {
         return '\n' + row.map(field => `"${field}"`).join(';') + '\n' + '-'.repeat(60);
       }
       if (row[0] && row[0].includes('INFORMAÇÕES DO SISTEMA')) {
@@ -1099,6 +1189,39 @@ Flexi Gestor - Controle de Estoque
     return error.code === '42P01' || error.code === 'PGRST116' || error.code === 'PGRST301' || error?.message?.includes('404') || error?.message?.toLowerCase?.().includes('schema cache');
   };
 
+  const isUUID = (value: unknown): value is string => {
+    if (typeof value !== 'string') return false;
+    return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/.test(value);
+  };
+
+  const atualizarContaPagaLocalmente = (
+    contaOriginal: ContaPagar,
+    updates: Partial<ContaPagar>
+  ) => {
+    setContasPagarBase(prev =>
+      prev.map(conta => (conta.id === contaOriginal.id ? { ...conta, ...updates } : conta))
+    );
+    setContasPagar(prev =>
+      prev.map(conta => (conta.id === contaOriginal.id ? { ...conta, ...updates } : conta))
+    );
+  };
+
+  const atualizarContaRecebidaLocalmente = (
+    contaOriginal: ContaReceber,
+    updates: Partial<ContaReceber>
+  ) => {
+    const matcher = (conta: ContaReceber) => {
+      if (conta.id === contaOriginal.id) return true;
+      if (contaOriginal.movimento_id && conta.movimento_id) {
+        return conta.movimento_id === contaOriginal.movimento_id;
+      }
+      return false;
+    };
+
+    setContasReceberBase(prev => prev.map(conta => (matcher(conta) ? { ...conta, ...updates } : conta)));
+    setContasReceber(prev => prev.map(conta => (matcher(conta) ? { ...conta, ...updates } : conta)));
+  };
+
   // 👉 Atualiza uma conta a pagar respeitando a coexistência das tabelas nova (contas_a_pagar) e legada (contas_pagar)
   const atualizarContaPagarRemoto = async (
     contaId: string,
@@ -1205,7 +1328,6 @@ Flexi Gestor - Controle de Estoque
       status_pagamento: conta.status_pagamento || 'pendente',
       workspace_id: workspaceAtivo.id,
       usuario_id: user.id,
-      movimento_id: conta.movimento_id || null,
     };
 
     const dadosContaLegado = {
@@ -1222,7 +1344,6 @@ Flexi Gestor - Controle de Estoque
       forma_pagamento: conta.forma_pagamento || null,
       numero_parcelas: numeroParcelas,
       observacoes,
-      movimento_id: conta.movimento_id || null,
       usuario_id: workspaceAtivo.id,
       workspace_id: workspaceAtivo.id,
       origem_pagamento: conta.conta_origem || conta.origem_pagamento || 'caixa',
@@ -1314,24 +1435,108 @@ Flexi Gestor - Controle de Estoque
     const dataVencimento = obterData(conta.data_vencimento, dataLancamento);
     const dataRecebimentoExistente = conta.data_recebimento ? obterData(conta.data_recebimento, dataVencimento) : null;
 
-    const dadosContaNovo = {
+    const dadosContaNovoBase: Record<string, any> = {
       lancamento: dataLancamento.toISOString().split('T')[0],
       observacoes: descricao,
       forma_recebimento: conta.forma_recebimento || 'dinheiro',
       conta_destino: conta.conta_destino || 'caixa',
-      centro_custo: conta.centro_custo || conta.categoria_dre || null,
       cliente: conta.cliente || '',
       valor_total: valorTotal,
       valor_recebido: valorRecebido,
       valor_restante: valorRestante,
       parcelas: numeroParcelas,
-      parcelas_recebidas: conta.parcelas_recebidas || 0,
       data_vencimento: dataVencimento.toISOString().split('T')[0],
       data_recebimento: dataRecebimentoExistente ? dataRecebimentoExistente.toISOString().split('T')[0] : null,
       status_recebimento: conta.status_recebimento || 'pendente',
       workspace_id: workspaceAtivo.id,
       usuario_id: user.id,
-      movimento_id: conta.movimento_id || null,
+    };
+
+    if (conta.centro_custo || conta.categoria_dre) {
+      dadosContaNovoBase.centro_custo = conta.centro_custo || conta.categoria_dre;
+    }
+
+    if (typeof conta.parcelas_recebidas === 'number') {
+      dadosContaNovoBase.parcelas_recebidas = conta.parcelas_recebidas;
+    }
+
+    const extrairNomeColunaDoErro = (error: any): string | null => {
+      const mensagem = error?.message || error?.details;
+      if (!mensagem || typeof mensagem !== 'string') return null;
+
+      const match = mensagem.match(/column\s+"?([\w\d_]+)"?/i);
+      if (match?.[1]) {
+        return match[1];
+      }
+
+      const matchPortuguese = mensagem.match(/coluna\s+"?([\w\d_]+)"?/i);
+      if (matchPortuguese?.[1]) {
+        return matchPortuguese[1];
+      }
+
+      return null;
+    };
+
+    const tentarInserirContaNova = async (): Promise<{
+      data: any | null;
+      payload: Record<string, any>;
+      error?: any;
+      colunasRemovidas?: string[];
+    }> => {
+      const payload = { ...dadosContaNovoBase };
+      const colunasRemovidas: string[] = [];
+
+      while (true) {
+        const { data, error } = await supabase
+          .from('contas_a_receber')
+          .insert([payload])
+          .select()
+          .single();
+
+        if (!error && data) {
+          if (colunasRemovidas.length > 0) {
+            console.warn('[Financeiro] Conta a receber criada sem as colunas:', colunasRemovidas);
+          }
+          return { data, payload };
+        }
+
+        if (!error) {
+          // Nenhum dado retornado mas também sem erro – encerrar loop
+          return { data: null, payload };
+        }
+
+        // Se erro indicar uso da tabela legada, apenas sair para tentar fallback posteriormente
+        if (erroIndicaTabelaLegada(error) || error.code === '42P01') {
+          return { error, payload, colunasRemovidas };
+        }
+
+        // Se coluna inexistente, remover e tentar novamente
+        if (error.code === '42703') {
+          const colunaInvalida = extrairNomeColunaDoErro(error);
+          if (colunaInvalida && Object.prototype.hasOwnProperty.call(payload, colunaInvalida)) {
+            delete payload[colunaInvalida];
+            colunasRemovidas.push(colunaInvalida);
+            console.warn(`[Financeiro] Coluna inexistente em contas_a_receber (${colunaInvalida}). Removendo e tentando novamente...`);
+            continue;
+          }
+        }
+
+        // Tratamento de valores nulos obrigatórios
+        if (error.code === '23502') {
+          const colunaObrigatoria = extrairNomeColunaDoErro(error);
+          throw new Error(colunaObrigatoria
+            ? `O campo '${colunaObrigatoria}' é obrigatório para registrar a conta a receber.`
+            : 'Existem campos obrigatórios sem preenchimento para registrar a conta a receber.');
+        }
+
+        // Qualquer outro erro deve ser propagado
+        console.error('[Financeiro] Falha ao inserir conta em contas_a_receber', {
+          error,
+          payload,
+          colunasRemovidas,
+        });
+        throw error;
+      }
     };
 
     const dadosContaLegado = {
@@ -1345,22 +1550,15 @@ Flexi Gestor - Controle de Estoque
       cliente: conta.cliente || '',
       observacoes: descricao,
       movimento_id: conta.movimento_id || null,
-      usuario_id: workspaceAtivo.id,
+      usuario_id: user.id,
       workspace_id: workspaceAtivo.id
     };
 
     try {
-      const { data, error } = await supabase
-        .from('contas_a_receber')
-        .insert([dadosContaNovo])
-        .select()
-        .single();
+      const resultado = await tentarInserirContaNova();
 
-      if (error) {
-        if (!erroIndicaTabelaLegada(error)) {
-          throw error;
-        }
-      } else if (data) {
+      if (resultado?.data) {
+        const { data } = resultado;
         return {
           ...conta,
           id: data.id,
@@ -1372,13 +1570,17 @@ Flexi Gestor - Controle de Estoque
           parcelas_recebidas: conta.parcelas_recebidas || 0,
           data_vencimento: dataVencimento,
           data_recebimento: dataRecebimentoExistente || undefined,
-          status_recebimento: dadosContaNovo.status_recebimento,
+          status_recebimento: dadosContaNovoBase.status_recebimento,
           status: conta.status || 'pendente',
-          conta_destino: dadosContaNovo.conta_destino,
+          conta_destino: resultado.payload.conta_destino || conta.conta_destino || 'caixa',
           workspace_id: workspaceAtivo.id,
           usuario_id: user.id,
           movimento_id: conta.movimento_id,
         } satisfies ContaReceber;
+      }
+
+      if (resultado?.error && !erroIndicaTabelaLegada(resultado.error)) {
+        throw resultado.error;
       }
     } catch (error) {
       console.error('Erro ao inserir conta na tabela contas_a_receber:', error);
@@ -1392,6 +1594,27 @@ Flexi Gestor - Controle de Estoque
       .single();
 
     if (erroLegado) {
+      if (erroIndicaTabelaLegada(erroLegado) || erroLegado.code === 'PGRST205') {
+        console.warn('[Financeiro] Tabela legada contas_receber ausente. Conta será tratada somente em memória.', erroLegado);
+        return {
+          ...conta,
+          valor_total: valorTotal,
+          valor: valorTotal,
+          valor_recebido: valorRecebido,
+          valor_restante: valorRestante,
+          parcelas: numeroParcelas,
+          parcelas_recebidas: conta.parcelas_recebidas || 0,
+          data_vencimento: dataVencimento,
+          data_recebimento: dataRecebimentoExistente || undefined,
+          status_recebimento: conta.status_recebimento || 'pendente',
+          status: conta.status || 'pendente',
+          conta_destino: conta.conta_destino || 'caixa',
+          workspace_id: workspaceAtivo.id,
+          usuario_id: user.id,
+          movimento_id: conta.movimento_id,
+        } satisfies ContaReceber;
+      }
+
       console.error('Erro ao inserir conta na tabela contas_receber:', erroLegado);
       throw erroLegado;
     }
@@ -1801,7 +2024,7 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
         valor_total: parseFloat(c.valor_total) || 0,
         valor: parseFloat(c.valor_total) || 0,
         valor_pago: parseFloat(c.valor_pago) || 0,
-        valor_restante: parseFloat(c.valor_restante) || 0,
+        valor_restante: parseFloat(c.valor_restante ?? (parseFloat(c.valor_total) || 0)) || 0,
         parcelas: c.parcelas || 1,
         parcelas_pagas: c.parcelas_pagas || 0,
         data_vencimento: new Date(c.data_vencimento),
@@ -2166,18 +2389,18 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
       return;
     }
 
-    try {
-      const dataPagamentoISO = new Date().toISOString();
-      const valorConta = conta.valor_total ?? conta.valor ?? 0;
-      const totalParcelasPagas = conta.parcelasDetalhes?.length
-        ? conta.parcelasDetalhes.filter(p => p.status === 'pago').length
-        : conta.parcelas || conta.numero_parcelas || 0;
+    const dataPagamento = new Date();
+    const valorConta = conta.valor_total ?? conta.valor ?? 0;
+    const totalParcelasPagas = conta.parcelasDetalhes?.length
+      ? conta.parcelasDetalhes.filter(p => p.status === 'pago').length
+      : conta.parcelas || conta.numero_parcelas || 0;
 
+    try {
       await atualizarContaPagarRemoto(
         conta.id,
         {
           status_pagamento: 'pago',
-          data_pagamento: dataPagamentoISO,
+          data_pagamento: dataPagamento.toISOString(),
           valor_pago: valorConta,
           valor_restante: 0,
           parcelas_pagas: totalParcelasPagas,
@@ -2185,7 +2408,7 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
         },
         {
           status: 'pago',
-          data_pagamento: dataPagamentoISO,
+          data_pagamento: dataPagamento.toISOString(),
           valor_pago: valorConta,
           valor_restante: 0,
           parcelas_pagas: totalParcelasPagas,
@@ -2193,10 +2416,36 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
         }
       );
 
+      atualizarContaPagaLocalmente(conta, {
+        status_pagamento: 'pago',
+        status: 'pago',
+        valor_pago: valorConta,
+        valor_restante: 0,
+        parcelas_pagas: totalParcelasPagas,
+        data_pagamento: dataPagamento,
+        conta_origem: conta.conta_origem || 'caixa',
+        origem_pagamento: conta.origem_pagamento || conta.conta_origem || 'caixa',
+      });
+
       toast.success('Conta marcada como paga!');
       await carregarContasPagar();
     } catch (error: any) {
-      toast.error(error.message || 'Erro ao marcar conta como paga');
+      atualizarContaPagaLocalmente(conta, {
+        status_pagamento: 'pago',
+        status: 'pago',
+        valor_pago: valorConta,
+        valor_restante: 0,
+        parcelas_pagas: totalParcelasPagas,
+        data_pagamento: dataPagamento,
+        conta_origem: conta.conta_origem || 'caixa',
+        origem_pagamento: conta.origem_pagamento || conta.conta_origem || 'caixa',
+        valor_total: conta.valor_total ?? conta.valor ?? valorConta,
+      });
+      console.error('Erro ao marcar conta como paga:', error);
+      toast.error(
+        (error?.message as string) ||
+          'Erro ao marcar conta como paga. O pagamento foi atualizado apenas localmente.'
+      );
     }
   };
 
@@ -2217,6 +2466,8 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
       return;
     }
 
+    const updatesLocalBase: Partial<ContaReceber> = {};
+
     try {
       if (!dataRecebimento || Number.isNaN(dataRecebimento.getTime())) {
         throw new Error('Informe uma data de recebimento válida.');
@@ -2225,6 +2476,25 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
       const valorEfetivo = valorRecebido > 0 ? valorRecebido : (contaProcessada.valor_total || contaProcessada.valor || 0);
       if (valorEfetivo <= 0) {
         throw new Error('Informe um valor recebido maior que zero.');
+      }
+
+      const updatesLocal: Partial<ContaReceber> = {
+        status_recebimento: 'recebido',
+        status: 'pago',
+        valor_recebido: valorEfetivo,
+        valor_restante: 0,
+        parcelas_recebidas: contaProcessada.parcelas || contaProcessada.numero_parcelas || 1,
+        conta_destino: contaDestino || contaProcessada.conta_destino || 'caixa',
+        data_recebimento: dataRecebimento,
+      };
+      Object.assign(updatesLocalBase, updatesLocal);
+
+      const possuiPersistenciaRemota = isUUID(contaProcessada.id);
+
+      if (!possuiPersistenciaRemota) {
+        atualizarContaRecebidaLocalmente(contaProcessada, updatesLocal);
+        toast.info('Recebimento registrado apenas localmente. Execute a migração de contas a receber para sincronizar com o banco.');
+        return;
       }
 
       const dadosAtualizacaoNova = {
@@ -2319,8 +2589,20 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
       toast.success('Conta marcada como recebida!');
       await carregarContasReceber();
     } catch (error: any) {
+      atualizarContaRecebidaLocalmente(contaProcessada, {
+        ...updatesLocalBase,
+        // garantir que valor_total permanece
+        valor_total:
+          contaProcessada.valor_total ??
+          contaProcessada.valor ??
+          updatesLocalBase.valor_recebido ??
+          0,
+      });
       console.error('Erro ao marcar conta como recebida:', error);
-      toast.error(error.message || 'Erro ao marcar conta como recebida');
+      toast.error(
+        (error?.message as string) ||
+          'Erro ao marcar conta como recebida. O recebimento foi registrado apenas no sistema local.'
+      );
     }
   };
 
@@ -3122,7 +3404,7 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
         {/* ABA 1: MOVIMENTAÇÕES */}
         <TabsContent value="movimentacoes" className="space-y-6">
           {/* Cards de Estatísticas de Movimentações */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 sm:gap-6 lg:gap-8">
             <div className="group bg-gradient-to-br from-blue-100 to-blue-200 rounded-2xl sm:rounded-3xl p-4 sm:p-6 text-blue-800 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 border border-blue-200/50">
               <div className="flex items-center justify-between mb-3 sm:mb-4">
                 <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-300/50 rounded-xl sm:rounded-2xl flex items-center justify-center backdrop-blur-sm">
@@ -3137,20 +3419,56 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
               <p className="text-xs sm:text-sm opacity-80">Registros no sistema</p>
             </div>
 
-            <div className={`group ${saldo >= 0 ? 'bg-gradient-to-br from-green-100 to-green-200' : 'bg-gradient-to-br from-red-100 to-red-200'} rounded-2xl sm:rounded-3xl p-4 sm:p-6 ${saldo >= 0 ? 'text-green-800' : 'text-red-800'} shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 border ${saldo >= 0 ? 'border-green-200/50' : 'border-red-200/50'}`}>
+            <div className={`group ${saldoConsolidado >= 0 ? 'bg-gradient-to-br from-emerald-100 to-emerald-200' : 'bg-gradient-to-br from-rose-100 to-rose-200'} rounded-2xl sm:rounded-3xl p-4 sm:p-6 ${saldoConsolidado >= 0 ? 'text-emerald-800' : 'text-rose-800'} shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 border ${saldoConsolidado >= 0 ? 'border-emerald-200/50' : 'border-rose-200/50'}`}>
               <div className="flex items-center justify-between mb-3 sm:mb-4">
-                <div className={`w-10 h-10 sm:w-12 sm:h-12 ${saldo >= 0 ? 'bg-green-300/50' : 'bg-red-300/50'} rounded-xl sm:rounded-2xl flex items-center justify-center backdrop-blur-sm`}>
-                  <Wallet className={`w-5 h-5 sm:w-6 sm:h-6 ${saldo >= 0 ? 'text-green-700' : 'text-red-700'}`} />
+                <div className={`w-10 h-10 sm:w-12 sm:h-12 ${saldoConsolidado >= 0 ? 'bg-emerald-300/50' : 'bg-rose-300/50'} rounded-xl sm:rounded-2xl flex items-center justify-center backdrop-blur-sm`}>
+                  <Wallet className={`w-5 h-5 sm:w-6 sm:h-6 ${saldoConsolidado >= 0 ? 'text-emerald-700' : 'text-rose-700'}`} />
                 </div>
                 <div className="text-right">
                   <div className="text-lg sm:text-xl font-black">
-                    R$ {Math.abs(saldo).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    {saldoConsolidado >= 0 ? '+' : ''}R$ {Math.abs(saldoConsolidado).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </div>
-                  <div className="text-xs sm:text-sm opacity-90">{saldo >= 0 ? 'Lucro' : 'Prejuízo'}</div>
+                  <div className="text-xs sm:text-sm opacity-90">Disponível</div>
                 </div>
               </div>
-              <h3 className="text-base sm:text-lg font-semibold mb-2 flex items-center gap-2"><DollarSign className="h-4 w-4" /> Saldo</h3>
-              <p className="text-xs sm:text-sm opacity-80">Posição financeira</p>
+              <h3 className="text-base sm:text-lg font-semibold mb-2 flex items-center gap-2"><DollarSign className="h-4 w-4" /> Saldo Consolidado</h3>
+              <p className="text-xs sm:text-sm opacity-80">Caixa + Banco (recebimentos - pagamentos)</p>
+            </div>
+
+            <div className={`group ${saldoCaixa >= 0 ? 'bg-gradient-to-br from-cyan-100 to-cyan-200 text-cyan-900 border-cyan-200/50' : 'bg-gradient-to-br from-rose-100 to-rose-200 text-rose-900 border-rose-200/50'} rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 border`}>
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
+                <div className={`w-10 h-10 sm:w-12 sm:h-12 ${saldoCaixa >= 0 ? 'bg-cyan-300/40 text-cyan-700' : 'bg-rose-300/40 text-rose-700'} rounded-xl sm:rounded-2xl flex items-center justify-center backdrop-blur-sm`}>
+                  <Wallet className="w-5 h-5 sm:w-6 sm:h-6" />
+                </div>
+                <div className="text-right">
+                  <div className="text-lg sm:text-xl font-black">
+                    {saldoCaixa >= 0 ? '+' : ''}R$ {Math.abs(saldoCaixa).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </div>
+                  <div className="text-xs sm:text-sm opacity-80">Caixa atual</div>
+                </div>
+              </div>
+              <h3 className="text-base sm:text-lg font-semibold mb-2 flex items-center gap-2">
+                <DollarSign className="h-4 w-4" /> Saldo Caixa
+              </h3>
+              <p className="text-xs sm:text-sm opacity-80">Recebimentos - Pagamentos (caixa)</p>
+            </div>
+
+            <div className={`group ${saldoBanco >= 0 ? 'bg-gradient-to-br from-indigo-100 to-indigo-200 text-indigo-900 border-indigo-200/50' : 'bg-gradient-to-br from-amber-100 to-amber-200 text-amber-900 border-amber-200/50'} rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 border`}>
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
+                <div className={`w-10 h-10 sm:w-12 sm:h-12 ${saldoBanco >= 0 ? 'bg-indigo-300/40 text-indigo-700' : 'bg-amber-300/40 text-amber-700'} rounded-xl sm:rounded-2xl flex items-center justify-center backdrop-blur-sm`}>
+                  <Banknote className="w-5 h-5 sm:w-6 sm:h-6" />
+                </div>
+                <div className="text-right">
+                  <div className="text-lg sm:text-xl font-black">
+                    {saldoBanco >= 0 ? '+' : ''}R$ {Math.abs(saldoBanco).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </div>
+                  <div className="text-xs sm:text-sm opacity-80">Banco atual</div>
+                </div>
+              </div>
+              <h3 className="text-base sm:text-lg font-semibold mb-2 flex items-center gap-2">
+                <Banknote className="h-4 w-4" /> Saldo Banco
+              </h3>
+              <p className="text-xs sm:text-sm opacity-80">Recebimentos - Pagamentos (banco)</p>
             </div>
 
             <div className="group bg-gradient-to-br from-purple-100 to-purple-200 rounded-2xl sm:rounded-3xl p-4 sm:p-6 text-purple-800 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 border border-purple-200/50">
@@ -4829,10 +5147,10 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
                         <DollarSign className={`h-5 w-5 ${
                           saldoCaixa >= 0 ? 'text-blue-600' : 'text-red-600'
                         }`} />
-                        Total Caixa
+                        Saldo Caixa
                       </CardTitle>
                       <CardDescription className={saldoCaixa >= 0 ? 'text-blue-700' : 'text-red-700'}>
-                        Saldo do período
+                        Recebimentos - Pagamentos destinados ao caixa
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -4851,25 +5169,18 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
                             {saldoCaixa >= 0 ? 'Positivo' : 'Negativo'}
                           </Badge>
                         </div>
-                        <div className={`text-xs mt-3 space-y-1 ${
-                          saldoCaixa >= 0 ? 'text-blue-600' : 'text-red-600'
-                        }`}>
-                          <p className="font-semibold">
-                            Receitas registradas: R$ {totalSaidas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </p>
-                          <p className="font-semibold">
-                            Recebimentos de contas: R$ {recebimentosCaixa.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        <div className="text-xs mt-3 space-y-1 text-gray-600 dark:text-gray-300">
+                          <p className="font-semibold text-blue-700 dark:text-blue-200">
+                            Recebimentos no caixa: R$ {recebimentosCaixa.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </p>
                           <p className="font-semibold text-red-600 dark:text-red-400">
-                            Pagamentos do Caixa: R$ {pagamentosCaixa.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            Pagamentos do caixa: R$ {pagamentosCaixa.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </p>
-                          <p className="font-medium">
-                            {saldoCaixa >= 0 ? 'Entradas superam saídas/pagamentos' : 'Saídas e pagamentos superam entradas'}
+                          <p className="font-medium text-gray-700 dark:text-gray-200">
+                            {saldoCaixa >= 0 ? 'Fluxo líquido positivo para o caixa' : 'Fluxo líquido negativo para o caixa'}
                           </p>
-                          <p className="opacity-75">
-                            {saldoCaixa >= 0 
-                              ? 'Fluxo de caixa positivo' 
-                              : 'Atenção: fluxo negativo'}
+                          <p className="opacity-70">
+                            Vendas de estoque registradas: R$ {totalSaidas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </p>
                         </div>
                       </div>
@@ -4953,7 +5264,7 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
 
                         <div className="bg-white/60 rounded-lg p-4 border border-cyan-200">
                           <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium text-cyan-700">Recebimentos (Contas)</span>
+                            <span className="text-sm font-medium text-cyan-700">Recebimentos no Banco</span>
                             <TrendingUp className="h-4 w-4 text-cyan-600 rotate-180" />
                           </div>
                           <div className="text-2xl font-bold text-cyan-700">
@@ -4988,7 +5299,7 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
                             {saldoBanco >= 0 ? '+' : ''}R$ {Math.abs(saldoBanco).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </div>
                           <p className="text-xs text-cyan-600 mt-1 opacity-75">
-                            Lucro Líquido - Pagamentos do Banco
+                            Recebimentos - Pagamentos destinados ao banco
                           </p>
                         </div>
                       </div>

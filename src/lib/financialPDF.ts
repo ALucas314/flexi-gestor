@@ -45,6 +45,7 @@ export interface FinancialReportData {
     month: string;
     entradas: number;
     saidas: number;
+    difference: number;
   }>;
   profitByProduct: Array<{
     productName: string;
@@ -86,16 +87,17 @@ export const generateFinancialReportHTML = (data: FinancialReportData): string =
   };
 
   // Gerar HTML do gráfico mensal (tabela)
+  const totalMonthlyDifference = monthlyData.reduce((sum, item) => sum + item.difference, 0);
   const monthlyChartHTML = monthlyData.length > 0 ? `
     <div class="section">
-      <h2 class="section-title">📊 Comparativo Mensal</h2>
+      <h2 class="section-title">📊 Compras vs Vendas por Mês (Diferença)</h2>
       <table class="data-table">
         <thead>
           <tr>
             <th>Mês</th>
-            <th class="text-right">Entradas (Custos)</th>
-            <th class="text-right">Saídas (Receitas)</th>
-            <th class="text-right">Saldo</th>
+            <th class="text-right">Compras (Entradas)</th>
+            <th class="text-right">Vendas (Saídas)</th>
+            <th class="text-right">Diferença</th>
           </tr>
         </thead>
         <tbody>
@@ -104,11 +106,17 @@ export const generateFinancialReportHTML = (data: FinancialReportData): string =
               <td>${item.month}</td>
               <td class="text-right">${formatCurrency(item.entradas)}</td>
               <td class="text-right">${formatCurrency(item.saidas)}</td>
-              <td class="text-right ${item.saidas - item.entradas >= 0 ? 'positive' : 'negative'}">
-                ${formatCurrency(item.saidas - item.entradas)}
+              <td class="text-right ${item.difference >= 0 ? 'positive' : 'negative'}">
+                ${item.difference >= 0 ? '+' : ''}${formatCurrency(item.difference)}
               </td>
             </tr>
-          `).join('')}
+          `).join('')}          
+          <tr class="total-row">
+            <td colspan="3" class="text-right total-label">Total da Diferença</td>
+            <td class="text-right ${totalMonthlyDifference >= 0 ? 'positive' : 'negative'}">
+              ${totalMonthlyDifference >= 0 ? '+' : ''}${formatCurrency(totalMonthlyDifference)}
+            </td>
+          </tr>
         </tbody>
       </table>
     </div>
@@ -241,6 +249,16 @@ export const generateFinancialReportHTML = (data: FinancialReportData): string =
 
     .data-table tr:hover {
       background: #f9fafb;
+    }
+
+    .total-row td {
+      font-weight: bold;
+      background: #e0f2fe;
+    }
+
+    .total-label {
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
 
     .text-right {
