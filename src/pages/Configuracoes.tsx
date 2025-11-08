@@ -139,6 +139,78 @@ const Configuracoes = () => {
         }
       }
 
+      const deleteAllAccounts = async (tableName: string, fallbackTableName?: string) => {
+        const attemptDelete = async (name: string, column: string) => {
+          const { error } = await supabase
+            .from(name)
+            .delete()
+            .eq(column, workspaceAtivo.id);
+
+          if (!error) {
+            return true;
+          }
+
+          if (error.code === '42P01') {
+            return 'missing_table';
+          }
+
+          // Alguns ambientes legados não possuem a coluna workspace_id (apenas usuario_id)
+          if (error.message?.includes(column) || column === 'workspace_id') {
+            const { error: fallbackError } = await supabase
+              .from(name)
+              .delete()
+              .eq('usuario_id', workspaceAtivo.id);
+
+            if (!fallbackError) {
+              return true;
+            }
+
+            if (fallbackError.code === '42P01') {
+              return 'missing_table';
+            }
+
+            return fallbackError;
+          }
+
+          return error;
+        };
+
+        const result = await attemptDelete(tableName, 'workspace_id');
+
+        if (result === true || result === 'missing_table') {
+          if (result === 'missing_table' && fallbackTableName) {
+            const legacyResult = await attemptDelete(fallbackTableName, 'workspace_id');
+            if (legacyResult !== true && legacyResult !== 'missing_table') {
+              throw legacyResult;
+            }
+          }
+          return;
+        }
+
+        // Se chegou aqui é porque houve erro na nova tabela (exceto missing_table)
+        if (fallbackTableName) {
+          const legacyResult = await attemptDelete(fallbackTableName, 'workspace_id');
+          if (legacyResult === true || legacyResult === 'missing_table') {
+            // Caso a tabela legada tenha sido limpa com sucesso, não é necessário interromper o fluxo
+            return;
+          }
+          // Caso contrário, lança o erro original da nova tabela
+        }
+
+        if (result && result !== true) {
+          throw result;
+        }
+      };
+
+      // Deletar movimentações financeiras antes das contas (para evitar violar constraints)
+      await deleteAllAccounts('movimentacoes_financeiras');
+
+      // Deletar todas as contas a pagar (tabela nova e legado)
+      await deleteAllAccounts('contas_a_pagar', 'contas_pagar');
+
+      // Deletar todas as contas a receber (tabela nova e legado)
+      await deleteAllAccounts('contas_a_receber', 'contas_receber');
+
       // Limpar localStorage do workspace e dados em cache PRIMEIRO (para atualização imediata na UI)
       localStorage.removeItem(`flexi-gestor-workspace-${workspaceAtivo.id}`);
       localStorage.removeItem(`flexi-products-${workspaceAtivo.id}`);
