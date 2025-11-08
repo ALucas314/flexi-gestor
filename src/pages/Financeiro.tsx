@@ -39,7 +39,8 @@ import {
   ArrowRightLeft,
   ChevronLeft,
   ChevronRight,
-  Banknote
+  Banknote,
+  CalendarDays
 } from "lucide-react";
 import { useData } from "@/contexts/DataContext";
 import { useResponsive } from "@/hooks/use-responsive";
@@ -522,7 +523,7 @@ const Financeiro = () => {
   const pagamentosBanco = pagamentosPorOrigem.banco ?? 0;
   const recebimentosCaixa = recebimentosPorOrigem.caixa ?? 0;
   const recebimentosBanco = recebimentosPorOrigem.banco ?? 0;
-  const saldoCaixa = totalSaidas + recebimentosCaixa - pagamentosCaixa;
+  const saldoCaixa = recebimentosCaixa - pagamentosCaixa;
   const saldoBanco = recebimentosBanco - pagamentosBanco;
   const saldoConsolidado = saldoCaixa + saldoBanco;
 
@@ -593,6 +594,7 @@ const Financeiro = () => {
     const movementDate = new Date(m.date);
     return movementDate.getMonth() === now.getMonth() && movementDate.getFullYear() === now.getFullYear();
   });
+  const thisMonthMovementCount = thisMonthMovements.length;
 
   const thisMonthEntradas = thisMonthMovements.filter(m => m.type === 'entrada').reduce((sum, m) => sum + m.total, 0);
   const thisMonthSaidas = thisMonthMovements.filter(m => m.type === 'saida').reduce((sum, m) => sum + m.total, 0);
@@ -611,6 +613,104 @@ const Financeiro = () => {
   // Estatísticas
   const totalMovements = periodMovements.length;
   const productosMovimentados = new Set(periodMovements.map(m => m.productId)).size;
+
+  const formatCurrencyWithSign = (valor: number) => {
+    const prefix = valor >= 0 ? '+' : '-';
+    return `${prefix}${formatarMoeda(Math.abs(valor))}`;
+  };
+
+  const resumoCards = useMemo(() => {
+    const saldoConsolidadoPositivo = saldoConsolidado >= 0;
+    const saldoCaixaPositivo = saldoCaixa >= 0;
+    const saldoBancoPositivo = saldoBanco >= 0;
+
+    return [
+      {
+        id: 'total-movimentacoes',
+        badge: 'Total',
+        title: 'Total Movimentações',
+        value: totalMovements,
+        subtitle: 'Registros no sistema',
+        icon: ArrowRightLeft,
+        containerClass: 'bg-gradient-to-br from-slate-50 via-white to-slate-100 border border-slate-200/60 text-slate-900 shadow-sm hover:shadow-lg transition-all duration-300',
+        iconClass: 'bg-slate-200/80 text-slate-700',
+        badgeClass: 'bg-white/80 text-slate-700 border-slate-200',
+        valueClass: 'text-slate-900',
+        formatter: (value: number) => value.toLocaleString('pt-BR'),
+      },
+      {
+        id: 'saldo-consolidado',
+        badge: 'Disponível',
+        title: 'Saldo Consolidado',
+        value: saldoConsolidado,
+        subtitle: 'Caixa + Banco (recebimentos - pagamentos)',
+        icon: PiggyBank,
+        containerClass: saldoConsolidadoPositivo
+          ? 'bg-gradient-to-br from-emerald-50 via-white to-emerald-100 border border-emerald-200/70 text-emerald-900 shadow-sm hover:shadow-lg transition-all duration-300'
+          : 'bg-gradient-to-br from-rose-50 via-white to-rose-100 border border-rose-200/70 text-rose-900 shadow-sm hover:shadow-lg transition-all duration-300',
+        iconClass: saldoConsolidadoPositivo ? 'bg-emerald-100/80 text-emerald-600' : 'bg-rose-100/80 text-rose-600',
+        badgeClass: saldoConsolidadoPositivo ? 'bg-emerald-100/70 text-emerald-700 border-emerald-200' : 'bg-rose-100/70 text-rose-700 border-rose-200',
+        valueClass: saldoConsolidadoPositivo ? 'text-emerald-600' : 'text-rose-600',
+        formatter: formatCurrencyWithSign,
+      },
+      {
+        id: 'saldo-caixa',
+        badge: 'Caixa atual',
+        title: 'Saldo Caixa',
+        value: saldoCaixa,
+        subtitle: 'Recebimentos - Pagamentos (caixa)',
+        icon: Wallet,
+        containerClass: saldoCaixaPositivo
+          ? 'bg-gradient-to-br from-blue-50 via-white to-blue-100 border border-blue-200/70 text-blue-900 shadow-sm hover:shadow-lg transition-all duration-300'
+          : 'bg-gradient-to-br from-rose-50 via-white to-rose-100 border border-rose-200/70 text-rose-900 shadow-sm hover:shadow-lg transition-all duration-300',
+        iconClass: saldoCaixaPositivo ? 'bg-blue-100/80 text-blue-600' : 'bg-rose-100/80 text-rose-600',
+        badgeClass: saldoCaixaPositivo ? 'bg-blue-100/70 text-blue-700 border-blue-200' : 'bg-rose-100/70 text-rose-700 border-rose-200',
+        valueClass: saldoCaixaPositivo ? 'text-blue-700' : 'text-rose-600',
+        formatter: formatCurrencyWithSign,
+      },
+      {
+        id: 'saldo-banco',
+        badge: 'Banco atual',
+        title: 'Saldo Banco',
+        value: saldoBanco,
+        subtitle: 'Recebimentos - Pagamentos (banco)',
+        icon: Banknote,
+        containerClass: saldoBancoPositivo
+          ? 'bg-gradient-to-br from-cyan-50 via-white to-cyan-100 border border-cyan-200/70 text-cyan-900 shadow-sm hover:shadow-lg transition-all duration-300'
+          : 'bg-gradient-to-br from-rose-50 via-white to-rose-100 border border-rose-200/70 text-rose-900 shadow-sm hover:shadow-lg transition-all duration-300',
+        iconClass: saldoBancoPositivo ? 'bg-cyan-100/80 text-cyan-600' : 'bg-rose-100/80 text-rose-600',
+        badgeClass: saldoBancoPositivo ? 'bg-cyan-100/70 text-cyan-700 border-cyan-200' : 'bg-rose-100/70 text-rose-700 border-rose-200',
+        valueClass: saldoBancoPositivo ? 'text-cyan-700' : 'text-rose-600',
+        formatter: formatCurrencyWithSign,
+      },
+      {
+        id: 'movimentacoes-periodo',
+        badge: 'Este Mês',
+        title: 'Movimentações',
+        value: thisMonthMovementCount,
+        subtitle: 'Movimentações do período',
+        icon: CalendarDays,
+        containerClass: 'bg-gradient-to-br from-sky-50 via-white to-sky-100 border border-sky-200/70 text-sky-900 shadow-sm hover:shadow-lg transition-all duration-300',
+        iconClass: 'bg-sky-100/80 text-sky-600',
+        badgeClass: 'bg-sky-100/70 text-sky-700 border-sky-200',
+        valueClass: 'text-sky-900',
+        formatter: (value: number) => value.toLocaleString('pt-BR'),
+      },
+      {
+        id: 'produtos-movimentados',
+        badge: 'Produtos',
+        title: 'Produtos',
+        value: productosMovimentados,
+        subtitle: 'Produtos movimentados',
+        icon: Package,
+        containerClass: 'bg-gradient-to-br from-violet-50 via-white to-violet-100 border border-violet-200/70 text-violet-900 shadow-sm hover:shadow-lg transition-all duration-300',
+        iconClass: 'bg-violet-100/80 text-violet-600',
+        badgeClass: 'bg-violet-100/70 text-violet-700 border-violet-200',
+        valueClass: 'text-violet-700',
+        formatter: (value: number) => value.toLocaleString('pt-BR'),
+      },
+    ];
+  }, [saldoBanco, saldoCaixa, saldoConsolidado, thisMonthMovementCount, productosMovimentados, totalMovements]);
   const totalProducts = products.length;
   const totalStockValue = products.reduce((sum, p) => sum + (p.price * p.stock), 0);
   const lowStockProducts = products.filter(p => p.stock <= p.minStock && p.minStock > 0);
@@ -1181,6 +1281,37 @@ Flexi Gestor - Controle de Estoque
         atualizado_em: dataBase,
       } satisfies Parcela;
     });
+  };
+
+  const normalizarStatusParcela = (status?: ParcelaStatus | string): ParcelaStatus => {
+    if (!status) return 'pendente';
+    if (status === 'pago' || status === 'finalizado' || status === 'recebido') {
+      return 'pago';
+    }
+    if (status === 'vencido') {
+      return 'vencido';
+    }
+    return 'pendente';
+  };
+
+  const obterBadgeStatusParcela = (status: ParcelaStatus, tipo: 'pagar' | 'receber') => {
+    const label =
+      status === 'pago'
+        ? tipo === 'pagar'
+          ? 'Pago'
+          : 'Recebido'
+        : status === 'vencido'
+          ? 'Vencido'
+          : 'Pendente';
+
+    const className =
+      status === 'pago'
+        ? 'bg-green-100 text-green-800'
+        : status === 'vencido'
+          ? 'bg-red-100 text-red-800'
+          : 'bg-yellow-100 text-yellow-800';
+
+    return { label, className };
   };
 
   // 👉 Determina se o erro retornado pelo Supabase indica a necessidade de tentar a tabela legada
@@ -2870,6 +3001,129 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
     return filtradas;
   }, [contasPagar, filtroFornecedor, filtroFormaPagamento, filtroStatus, filtroPeriodo]);
 
+  const contasPagarListagem = useMemo(() => {
+    return contasPagarFiltradas.flatMap((conta) => {
+      const valorTotalConta = Number(conta.valor_total ?? conta.valor ?? 0);
+      const valorPago = Number(conta.valor_pago ?? 0);
+      const valorRestanteCalculado = Math.max(valorTotalConta - valorPago, 0);
+      const valorRestante = Number.isFinite(conta.valor_restante)
+        ? Number(Math.max(conta.valor_restante ?? valorRestanteCalculado, 0))
+        : valorRestanteCalculado;
+
+      const totalParcelas =
+        conta.parcelasDetalhes?.length ||
+        conta.numero_parcelas ||
+        conta.parcelas ||
+        1;
+
+      const dataBase =
+        conta.data_vencimento instanceof Date
+          ? conta.data_vencimento
+          : new Date(conta.data_vencimento);
+
+      const parcelasDetalhes =
+        conta.parcelasDetalhes && conta.parcelasDetalhes.length > 0
+          ? conta.parcelasDetalhes
+          : totalParcelas > 1
+            ? gerarParcelasPlaceholder(conta.id, valorTotalConta, totalParcelas, dataBase)
+            : [];
+
+      if (parcelasDetalhes.length === 0) {
+        return [
+          {
+            key: `${conta.id}-parcela-unica`,
+            conta,
+            parcela: undefined as Parcela | undefined,
+            numeroParcela: 1,
+            totalParcelas: 1,
+            valorParcela: valorTotalConta,
+            vencimento: dataBase,
+            statusParcela: normalizarStatusParcela(conta.status_pagamento || conta.status),
+            valorTotalConta,
+            valorPago,
+            valorRestante,
+          },
+        ];
+      }
+
+      return parcelasDetalhes.map((parcela, index) => ({
+        key: `${conta.id}-${parcela.id || `parcela-${index + 1}`}`,
+        conta,
+        parcela,
+        numeroParcela: parcela.numero ?? index + 1,
+        totalParcelas: parcelasDetalhes.length,
+        valorParcela: Number(parcela.valor ?? (valorTotalConta / parcelasDetalhes.length)),
+        vencimento: parcela.data_vencimento instanceof Date
+          ? parcela.data_vencimento
+          : new Date(parcela.data_vencimento),
+        statusParcela: normalizarStatusParcela(parcela.status || conta.status_pagamento || conta.status),
+        valorTotalConta,
+        valorPago,
+        valorRestante,
+      }));
+    });
+  }, [contasPagarFiltradas]);
+
+  const contasReceberListagem = useMemo(() => {
+    return contasReceber.flatMap((conta) => {
+      const valorTotalConta = Number(conta.valor_total ?? conta.valor ?? 0);
+      const valorRecebido = Number(conta.valor_recebido ?? 0);
+      const valorRestante = Math.max(valorTotalConta - valorRecebido, 0);
+
+      const totalParcelas =
+        conta.parcelasDetalhes?.length ||
+        conta.parcelas ||
+        conta.numero_parcelas ||
+        1;
+
+      const dataBase =
+        conta.data_vencimento instanceof Date
+          ? conta.data_vencimento
+          : new Date(conta.data_vencimento);
+
+      const parcelasDetalhes =
+        conta.parcelasDetalhes && conta.parcelasDetalhes.length > 0
+          ? conta.parcelasDetalhes
+          : totalParcelas > 1
+            ? gerarParcelasPlaceholder(conta.id, valorTotalConta, totalParcelas, dataBase)
+            : [];
+
+      if (parcelasDetalhes.length === 0) {
+        return [
+          {
+            key: `${conta.id}-parcela-unica`,
+            conta,
+            parcela: undefined as Parcela | undefined,
+            numeroParcela: 1,
+            totalParcelas: 1,
+            valorParcela: valorTotalConta,
+            vencimento: dataBase,
+            statusParcela: normalizarStatusParcela(conta.status_recebimento || conta.status),
+            valorTotalConta,
+            valorRecebido,
+            valorRestante,
+          },
+        ];
+      }
+
+      return parcelasDetalhes.map((parcela, index) => ({
+        key: `${conta.id}-${parcela.id || `parcela-${index + 1}`}`,
+        conta,
+        parcela,
+        numeroParcela: parcela.numero ?? index + 1,
+        totalParcelas: parcelasDetalhes.length,
+        valorParcela: Number(parcela.valor ?? (valorTotalConta / parcelasDetalhes.length)),
+        vencimento: parcela.data_vencimento instanceof Date
+          ? parcela.data_vencimento
+          : new Date(parcela.data_vencimento),
+        statusParcela: normalizarStatusParcela(parcela.status || conta.status_recebimento || conta.status),
+        valorTotalConta,
+        valorRecebido,
+        valorRestante,
+      }));
+    });
+  }, [contasReceber]);
+
   // Calcular totais
   const totaisContasPagar = useMemo(() => {
     const totalGeral = contasPagarFiltradas.reduce((sum, c) => sum + (c.valor_total ?? c.valor ?? 0), 0);
@@ -3404,7 +3658,7 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
         {/* ABA 1: MOVIMENTAÇÕES */}
         <TabsContent value="movimentacoes" className="space-y-6">
           {/* Cards de Estatísticas de Movimentações */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 sm:gap-6 lg:gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
             <div className="group bg-gradient-to-br from-blue-100 to-blue-200 rounded-2xl sm:rounded-3xl p-4 sm:p-6 text-blue-800 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 border border-blue-200/50">
               <div className="flex items-center justify-between mb-3 sm:mb-4">
                 <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-300/50 rounded-xl sm:rounded-2xl flex items-center justify-center backdrop-blur-sm">
@@ -5332,25 +5586,43 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
                   <CardTitle className="text-slate-800 text-lg">Resumo do Período</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="text-center p-4 bg-white rounded-lg border border-green-200">
-                      <p className="text-sm text-gray-600 mb-1">Total de Movimentações</p>
-                      <p className="text-2xl font-bold text-gray-900">{totalMovements}</p>
-                    </div>
-                    <div className="text-center p-4 bg-white rounded-lg border border-blue-200">
-                      <p className="text-sm text-gray-600 mb-1">Produtos Movimentados</p>
-                      <p className="text-2xl font-bold text-gray-900">{productosMovimentados}</p>
-                    </div>
-                    <div className={`text-center p-4 bg-white rounded-lg border-2 ${
-                      saldo >= 0 ? 'border-emerald-300' : 'border-red-300'
-                    }`}>
-                      <p className="text-sm text-gray-600 mb-1">Resultado Final</p>
-                      <p className={`text-2xl font-bold ${
-                        saldo >= 0 ? 'text-emerald-700' : 'text-red-700'
-                      }`}>
-                        {saldo >= 0 ? 'Lucro' : 'Prejuízo'}
-                      </p>
-                    </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {resumoCards.map((card) => {
+                      const Icon = card.icon;
+
+                      return (
+                        <div
+                          key={card.id}
+                          className={`group relative overflow-hidden rounded-2xl border p-5 sm:p-6 ${card.containerClass}`}
+                        >
+                          <div className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100 bg-gradient-to-br from-white/0 via-white/20 to-white/40" />
+
+                          <div className="relative flex items-center justify-between">
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] font-semibold uppercase tracking-[0.18em] ${card.badgeClass}`}
+                            >
+                              {card.badge}
+                            </Badge>
+                            <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${card.iconClass}`}>
+                              <Icon className="h-6 w-6" />
+                            </div>
+                          </div>
+
+                          <div className="relative mt-6 space-y-2">
+                            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500/80">
+                              {card.title}
+                            </p>
+                            <p className={`text-3xl font-bold sm:text-4xl ${card.valueClass}`}>
+                              {card.formatter(card.value)}
+                            </p>
+                            <p className="text-sm text-slate-600/90 dark:text-slate-200/80">
+                              {card.subtitle}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </CardContent>
               </Card>

@@ -38,15 +38,107 @@ export function calcularDRE(
     return dataMov >= periodoInicio && dataMov <= periodoFim;
   });
 
+  const movimentacoesEntrada = movimentacoesPeriodo.filter(m => m.type === 'entrada');
+  const movimentacoesSaida = movimentacoesPeriodo.filter(m => m.type === 'saida');
+  const movimentacoesEntradaIds = new Set(movimentacoesEntrada.map(m => m.id));
+  const movimentacoesSaidaIds = new Set(movimentacoesSaida.map(m => m.id));
+
+  const getValorContaPagar = (conta: ContaPagar) => {
+    if (typeof conta.valor_total === 'number') return conta.valor_total;
+    if (typeof conta.valor === 'number') return conta.valor;
+    if (typeof conta.valor_pago === 'number' && conta.valor_pago > 0) return conta.valor_pago;
+    return 0;
+  };
+
+  const getValorContaReceber = (conta: ContaReceber) => {
+    if (typeof conta.valor_total === 'number') return conta.valor_total;
+    if (typeof conta.valor === 'number') return conta.valor;
+    if (typeof conta.valor_recebido === 'number' && conta.valor_recebido > 0) return conta.valor_recebido;
+    return 0;
+  };
+
+  const isContaPagarLiquidada = (conta: ContaPagar) => {
+    const status = conta.status || conta.status_pagamento;
+    return status === 'pago' || status === 'finalizado';
+  };
+
+  const isContaReceberLiquidada = (conta: ContaReceber) => {
+    const status = conta.status || conta.status_recebimento;
+    return status === 'pago' || status === 'recebido' || status === 'finalizado';
+  };
+
+  const contasReceberLiquidada = contasReceberPeriodo.filter(isContaReceberLiquidada);
+  const contasReceberSemMovimentacao = contasReceberLiquidada.filter(conta => {
+    if (!conta.movimento_id) return true;
+    return !movimentacoesSaidaIds.has(conta.movimento_id);
+  });
+
+  const contasPagarLiquidadas = contasPagarPeriodo.filter(isContaPagarLiquidada);
+  const contasPagarSemMovimentacaoEntrada = contasPagarLiquidadas.filter(conta => {
+    if (!conta.movimento_id) return true;
+    return !movimentacoesEntradaIds.has(conta.movimento_id);
+  });
+
+  const normalizarTexto = (texto?: string | null) => (texto || '').trim().toLowerCase();
+  const valoresAproximadamenteIguais = (a: number, b: number) => Math.abs(a - b) < 0.01;
+
+  const movimentoCorrespondeContaReceber = (conta: ContaReceber, mov: typeof movimentacoesSaida[number]) => {
+    if (conta.movimento_id && conta.movimento_id === mov.id) return true;
+    const valorConta = getValorContaReceber(conta);
+    if (!valoresAproximadamenteIguais(valorConta, mov.total)) {
+      return false;
+    }
+
+    const descricaoConta = normalizarTexto(conta.descricao || conta.observacoes);
+    const descricaoMov = normalizarTexto(mov.description);
+    if (descricaoConta && descricaoMov && descricaoConta === descricaoMov) {
+      return true;
+    }
+
+    const clienteConta = normalizarTexto((conta as any).cliente);
+    if (clienteConta && descricaoMov.includes(clienteConta)) {
+      return true;
+    }
+
+    return false;
+  };
+
+  const movimentoCorrespondeContaPagar = (conta: ContaPagar, mov: typeof movimentacoesEntrada[number]) => {
+    if (conta.movimento_id && conta.movimento_id === mov.id) return true;
+    const valorConta = getValorContaPagar(conta);
+    if (!valoresAproximadamenteIguais(valorConta, mov.total)) {
+      return false;
+    }
+
+    const descricaoConta = normalizarTexto(conta.descricao || conta.observacoes);
+    const descricaoMov = normalizarTexto(mov.description);
+    if (descricaoConta && descricaoMov && descricaoConta === descricaoMov) {
+      return true;
+    }
+
+    const fornecedorConta = normalizarTexto((conta as any).fornecedor);
+    if (fornecedorConta && descricaoMov.includes(fornecedorConta)) {
+      return true;
+    }
+
+    return false;
+  };
+
+  const contasReceberUnicas = contasReceberSemMovimentacao.filter(conta => {
+    return !movimentacoesSaida.some(mov => movimentoCorrespondeContaReceber(conta, mov));
+  });
+
+  const contasPagarUnicas = contasPagarSemMovimentacaoEntrada.filter(conta => {
+    return !movimentacoesEntrada.some(mov => movimentoCorrespondeContaPagar(conta, mov));
+  });
+
   // RECEITAS OPERACIONAIS
   // Receitas de vendas (saídas) + Contas a Receber pagas
-  const receitasVendas = movimentacoesPeriodo
-    .filter(m => m.type === 'saida')
+  const receitasVendas = movimentacoesSaida
     .reduce((sum, m) => sum + m.total, 0);
 
-  const receitasContasReceber = contasReceberPeriodo
-    .filter(c => c.status === 'pago')
-    .reduce((sum, c) => sum + c.valor, 0);
+  const receitasContasReceber = contasReceberUnicas
+    .reduce((sum, c) => sum + getValorContaReceber(c), 0);
 
   const receitaOperacionalBruta = receitasVendas + receitasContasReceber;
   const deducoesVendas = 0; // Pode ser expandido para incluir devoluções, descontos, etc.
@@ -54,33 +146,32 @@ export function calcularDRE(
 
   // CUSTOS
   // Custos de compras (entradas) + Contas a Pagar pagas relacionadas a custos
-  const custosCompras = movimentacoesPeriodo
-    .filter(m => m.type === 'entrada')
+  const custosCompras = movimentacoesEntrada
     .reduce((sum, m) => sum + m.total, 0);
 
-  const custosContasPagar = contasPagarPeriodo
-    .filter(c => c.status === 'pago' && c.categoria_dre === 'custo_produto_vendido')
-    .reduce((sum, c) => sum + c.valor, 0);
+  const custosContasPagar = contasPagarUnicas
+    .filter(c => c.categoria_dre === 'custo_produto_vendido')
+    .reduce((sum, c) => sum + getValorContaPagar(c), 0);
 
   const custoProdutoVendido = custosCompras + custosContasPagar;
   const lucroBruto = receitaOperacionalLiquida - custoProdutoVendido;
 
   // DESPESAS OPERACIONAIS
-  const despesasAdministrativas = contasPagarPeriodo
-    .filter(c => c.status === 'pago' && c.categoria_dre === 'despesa_administrativa')
-    .reduce((sum, c) => sum + c.valor, 0);
+  const despesasAdministrativas = contasPagarLiquidadas
+    .filter(c => c.categoria_dre === 'despesa_administrativa')
+    .reduce((sum, c) => sum + getValorContaPagar(c), 0);
 
-  const despesasComerciais = contasPagarPeriodo
-    .filter(c => c.status === 'pago' && c.categoria_dre === 'despesa_comercial')
-    .reduce((sum, c) => sum + c.valor, 0);
+  const despesasComerciais = contasPagarLiquidadas
+    .filter(c => c.categoria_dre === 'despesa_comercial')
+    .reduce((sum, c) => sum + getValorContaPagar(c), 0);
 
-  const despesasFinanceiras = contasPagarPeriodo
-    .filter(c => c.status === 'pago' && c.categoria_dre === 'despesa_financeira')
-    .reduce((sum, c) => sum + c.valor, 0);
+  const despesasFinanceiras = contasPagarLiquidadas
+    .filter(c => c.categoria_dre === 'despesa_financeira')
+    .reduce((sum, c) => sum + getValorContaPagar(c), 0);
 
-  const outrasDespesasOperacionais = contasPagarPeriodo
-    .filter(c => c.status === 'pago' && c.categoria_dre === 'despesa_operacional')
-    .reduce((sum, c) => sum + c.valor, 0);
+  const outrasDespesasOperacionais = contasPagarLiquidadas
+    .filter(c => c.categoria_dre === 'despesa_operacional')
+    .reduce((sum, c) => sum + getValorContaPagar(c), 0);
 
   const totalDespesasOperacionais = 
     despesasAdministrativas + 
@@ -92,21 +183,23 @@ export function calcularDRE(
   const resultadoOperacional = lucroBruto - totalDespesasOperacionais;
 
   // RESULTADO FINANCEIRO
-  const receitasFinanceiras = contasReceberPeriodo
-    .filter(c => c.status === 'pago' && c.categoria_dre === 'receita_financeira')
-    .reduce((sum, c) => sum + c.valor, 0);
+  const contasReceberFinanceiras = contasReceberUnicas
+    .filter(c => c.categoria_dre === 'receita_financeira');
+
+  const receitasFinanceiras = contasReceberFinanceiras
+    .reduce((sum, c) => sum + getValorContaReceber(c), 0);
 
   const despesasFinanceirasTotal = despesasFinanceiras; // Já calculado acima
   const resultadoFinanceiro = receitasFinanceiras - despesasFinanceirasTotal;
 
   // OUTRAS RECEITAS E DESPESAS
-  const outrasReceitas = contasReceberPeriodo
-    .filter(c => c.status === 'pago' && c.categoria_dre === 'outras_receitas')
-    .reduce((sum, c) => sum + c.valor, 0);
+  const outrasReceitas = contasReceberUnicas
+    .filter(c => c.categoria_dre === 'outras_receitas')
+    .reduce((sum, c) => sum + getValorContaReceber(c), 0);
 
-  const outrasDespesas = contasPagarPeriodo
-    .filter(c => c.status === 'pago' && c.categoria_dre === 'outras_despesas')
-    .reduce((sum, c) => sum + c.valor, 0);
+  const outrasDespesas = contasPagarLiquidadas
+    .filter(c => c.categoria_dre === 'outras_despesas')
+    .reduce((sum, c) => sum + getValorContaPagar(c), 0);
 
   // RESULTADO ANTES DO IMPOSTO
   const resultadoAntesImposto = 
@@ -122,32 +215,32 @@ export function calcularDRE(
   const resultadoLiquido = resultadoAntesImposto - impostos;
 
   // DETALHAMENTO POR CATEGORIA
+  const contasReceberOperacionais = contasReceberUnicas
+    .filter(c => !c.categoria_dre || c.categoria_dre === 'receita_operacional');
+
   const detalhamentoReceitas = [
     {
       categoria: 'Receitas Operacionais',
       valor: receitaOperacionalLiquida,
-      contas: contasReceberPeriodo
-        .filter(c => c.status === 'pago' && !c.categoria_dre)
-        .map(c => ({ id: c.id, descricao: c.descricao, valor: c.valor }))
+      contas: contasReceberOperacionais
+        .map(c => ({ id: c.id, descricao: c.descricao, valor: getValorContaReceber(c) }))
         .concat(
-          movimentacoesPeriodo
-            .filter(m => m.type === 'saida')
+          movimentacoesSaida
             .map(m => ({ id: m.id, descricao: m.description, valor: m.total }))
         )
     },
     {
       categoria: 'Receitas Financeiras',
       valor: receitasFinanceiras,
-      contas: contasReceberPeriodo
-        .filter(c => c.status === 'pago' && c.categoria_dre === 'receita_financeira')
-        .map(c => ({ id: c.id, descricao: c.descricao, valor: c.valor }))
+      contas: contasReceberFinanceiras
+        .map(c => ({ id: c.id, descricao: c.descricao, valor: getValorContaReceber(c) }))
     },
     {
       categoria: 'Outras Receitas',
       valor: outrasReceitas,
-      contas: contasReceberPeriodo
-        .filter(c => c.status === 'pago' && c.categoria_dre === 'outras_receitas')
-        .map(c => ({ id: c.id, descricao: c.descricao, valor: c.valor }))
+      contas: contasReceberUnicas
+        .filter(c => c.categoria_dre === 'outras_receitas')
+        .map(c => ({ id: c.id, descricao: c.descricao, valor: getValorContaReceber(c) }))
     }
   ].filter(item => item.valor > 0);
 
@@ -155,12 +248,11 @@ export function calcularDRE(
     {
       categoria: 'Custo do Produto Vendido',
       valor: custoProdutoVendido,
-      contas: contasPagarPeriodo
-        .filter(c => c.status === 'pago' && c.categoria_dre === 'custo_produto_vendido')
-        .map(c => ({ id: c.id, descricao: c.descricao, valor: c.valor }))
+      contas: contasPagarUnicas
+        .filter(c => c.categoria_dre === 'custo_produto_vendido')
+        .map(c => ({ id: c.id, descricao: c.descricao, valor: getValorContaPagar(c) }))
         .concat(
-          movimentacoesPeriodo
-            .filter(m => m.type === 'entrada')
+          movimentacoesEntrada
             .map(m => ({ id: m.id, descricao: m.description, valor: m.total }))
         )
     }
@@ -170,30 +262,30 @@ export function calcularDRE(
     {
       categoria: 'Despesas Administrativas',
       valor: despesasAdministrativas,
-      contas: contasPagarPeriodo
-        .filter(c => c.status === 'pago' && c.categoria_dre === 'despesa_administrativa')
-        .map(c => ({ id: c.id, descricao: c.descricao, valor: c.valor }))
+      contas: contasPagarLiquidadas
+        .filter(c => c.categoria_dre === 'despesa_administrativa')
+        .map(c => ({ id: c.id, descricao: c.descricao, valor: getValorContaPagar(c) }))
     },
     {
       categoria: 'Despesas Comerciais',
       valor: despesasComerciais,
-      contas: contasPagarPeriodo
-        .filter(c => c.status === 'pago' && c.categoria_dre === 'despesa_comercial')
-        .map(c => ({ id: c.id, descricao: c.descricao, valor: c.valor }))
+      contas: contasPagarLiquidadas
+        .filter(c => c.categoria_dre === 'despesa_comercial')
+        .map(c => ({ id: c.id, descricao: c.descricao, valor: getValorContaPagar(c) }))
     },
     {
       categoria: 'Despesas Financeiras',
       valor: despesasFinanceiras,
-      contas: contasPagarPeriodo
-        .filter(c => c.status === 'pago' && c.categoria_dre === 'despesa_financeira')
-        .map(c => ({ id: c.id, descricao: c.descricao, valor: c.valor }))
+      contas: contasPagarLiquidadas
+        .filter(c => c.categoria_dre === 'despesa_financeira')
+        .map(c => ({ id: c.id, descricao: c.descricao, valor: getValorContaPagar(c) }))
     },
     {
       categoria: 'Outras Despesas',
       valor: outrasDespesasOperacionais + outrasDespesas,
-      contas: contasPagarPeriodo
-        .filter(c => c.status === 'pago' && (c.categoria_dre === 'despesa_operacional' || c.categoria_dre === 'outras_despesas'))
-        .map(c => ({ id: c.id, descricao: c.descricao, valor: c.valor }))
+      contas: contasPagarLiquidadas
+        .filter(c => c.categoria_dre === 'despesa_operacional' || c.categoria_dre === 'outras_despesas')
+        .map(c => ({ id: c.id, descricao: c.descricao, valor: getValorContaPagar(c) }))
     }
   ].filter(item => item.valor > 0);
 

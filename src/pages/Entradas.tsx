@@ -599,22 +599,6 @@ const Entradas = () => {
       // Criar conta a pagar se o pagamento for parcelado (mesmo com 1 parcela, se marcado como parcelado)
       if (paymentMethod === "parcelado" && totalCompra > 0 && installments >= 1 && workspaceAtivo?.id && user?.id) {
         try {
-          // Buscar fornecedor_id se o nome do fornecedor existir
-          let fornecedorId: string | null = null;
-          if (supplier && supplier.trim() !== '') {
-            const { data: fornecedorData } = await supabase
-              .from('fornecedores')
-              .select('id')
-              .eq('nome', supplier.trim())
-              .eq('workspace_id', workspaceAtivo.id)
-              .limit(1)
-              .single();
-            
-            if (fornecedorData) {
-              fornecedorId = fornecedorData.id;
-            }
-          }
-
           // Calcular valor por parcela
           const valorParcela = totalCompra / installments;
           
@@ -637,9 +621,8 @@ const Entradas = () => {
               lancamento: entryDate.toISOString().split('T')[0],
               observacoes: `Compra parcelada: ${itemsToProcess.map(i => i.productName).join(', ')}${notes ? ` - ${notes}` : ''}`,
               forma_pagamento: 'parcelado',
-              conta_origem: 'caixa', // Padrão, pode ser alterado depois
+              conta_origem: paymentMethod === "parcelado" ? 'banco' : 'caixa', // Parcelado vai para banco, à vista permanece no caixa
               centro_custo: '', // Pode ser preenchido depois
-              fornecedor_id: fornecedorId,
               fornecedor: supplier,
               valor_total: totalCompra,
               valor_pago: 0,
@@ -1424,22 +1407,6 @@ const Entradas = () => {
         // Criar conta a pagar se o pagamento for parcelado (mesmo com 1 parcela, se marcado como parcelado)
         if (paymentMethod === "parcelado" && totalCost > 0 && installments >= 1 && workspaceAtivo?.id && user?.id) {
           try {
-            // Buscar fornecedor_id se o nome do fornecedor existir
-            let fornecedorId: string | null = null;
-            if (data.supplier && data.supplier.trim() !== '') {
-              const { data: fornecedorData } = await supabase
-                .from('fornecedores')
-                .select('id')
-                .eq('nome', data.supplier.trim())
-                .eq('workspace_id', workspaceAtivo.id)
-                .limit(1)
-                .single();
-              
-              if (fornecedorData) {
-                fornecedorId = fornecedorData.id;
-              }
-            }
-
             // Calcular valor por parcela
             const valorParcela = totalCost / installments;
             
@@ -1462,9 +1429,8 @@ const Entradas = () => {
                 lancamento: data.entryDate.toISOString().split('T')[0],
                 observacoes: `Compra parcelada: ${product.name} - ${totalQuantity} unidades em ${selectedBatches.length} lote(s)`,
                 forma_pagamento: 'parcelado',
-                conta_origem: 'caixa',
+                conta_origem: paymentMethod === "parcelado" ? 'banco' : 'caixa',
                 centro_custo: '',
-                fornecedor_id: fornecedorId,
                 fornecedor: data.supplier,
                 valor_total: totalCost,
                 valor_pago: 0,
@@ -1629,22 +1595,6 @@ const Entradas = () => {
       const totalCompra = data.quantity * data.unitCost;
       if (paymentMethod === "parcelado" && totalCompra > 0 && installments >= 1 && workspaceAtivo?.id && user?.id) {
         try {
-          // Buscar fornecedor_id se o nome do fornecedor existir
-          let fornecedorId: string | null = null;
-          if (data.supplier && data.supplier.trim() !== '') {
-            const { data: fornecedorData } = await supabase
-              .from('fornecedores')
-              .select('id')
-              .eq('nome', data.supplier.trim())
-              .eq('workspace_id', workspaceAtivo.id)
-              .limit(1)
-              .single();
-            
-            if (fornecedorData) {
-              fornecedorId = fornecedorData.id;
-            }
-          }
-
           // Calcular valor por parcela
           const valorParcela = totalCompra / installments;
           
@@ -1667,9 +1617,8 @@ const Entradas = () => {
               lancamento: data.entryDate.toISOString().split('T')[0],
               observacoes: `Compra parcelada: ${product.name} - ${data.quantity} unidades`,
               forma_pagamento: 'parcelado',
-              conta_origem: 'caixa',
+              conta_origem: paymentMethod === "parcelado" ? 'banco' : 'caixa',
               centro_custo: '',
-              fornecedor_id: fornecedorId,
               fornecedor: data.supplier,
               valor_total: totalCompra,
               valor_pago: 0,
