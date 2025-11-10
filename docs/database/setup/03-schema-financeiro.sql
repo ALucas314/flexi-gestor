@@ -288,7 +288,8 @@ CREATE TABLE IF NOT EXISTS public.movimentacoes_financeiras (
   criado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   CONSTRAINT conta_relacionada_valida CHECK (
     (conta_pagar_id IS NOT NULL AND conta_receber_id IS NULL) OR
-    (conta_pagar_id IS NULL AND conta_receber_id IS NOT NULL)
+    (conta_pagar_id IS NULL AND conta_receber_id IS NOT NULL) OR
+    (conta_pagar_id IS NULL AND conta_receber_id IS NULL)
   )
 );
 

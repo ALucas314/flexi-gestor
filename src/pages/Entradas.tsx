@@ -599,7 +599,6 @@ const Entradas = () => {
       // Criar conta a pagar se o pagamento for parcelado (mesmo com 1 parcela, se marcado como parcelado)
       if (paymentMethod === "parcelado" && totalCompra > 0 && installments >= 1 && workspaceAtivo?.id && user?.id) {
         try {
-          // Calcular valor por parcela
           const valorParcela = totalCompra / installments;
           
           // Data de vencimento da primeira parcela (30 dias a partir da data da entrada)

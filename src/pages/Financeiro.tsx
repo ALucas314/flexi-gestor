@@ -113,6 +113,60 @@ type FormContaReceberState = {
   movimento_id: string;
 };
 
+const normalizarNumero = (valor?: number | string | null | undefined): number => {
+  if (typeof valor === 'number') {
+    return Number.isFinite(valor) ? valor : 0;
+  }
+  if (typeof valor === 'string') {
+    const parsed = parseInt(valor, 10);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+};
+
+const contaEhParcelada = (conta: any, tipo: 'pagar' | 'receber'): boolean => {
+  if (!conta) return false;
+
+  const forma =
+    tipo === 'pagar'
+      ? conta.forma_pagamento ?? conta.formaPagamento
+      : conta.forma_recebimento ?? conta.formaRecebimento;
+
+  const formaNormalizada = typeof forma === 'string' ? forma.toLowerCase() : '';
+  if (formaNormalizada.includes('parcelado')) {
+    return true;
+  }
+
+  const numeroParcelas =
+    normalizarNumero(conta.parcelas) ||
+    normalizarNumero(conta.numero_parcelas) ||
+    normalizarNumero(conta.parcelas_totais);
+
+  if (numeroParcelas > 1) {
+    return true;
+  }
+
+  if (Array.isArray(conta.parcelasDetalhes) && conta.parcelasDetalhes.length > 1) {
+    return true;
+  }
+
+  return false;
+};
+
+const classificarContaPagarOrigem = (conta: any): OrigemPagamento => {
+  return contaEhParcelada(conta, 'pagar') ? 'banco' : 'caixa';
+};
+
+const classificarContaReceberDestino = (conta: any): OrigemPagamento => {
+  return contaEhParcelada(conta, 'receber') ? 'banco' : 'caixa';
+};
+
+const classificarOrigemPorMetodoPagamento = (paymentMethod?: string): OrigemPagamento => {
+  if (!paymentMethod) return 'caixa';
+  const metodo = paymentMethod.toLowerCase();
+  return metodo.startsWith('parcelado') ? 'banco' : 'caixa';
+};
+
 const Financeiro = () => {
   const { isMobile } = useResponsive();
   const { movements, products } = useData();
@@ -303,7 +357,7 @@ const Financeiro = () => {
     lancamento: new Date(),
     observacoes: '',
     forma_recebimento: '' as FormaPagamento | '',
-    conta_destino: 'caixa' as OrigemPagamento,
+  conta_destino: 'caixa' as OrigemPagamento,
     centro_custo: '',
     cliente: '',
     valor_total: 0,
@@ -455,13 +509,68 @@ const Financeiro = () => {
 
   const periodMovements = getMovementsByPeriod();
 
+  const movimentosComContaPagar = useMemo(() => {
+    const ids = new Set<string>();
+    contasPagar.forEach((conta) => {
+      if (conta.movimento_id) {
+        ids.add(conta.movimento_id);
+      }
+    });
+    return ids;
+  }, [contasPagar]);
+
+  const movimentosComContaReceber = useMemo(() => {
+    const ids = new Set<string>();
+    contasReceber.forEach((conta) => {
+      if (conta.movimento_id) {
+        ids.add(conta.movimento_id);
+      }
+    });
+    return ids;
+  }, [contasReceber]);
+
+  const totaisMovimentacoesPagamentos = useMemo(() => {
+    const totais = { caixa: 0, banco: 0 } as Record<OrigemPagamento, number>;
+
+    periodMovements.forEach((mov) => {
+      if (mov.type !== 'entrada') return;
+      if (!mov) return;
+      if (movimentosComContaPagar.has(mov.id)) return;
+
+      const valorTotalRaw = typeof mov.total === 'number' ? mov.total : Number(mov.total ?? 0);
+      if (!Number.isFinite(valorTotalRaw) || valorTotalRaw === 0) return;
+
+      const origem = classificarOrigemPorMetodoPagamento(mov.paymentMethod);
+      totais[origem] += valorTotalRaw;
+    });
+
+    return totais;
+  }, [periodMovements, movimentosComContaPagar]);
+
+  const totaisMovimentacoesRecebimentos = useMemo(() => {
+    const totais = { caixa: 0, banco: 0 } as Record<OrigemPagamento, number>;
+
+    periodMovements.forEach((mov) => {
+      if (mov.type !== 'saida') return;
+      if (!mov) return;
+      if (movimentosComContaReceber.has(mov.id)) return;
+
+      const valorTotalRaw = typeof mov.total === 'number' ? mov.total : Number(mov.total ?? 0);
+      if (!Number.isFinite(valorTotalRaw) || valorTotalRaw === 0) return;
+
+      const origem = classificarOrigemPorMetodoPagamento(mov.paymentMethod);
+      totais[origem] += valorTotalRaw;
+    });
+
+    return totais;
+  }, [periodMovements, movimentosComContaReceber]);
+
   // 💵 Soma quanto já foi pago em contas a pagar, agrupando por origem (caixa ou banco).
   const pagamentosPorOrigem = useMemo(() => {
     const totais = { caixa: 0, banco: 0 } as Record<OrigemPagamento, number>;
 
     contasPagar.forEach((conta) => {
-      const origem = (conta.conta_origem || conta.origem_pagamento || (conta.forma_pagamento === 'dinheiro' ? 'caixa' : undefined)) as OrigemPagamento | undefined;
-      if (origem !== 'caixa' && origem !== 'banco') return;
+      const origem = classificarContaPagarOrigem(conta);
 
       const valorTotal = Number(conta.valor_total ?? conta.valor ?? 0);
       const restante = Number(conta.valor_restante ?? Math.max(valorTotal - Number(conta.valor_pago ?? 0), 0));
@@ -479,17 +588,18 @@ const Financeiro = () => {
       totais[origem] += valorPago;
     });
 
+    totais.caixa += totaisMovimentacoesPagamentos.caixa;
+    totais.banco += totaisMovimentacoesPagamentos.banco;
+
     return totais;
-  }, [contasPagar, estaNoPeriodoAtual]);
+  }, [contasPagar, estaNoPeriodoAtual, totaisMovimentacoesPagamentos]);
 
   // 💰 Soma quanto já foi recebido em contas a receber, agrupando por destino (caixa ou banco).
   const recebimentosPorOrigem = useMemo(() => {
     const totais = { caixa: 0, banco: 0 } as Record<OrigemPagamento, number>;
 
     contasReceber.forEach((conta) => {
-      const origemLegada = (conta as Record<string, any>)?.origem_pagamento as OrigemPagamento | undefined;
-      const origem = (conta.conta_destino || origemLegada || (conta.forma_recebimento === 'dinheiro' ? 'caixa' : undefined)) as OrigemPagamento | undefined;
-      if (origem !== 'caixa' && origem !== 'banco') return;
+      const origem = classificarContaReceberDestino(conta);
 
       const valorTotal = Number(conta.valor_total ?? conta.valor ?? 0);
       const restante = Number(conta.valor_restante ?? Math.max(valorTotal - Number(conta.valor_recebido ?? 0), 0));
@@ -507,8 +617,11 @@ const Financeiro = () => {
       totais[origem] += valorRecebido;
     });
 
+    totais.caixa += totaisMovimentacoesRecebimentos.caixa;
+    totais.banco += totaisMovimentacoesRecebimentos.banco;
+
     return totais;
-  }, [contasReceber, estaNoPeriodoAtual]);
+  }, [contasReceber, estaNoPeriodoAtual, totaisMovimentacoesRecebimentos]);
 
   // Calcular valores financeiros baseados nas movimentações filtradas por período
   const entradas = periodMovements.filter(m => m.type === 'entrada');
@@ -1446,7 +1559,7 @@ Flexi Gestor - Controle de Estoque
       lancamento: dataLancamento.toISOString().split('T')[0],
       observacoes,
       forma_pagamento: conta.forma_pagamento || 'dinheiro',
-      conta_origem: conta.conta_origem || 'caixa',
+      conta_origem: conta.conta_origem || conta.origem_pagamento || classificarContaPagarOrigem(conta),
       centro_custo: conta.centro_custo || conta.categoria_dre || null,
       fornecedor: conta.fornecedor || '',
       valor_total: valorTotal,
@@ -1477,7 +1590,7 @@ Flexi Gestor - Controle de Estoque
       observacoes,
       usuario_id: workspaceAtivo.id,
       workspace_id: workspaceAtivo.id,
-      origem_pagamento: conta.conta_origem || conta.origem_pagamento || 'caixa',
+      origem_pagamento: conta.conta_origem || conta.origem_pagamento || classificarContaPagarOrigem(conta),
     };
 
     try {
@@ -1570,7 +1683,7 @@ Flexi Gestor - Controle de Estoque
       lancamento: dataLancamento.toISOString().split('T')[0],
       observacoes: descricao,
       forma_recebimento: conta.forma_recebimento || 'dinheiro',
-      conta_destino: conta.conta_destino || 'caixa',
+      conta_destino: conta.conta_destino || classificarContaReceberDestino(conta),
       cliente: conta.cliente || '',
       valor_total: valorTotal,
       valor_recebido: valorRecebido,
@@ -1609,7 +1722,7 @@ Flexi Gestor - Controle de Estoque
     };
 
     const tentarInserirContaNova = async (): Promise<{
-      data: any | null;
+      data?: any | null;
       payload: Record<string, any>;
       error?: any;
       colunasRemovidas?: string[];
@@ -1638,7 +1751,7 @@ Flexi Gestor - Controle de Estoque
 
         // Se erro indicar uso da tabela legada, apenas sair para tentar fallback posteriormente
         if (erroIndicaTabelaLegada(error) || error.code === '42P01') {
-          return { error, payload, colunasRemovidas };
+          return { data: null, error, payload, colunasRemovidas };
         }
 
         // Se coluna inexistente, remover e tentar novamente
@@ -1703,7 +1816,7 @@ Flexi Gestor - Controle de Estoque
           data_recebimento: dataRecebimentoExistente || undefined,
           status_recebimento: dadosContaNovoBase.status_recebimento,
           status: conta.status || 'pendente',
-          conta_destino: resultado.payload.conta_destino || conta.conta_destino || 'caixa',
+          conta_destino: resultado.payload.conta_destino || conta.conta_destino || classificarContaReceberDestino(conta),
           workspace_id: workspaceAtivo.id,
           usuario_id: user.id,
           movimento_id: conta.movimento_id,
@@ -1739,7 +1852,7 @@ Flexi Gestor - Controle de Estoque
           data_recebimento: dataRecebimentoExistente || undefined,
           status_recebimento: conta.status_recebimento || 'pendente',
           status: conta.status || 'pendente',
-          conta_destino: conta.conta_destino || 'caixa',
+          conta_destino: conta.conta_destino || classificarContaReceberDestino(conta),
           workspace_id: workspaceAtivo.id,
           usuario_id: user.id,
           movimento_id: conta.movimento_id,
@@ -1763,7 +1876,7 @@ Flexi Gestor - Controle de Estoque
       data_recebimento: dataRecebimentoExistente || undefined,
       status_recebimento: conta.status_recebimento || 'pendente',
       status: conta.status || 'pendente',
-      conta_destino: conta.conta_destino || 'caixa',
+      conta_destino: conta.conta_destino || classificarContaReceberDestino(conta),
       workspace_id: workspaceAtivo.id,
       usuario_id: user.id,
       movimento_id: conta.movimento_id,
@@ -1845,8 +1958,10 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
     const baseDate = new Date(mov.date);
     const contaId = `mov-${mov.id}`;
     const valorTotal = Number((mov.total || mov.quantity * mov.unitPrice || 0).toFixed(2));
-    const parcelasDetalhadas = gerarParcelasPlaceholder(contaId, valorTotal, parcelas, baseDate);
-    const primeiroVencimento = parcelasDetalhadas.length > 0 ? parcelasDetalhadas[0].data_vencimento : baseDate;
+    const vencimentoBase = new Date(baseDate);
+    vencimentoBase.setDate(vencimentoBase.getDate() + 30);
+    const parcelasDetalhadas = gerarParcelasPlaceholder(contaId, valorTotal, parcelas, vencimentoBase);
+    const primeiroVencimento = parcelasDetalhadas.length > 0 ? parcelasDetalhadas[0].data_vencimento : vencimentoBase;
 
     const produto = mov.productName || 'Produto';
     const fornecedor = extrairTextoFinal(mov.description) || 'Fornecedor';
@@ -1858,7 +1973,7 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
       lancamento: baseDate,
       observacoes: observacoesConta,
       forma_pagamento: 'parcelado',
-      conta_origem: 'caixa',
+    conta_origem: 'banco',
       centro_custo: '',
       fornecedor: fornecedor || 'Fornecedor não informado',
       valor_total: valorTotal,
@@ -1879,7 +1994,7 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
       data_registro: baseDate,
       status: 'pendente',
       categoria_dre: undefined,
-      origem_pagamento: 'caixa',
+    origem_pagamento: 'banco',
       numero_parcelas: parcelas,
       movimento_id: mov.id,
       parcelasDetalhes: parcelasDetalhadas,
@@ -1895,19 +2010,21 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
     const baseDate = new Date(mov.date);
     const valorTotal = Number((mov.total || mov.quantity * mov.unitPrice || 0).toFixed(2));
     const primeiroVencimento = new Date(baseDate);
-    primeiroVencimento.setMonth(primeiroVencimento.getMonth());
+    primeiroVencimento.setDate(primeiroVencimento.getDate() + 30);
 
     const produto = mov.productName || 'Produto';
     const cliente = extrairTextoFinal(mov.description) || 'Cliente';
     const descricaoConta = `Venda parcelada - ${produto}`;
     const observacoesConta = mov.description || `Venda parcelada de ${mov.quantity} unidade(s) de ${produto} para ${cliente}`;
 
+    const parcelasDetalhes = gerarParcelasPlaceholder(`mov-${mov.id}`, valorTotal, parcelas, primeiroVencimento);
+
     return {
       id: `mov-${mov.id}`,
       lancamento: baseDate,
       observacoes: observacoesConta,
       forma_recebimento: 'parcelado',
-      conta_destino: 'caixa',
+      conta_destino: 'banco',
       centro_custo: '',
       cliente: extrairTextoFinal(mov.description) || 'Cliente não informado',
       valor_total: valorTotal,
@@ -1927,27 +2044,230 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
       status: 'pendente',
       categoria_dre: undefined,
       movimento_id: mov.id,
-      parcelasDetalhes: gerarParcelasPlaceholder(`mov-${mov.id}`, valorTotal, parcelas, baseDate),
+      parcelasDetalhes,
     } satisfies ContaReceber;
   };
 
+  const normalizarTextoChave = (texto: string | undefined | null) => {
+    if (!texto) return '';
+    return texto
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^\w\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
+  const criarChaveBasicaConta = (
+    descricao: string | undefined,
+    participante: string | undefined,
+    data: Date | string | undefined
+  ) => {
+    const descricaoNorm = normalizarTextoChave(descricao);
+    const participanteNorm = normalizarTextoChave(participante);
+    const dataNorm =
+      data instanceof Date
+        ? data.toISOString().split('T')[0]
+        : typeof data === 'string'
+          ? data.split('T')[0]
+          : '';
+    return `${descricaoNorm}|${participanteNorm}|${dataNorm}`;
+  };
+
+  const preferirContaPagarSemMarkup = (original: ContaPagar, derivada: ContaPagar) => {
+    const totalOriginal = Number(original.valor_total ?? original.valor ?? 0);
+    const totalDerivado = Number(derivada.valor_total ?? derivada.valor ?? 0);
+
+    if (totalDerivado > 0 && totalDerivado + 0.01 < totalOriginal) {
+      const valorRestanteDerivado =
+        Number.isFinite(derivada.valor_restante) && derivada.valor_restante !== undefined
+          ? Number(derivada.valor_restante)
+          : totalDerivado;
+
+      const parcelasDetalhes = derivada.parcelasDetalhes && derivada.parcelasDetalhes.length > 0
+        ? derivada.parcelasDetalhes
+        : original.parcelasDetalhes ?? [];
+
+      return {
+        ...original,
+        valor_total: totalDerivado,
+        valor: totalDerivado,
+        valor_restante: Math.min(
+          Number(original.valor_restante ?? totalOriginal),
+          valorRestanteDerivado
+        ),
+        parcelas: derivada.parcelas ?? original.parcelas,
+        numero_parcelas: derivada.numero_parcelas ?? original.numero_parcelas ?? derivada.parcelas,
+        parcelasDetalhes,
+        movimento_id: original.movimento_id || derivada.movimento_id,
+        conta_origem: derivada.conta_origem || original.conta_origem,
+        data_vencimento: derivada.data_vencimento,
+        data_compra: original.data_compra || derivada.data_compra,
+        observacoes: original.observacoes || derivada.observacoes,
+        descricao: original.descricao || derivada.descricao,
+      };
+    }
+
+    return original;
+  };
+
+  const preferirContaReceberComMarkup = (original: ContaReceber, derivada: ContaReceber) => {
+    const totalOriginal = Number(original.valor_total ?? original.valor ?? 0);
+    const totalDerivado = Number(derivada.valor_total ?? derivada.valor ?? 0);
+
+    if (totalDerivado > totalOriginal + 0.01) {
+      const valorRestanteDerivado =
+        Number.isFinite(derivada.valor_restante) && derivada.valor_restante !== undefined
+          ? Number(derivada.valor_restante)
+          : totalDerivado;
+
+      const parcelasDetalhes = derivada.parcelasDetalhes && derivada.parcelasDetalhes.length > 0
+        ? derivada.parcelasDetalhes
+        : original.parcelasDetalhes ?? [];
+
+      return {
+        ...original,
+        valor_total: totalDerivado,
+        valor: totalDerivado,
+        valor_restante: Math.max(
+          Number(original.valor_restante ?? totalOriginal),
+          valorRestanteDerivado
+        ),
+        parcelas: derivada.parcelas ?? original.parcelas,
+        numero_parcelas: derivada.numero_parcelas ?? original.numero_parcelas ?? derivada.parcelas,
+        parcelasDetalhes,
+        movimento_id: original.movimento_id || derivada.movimento_id,
+        conta_destino: derivada.conta_destino || original.conta_destino,
+        data_vencimento: derivada.data_vencimento,
+        data_recebimento: original.data_recebimento || derivada.data_recebimento,
+        observacoes: original.observacoes || derivada.observacoes,
+        descricao: original.descricao || derivada.descricao,
+      };
+    }
+
+    return original;
+  };
+
+  const isDatasProximas = (dataA?: Date, dataB?: Date, toleranciaDias = 5) => {
+    if (!dataA || !dataB) return false;
+    const diffMs = Math.abs(dataA.getTime() - dataB.getTime());
+    const diffDias = diffMs / (1000 * 60 * 60 * 24);
+    return diffDias <= toleranciaDias;
+  };
+
+  const encontrarIndiceSimilarContaPagar = (contas: ContaPagar[], derivada: ContaPagar) => {
+    const descDerivada = normalizarTextoChave(derivada.descricao || derivada.observacoes);
+    const fornecedorDerivado = normalizarTextoChave(derivada.fornecedor);
+    const valorDerivado = Number(derivada.valor_total ?? derivada.valor ?? 0);
+
+    for (let i = contas.length - 1; i >= 0; i--) {
+      const conta = contas[i];
+      const descConta = normalizarTextoChave(conta.descricao || conta.observacoes);
+      const fornecedorConta = normalizarTextoChave(conta.fornecedor);
+
+      if (descConta === descDerivada && fornecedorConta === fornecedorDerivado) {
+        if (
+          !conta.data_vencimento ||
+          !derivada.data_vencimento ||
+          isDatasProximas(conta.data_vencimento, derivada.data_vencimento, 7)
+        ) {
+          return i;
+        }
+      }
+    }
+
+    if (fornecedorDerivado) {
+      for (let i = contas.length - 1; i >= 0; i--) {
+        const conta = contas[i];
+        const fornecedorConta = normalizarTextoChave(conta.fornecedor);
+        if (fornecedorConta !== fornecedorDerivado) continue;
+
+        const valorConta = Number(conta.valor_total ?? conta.valor ?? 0);
+        if (Math.abs(valorConta - valorDerivado) <= 0.5) {
+          return i;
+        }
+      }
+    }
+
+    return -1;
+  };
+
+  const encontrarIndiceSimilarContaReceber = (contas: ContaReceber[], derivada: ContaReceber) => {
+    const descDerivada = normalizarTextoChave(derivada.descricao || derivada.observacoes);
+    const clienteDerivado = normalizarTextoChave(derivada.cliente);
+    const valorDerivado = Number(derivada.valor_total ?? derivada.valor ?? 0);
+
+    for (let i = contas.length - 1; i >= 0; i--) {
+      const conta = contas[i];
+      const descConta = normalizarTextoChave(conta.descricao || conta.observacoes);
+      const clienteConta = normalizarTextoChave(conta.cliente);
+
+      if (descConta === descDerivada && clienteConta === clienteDerivado) {
+        if (
+          !conta.data_vencimento ||
+          !derivada.data_vencimento ||
+          isDatasProximas(conta.data_vencimento, derivada.data_vencimento, 7)
+        ) {
+          return i;
+        }
+      }
+    }
+
+    if (clienteDerivado) {
+      for (let i = contas.length - 1; i >= 0; i--) {
+        const conta = contas[i];
+        const clienteConta = normalizarTextoChave(conta.cliente);
+        if (clienteConta !== clienteDerivado) continue;
+
+        const valorConta = Number(conta.valor_total ?? conta.valor ?? 0);
+        if (Math.abs(valorConta - valorDerivado) <= 0.5) {
+          return i;
+        }
+      }
+    }
+
+    return -1;
+  };
+
+  const atualizarChavesContaPagar = (conta: ContaPagar, index: number, mapa: Map<string, number>) => {
+    const chaveBasica = criarChaveBasicaConta(conta.descricao || conta.observacoes, conta.fornecedor, conta.data_vencimento);
+    if (chaveBasica) {
+      mapa.set(chaveBasica, index);
+    }
+    if (conta.movimento_id) {
+      mapa.set(`mov-${conta.movimento_id}`, index);
+    }
+    const fornecedorNorm = normalizarTextoChave(conta.fornecedor);
+    if (fornecedorNorm) {
+      const total = Number(conta.valor_total ?? conta.valor ?? 0);
+      mapa.set(`${fornecedorNorm}|${total.toFixed(2)}`, index);
+    }
+  };
+
+  const atualizarChavesContaReceber = (conta: ContaReceber, index: number, mapa: Map<string, number>) => {
+    const chaveBasica = criarChaveBasicaConta(conta.descricao || conta.observacoes, conta.cliente, conta.data_vencimento);
+    if (chaveBasica) {
+      mapa.set(chaveBasica, index);
+    }
+    if (conta.movimento_id) {
+      mapa.set(`mov-${conta.movimento_id}`, index);
+    }
+    const clienteNorm = normalizarTextoChave(conta.cliente);
+    if (clienteNorm) {
+      const total = Number(conta.valor_total ?? conta.valor ?? 0);
+      mapa.set(`${clienteNorm}|${total.toFixed(2)}`, index);
+    }
+  };
+
   const mesclarContasPagarComMovimentacoes = (contasBanco: ContaPagar[]) => {
-    const chavesExistentes = new Set<string>();
-    contasBanco.forEach(conta => {
-      if (conta.movimento_id) {
-        chavesExistentes.add(`mov-${conta.movimento_id}`);
-      }
-      if (conta.descricao) {
-        const chave = criarChaveConta(conta.descricao, conta.valor_total ?? conta.valor ?? 0, conta.data_vencimento);
-        chavesExistentes.add(chave);
-      }
-      if (conta.fornecedor && conta.data_vencimento) {
-        const chaveFornecedor = `${conta.fornecedor.trim().toLowerCase()}|${Number((conta.valor_total ?? conta.valor ?? 0).toFixed(2))}|${conta.data_vencimento.toISOString().split('T')[0]}`;
-        chavesExistentes.add(chaveFornecedor);
-      }
+    const contasAtualizadas = contasBanco.map(conta => ({ ...conta }));
+    const mapaBasico = new Map<string, number>();
+
+    contasAtualizadas.forEach((conta, index) => {
+      atualizarChavesContaPagar(conta, index, mapaBasico);
     });
 
-    const derivadas: ContaPagar[] = [];
     movements
       .filter(mov => mov.type === 'entrada')
       .forEach(mov => {
@@ -1957,49 +2277,99 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
         }
 
         const chaveMovimento = `mov-${contaDerivada.movimento_id}`;
-        const chaveDescricao = criarChaveConta(contaDerivada.descricao, contaDerivada.valor_total, contaDerivada.data_vencimento);
-        const chaveFornecedor = contaDerivada.fornecedor && contaDerivada.data_vencimento
-          ? `${contaDerivada.fornecedor.trim().toLowerCase()}|${Number((contaDerivada.valor_total ?? contaDerivada.valor ?? 0).toFixed(2))}|${contaDerivada.data_vencimento.toISOString().split('T')[0]}`
-          : null;
+        const chaveBasica = criarChaveBasicaConta(
+          contaDerivada.descricao || contaDerivada.observacoes,
+          contaDerivada.fornecedor,
+          contaDerivada.data_vencimento
+        );
 
-        if (
-          !chavesExistentes.has(chaveMovimento) &&
-          !chavesExistentes.has(chaveDescricao) &&
-          (!chaveFornecedor || !chavesExistentes.has(chaveFornecedor))
-        ) {
-          chavesExistentes.add(chaveMovimento);
-          chavesExistentes.add(chaveDescricao);
-          if (chaveFornecedor) {
-            chavesExistentes.add(chaveFornecedor);
-          }
-          derivadas.push(contaDerivada);
+        if (mapaBasico.has(chaveMovimento)) {
+          const index = mapaBasico.get(chaveMovimento)!;
+          contasAtualizadas[index] = preferirContaPagarSemMarkup(contasAtualizadas[index], contaDerivada);
+          atualizarChavesContaPagar(contasAtualizadas[index], index, mapaBasico);
+          return;
         }
+
+        if (chaveBasica && mapaBasico.has(chaveBasica)) {
+          const index = mapaBasico.get(chaveBasica)!;
+          contasAtualizadas[index] = preferirContaPagarSemMarkup(contasAtualizadas[index], contaDerivada);
+          atualizarChavesContaPagar(contasAtualizadas[index], index, mapaBasico);
+          return;
+        }
+
+        const chaveFornecedorValor = `${normalizarTextoChave(contaDerivada.fornecedor)}|${Number(contaDerivada.valor_total ?? contaDerivada.valor ?? 0).toFixed(2)}`;
+
+        if (mapaBasico.has(chaveBasica)) {
+          const indexSimilar = mapaBasico.get(chaveBasica)!;
+          contasAtualizadas[indexSimilar] = preferirContaPagarSemMarkup(contasAtualizadas[indexSimilar], contaDerivada);
+          return;
+        }
+
+        const indiceSimilar = encontrarIndiceSimilarContaPagar(contasAtualizadas, contaDerivada);
+        if (indiceSimilar >= 0) {
+          contasAtualizadas[indiceSimilar] = preferirContaPagarSemMarkup(contasAtualizadas[indiceSimilar], contaDerivada);
+          atualizarChavesContaPagar(contasAtualizadas[indiceSimilar], indiceSimilar, mapaBasico);
+          return;
+        }
+
+        if (chaveBasica) {
+          mapaBasico.set(chaveBasica, contasAtualizadas.length);
+        }
+        mapaBasico.set(chaveFornecedorValor, contasAtualizadas.length);
+        mapaBasico.set(chaveMovimento, contasAtualizadas.length);
+        contasAtualizadas.push(contaDerivada);
       });
 
-    if (derivadas.length === 0) {
-      return contasBanco;
-    }
+    const mapaDeduplicado = new Map<string, ContaPagar>();
+    const contasSemChave: ContaPagar[] = [];
 
-    return [...contasBanco, ...derivadas].sort((a, b) => b.data_vencimento.getTime() - a.data_vencimento.getTime());
-  };
+    contasAtualizadas.forEach(conta => {
+      const chave = criarChaveBasicaConta(conta.descricao || conta.observacoes, conta.fornecedor, conta.data_vencimento);
+      if (!chave) {
+        contasSemChave.push(conta);
+        return;
+      }
 
-  const mesclarContasReceberComMovimentacoes = (contasBanco: ContaReceber[]) => {
-    const chavesExistentes = new Set<string>();
-    contasBanco.forEach(conta => {
-      if (conta.movimento_id) {
-        chavesExistentes.add(`mov-${conta.movimento_id}`);
+      const existente = mapaDeduplicado.get(chave);
+      if (!existente) {
+        mapaDeduplicado.set(chave, conta);
+        return;
       }
-      if (conta.descricao) {
-        const chave = criarChaveConta(conta.descricao, conta.valor_total ?? conta.valor ?? 0, conta.data_vencimento);
-        chavesExistentes.add(chave);
-      }
-      if (conta.cliente && conta.data_vencimento) {
-        const chaveCliente = `${conta.cliente.trim().toLowerCase()}|${Number((conta.valor_total ?? conta.valor ?? 0).toFixed(2))}|${conta.data_vencimento.toISOString().split('T')[0]}`;
-        chavesExistentes.add(chaveCliente);
+
+      const valorExistente = Number(existente.valor_total ?? existente.valor ?? 0);
+      const valorAtual = Number(conta.valor_total ?? conta.valor ?? 0);
+
+      if (valorAtual < valorExistente - 0.01) {
+        mapaDeduplicado.set(chave, preferirContaPagarSemMarkup(existente, conta));
+      } else if (valorExistente < valorAtual - 0.01) {
+        mapaDeduplicado.set(chave, preferirContaPagarSemMarkup(conta, existente));
+      } else {
+        const detalhesExistente = existente.parcelasDetalhes?.length ?? 0;
+        const detalhesAtual = conta.parcelasDetalhes?.length ?? 0;
+        if (detalhesAtual > detalhesExistente) {
+          mapaDeduplicado.set(chave, {
+            ...existente,
+            parcelasDetalhes: conta.parcelasDetalhes,
+            parcelas: conta.parcelas ?? existente.parcelas,
+            numero_parcelas: conta.numero_parcelas ?? existente.numero_parcelas,
+          });
+        }
       }
     });
 
-    const derivadas: ContaReceber[] = [];
+    const contasFinal = [...mapaDeduplicado.values(), ...contasSemChave];
+
+    return contasFinal.sort((a, b) => b.data_vencimento.getTime() - a.data_vencimento.getTime());
+  };
+
+  const mesclarContasReceberComMovimentacoes = (contasBanco: ContaReceber[]) => {
+    const contasAtualizadas = contasBanco.map(conta => ({ ...conta }));
+    const mapaBasico = new Map<string, number>();
+
+    contasAtualizadas.forEach((conta, index) => {
+      atualizarChavesContaReceber(conta, index, mapaBasico);
+    });
+
     movements
       .filter(mov => mov.type === 'saida')
       .forEach(mov => {
@@ -2009,30 +2379,89 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
         }
 
         const chaveMovimento = `mov-${contaDerivada.movimento_id}`;
-        const chaveDescricao = criarChaveConta(contaDerivada.descricao, contaDerivada.valor_total, contaDerivada.data_vencimento);
-        const chaveCliente = contaDerivada.cliente && contaDerivada.data_vencimento
-          ? `${contaDerivada.cliente.trim().toLowerCase()}|${Number((contaDerivada.valor_total ?? contaDerivada.valor ?? 0).toFixed(2))}|${contaDerivada.data_vencimento.toISOString().split('T')[0]}`
-          : null;
+        const chaveBasica = criarChaveBasicaConta(
+          contaDerivada.descricao || contaDerivada.observacoes,
+          contaDerivada.cliente,
+          contaDerivada.data_vencimento
+        );
 
-        if (
-          !chavesExistentes.has(chaveMovimento) &&
-          !chavesExistentes.has(chaveDescricao) &&
-          (!chaveCliente || !chavesExistentes.has(chaveCliente))
-        ) {
-          chavesExistentes.add(chaveMovimento);
-          chavesExistentes.add(chaveDescricao);
-          if (chaveCliente) {
-            chavesExistentes.add(chaveCliente);
-          }
-          derivadas.push(contaDerivada);
+        if (mapaBasico.has(chaveMovimento)) {
+          const index = mapaBasico.get(chaveMovimento)!;
+          contasAtualizadas[index] = preferirContaReceberComMarkup(contasAtualizadas[index], contaDerivada);
+          atualizarChavesContaReceber(contasAtualizadas[index], index, mapaBasico);
+          return;
         }
+
+        if (chaveBasica && mapaBasico.has(chaveBasica)) {
+          const index = mapaBasico.get(chaveBasica)!;
+          contasAtualizadas[index] = preferirContaReceberComMarkup(contasAtualizadas[index], contaDerivada);
+          atualizarChavesContaReceber(contasAtualizadas[index], index, mapaBasico);
+          return;
+        }
+
+        const chaveClienteValor = `${normalizarTextoChave(contaDerivada.cliente)}|${Number(contaDerivada.valor_total ?? contaDerivada.valor ?? 0).toFixed(2)}`;
+
+        if (mapaBasico.has(chaveBasica)) {
+          const indexSimilar = mapaBasico.get(chaveBasica)!;
+          contasAtualizadas[indexSimilar] = preferirContaReceberComMarkup(contasAtualizadas[indexSimilar], contaDerivada);
+          return;
+        }
+
+        const indiceSimilar = encontrarIndiceSimilarContaReceber(contasAtualizadas, contaDerivada);
+        if (indiceSimilar >= 0) {
+          contasAtualizadas[indiceSimilar] = preferirContaReceberComMarkup(contasAtualizadas[indiceSimilar], contaDerivada);
+          atualizarChavesContaReceber(contasAtualizadas[indiceSimilar], indiceSimilar, mapaBasico);
+          return;
+        }
+
+        if (chaveBasica) {
+          mapaBasico.set(chaveBasica, contasAtualizadas.length);
+        }
+        mapaBasico.set(chaveClienteValor, contasAtualizadas.length);
+        mapaBasico.set(chaveMovimento, contasAtualizadas.length);
+        contasAtualizadas.push(contaDerivada);
       });
 
-    if (derivadas.length === 0) {
-      return contasBanco;
-    }
+    const mapaDeduplicado = new Map<string, ContaReceber>();
+    const contasSemChave: ContaReceber[] = [];
 
-    return [...contasBanco, ...derivadas].sort((a, b) => b.data_vencimento.getTime() - a.data_vencimento.getTime());
+    contasAtualizadas.forEach(conta => {
+      const chave = criarChaveBasicaConta(conta.descricao || conta.observacoes, conta.cliente, conta.data_vencimento);
+      if (!chave) {
+        contasSemChave.push(conta);
+        return;
+      }
+
+      const existente = mapaDeduplicado.get(chave);
+      if (!existente) {
+        mapaDeduplicado.set(chave, conta);
+        return;
+      }
+
+      const valorExistente = Number(existente.valor_total ?? existente.valor ?? 0);
+      const valorAtual = Number(conta.valor_total ?? conta.valor ?? 0);
+
+      if (valorAtual > valorExistente + 0.01) {
+        mapaDeduplicado.set(chave, preferirContaReceberComMarkup(existente, conta));
+      } else if (valorExistente > valorAtual + 0.01) {
+        mapaDeduplicado.set(chave, preferirContaReceberComMarkup(conta, existente));
+      } else {
+        const detalhesExistente = existente.parcelasDetalhes?.length ?? 0;
+        const detalhesAtual = conta.parcelasDetalhes?.length ?? 0;
+        if (detalhesAtual > detalhesExistente) {
+          mapaDeduplicado.set(chave, {
+            ...existente,
+            parcelasDetalhes: conta.parcelasDetalhes,
+            parcelas: conta.parcelas ?? existente.parcelas,
+            numero_parcelas: conta.numero_parcelas ?? existente.numero_parcelas,
+          });
+        }
+      }
+    });
+
+    const contasFinal = [...mapaDeduplicado.values(), ...contasSemChave];
+
+    return contasFinal.sort((a, b) => b.data_vencimento.getTime() - a.data_vencimento.getTime());
   };
 
   // 🔁 Reprocessar contas derivadas sempre que movimentações mudarem
@@ -2101,12 +2530,15 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
         if (errorOld) throw errorOld;
         
         // Mapear dados antigos para novo formato
-        const contasFormatadas: ContaPagar[] = (dataOld || []).map((c: any) => ({
+        const contasFormatadas: ContaPagar[] = (dataOld || []).map((c: any) => {
+          const origemCalculada = c.origem_pagamento || c.conta_origem || classificarOrigemPorMetodoPagamento(c.forma_pagamento);
+
+          return {
           id: c.id,
           lancamento: c.data_registro ? new Date(c.data_registro) : new Date(c.criado_em),
           observacoes: c.observacoes || c.descricao || '',
           forma_pagamento: (c.forma_pagamento || 'dinheiro') as FormaPagamento,
-          conta_origem: (c.origem_pagamento || 'caixa') as OrigemPagamento,
+          conta_origem: origemCalculada as OrigemPagamento,
           centro_custo: c.categoria_dre || '',
           fornecedor: c.fornecedor || '',
           valor_total: parseFloat(c.valor) || 0,
@@ -2133,7 +2565,8 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
           numero_parcelas: c.numero_parcelas || 1,
           movimento_id: c.movimento_id || '',
           parcelasDetalhes: []
-        }));
+          };
+        });
         
         const contasComMovimentos = mesclarContasPagarComMovimentacoes(contasFormatadas);
         setContasPagarBase(contasFormatadas);
@@ -2144,12 +2577,15 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
       if (error) throw error;
 
       // Mapear dados novos
-      const contasFormatadas: ContaPagar[] = (data || []).map((c: any) => ({
+      const contasFormatadas: ContaPagar[] = (data || []).map((c: any) => {
+        const origemCalculada = c.conta_origem || classificarOrigemPorMetodoPagamento(c.forma_pagamento);
+
+        return {
         id: c.id,
         lancamento: c.lancamento ? new Date(c.lancamento) : new Date(c.criado_em),
         observacoes: c.observacoes || '',
         forma_pagamento: c.forma_pagamento as FormaPagamento,
-        conta_origem: c.conta_origem as OrigemPagamento,
+        conta_origem: origemCalculada as OrigemPagamento,
         centro_custo: c.centro_custo || '',
         fornecedor: c.fornecedor || '',
         valor_total: parseFloat(c.valor_total) || 0,
@@ -2176,7 +2612,8 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
         numero_parcelas: c.parcelas || 1,
         movimento_id: c.movimento_id || '',
         parcelasDetalhes: []
-      }));
+        };
+      });
 
       console.log('✅ Contas formatadas:', contasFormatadas.length, 'contas');
       const contasComMovimentos = mesclarContasPagarComMovimentacoes(contasFormatadas);
@@ -2247,12 +2684,16 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
         if (errorOld) throw errorOld;
         
         // Mapear dados antigos para novo formato
-        const contasFormatadas: ContaReceber[] = (dataOld || []).map((c: any) => ({
+        const contasFormatadas: ContaReceber[] = (dataOld || []).map((c: any) => {
+          const formaRecebimento = (c.forma_recebimento || 'dinheiro') as FormaPagamento;
+          const destinoCalculado = c.conta_destino || c.origem_pagamento || classificarOrigemPorMetodoPagamento(formaRecebimento);
+
+          return {
           id: c.id,
           lancamento: new Date(c.criado_em),
           observacoes: c.observacoes || c.descricao || '',
-          forma_recebimento: 'dinheiro' as FormaPagamento,
-          conta_destino: 'caixa' as OrigemPagamento,
+          forma_recebimento: formaRecebimento,
+          conta_destino: destinoCalculado as OrigemPagamento,
           centro_custo: c.categoria_dre || '',
           cliente: c.cliente || '',
           valor_total: parseFloat(c.valor) || 0,
@@ -2273,7 +2714,8 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
           status: c.status as AccountStatus,
           categoria_dre: c.categoria_dre as DRECategory | undefined,
           movimento_id: c.movimento_id || ''
-        }));
+        };
+        });
         
         const contasComMovimentos = mesclarContasReceberComMovimentacoes(contasFormatadas);
         setContasReceberBase(contasFormatadas);
@@ -2289,7 +2731,7 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
         lancamento: c.lancamento ? new Date(c.lancamento) : new Date(c.criado_em),
         observacoes: c.observacoes || '',
         forma_recebimento: c.forma_recebimento as FormaPagamento,
-        conta_destino: c.conta_destino as OrigemPagamento,
+        conta_destino: (c.conta_destino as OrigemPagamento) || classificarOrigemPorMetodoPagamento(c.forma_recebimento),
         centro_custo: c.centro_custo || '',
         cliente: c.cliente || '',
         valor_total: parseFloat(c.valor_total) || 0,
@@ -2344,13 +2786,16 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
     try {
       const numeroParcelas = formContaPagar.parcelas || formContaPagar.numero_parcelas || 1;
       const lancamento = formContaPagar.lancamento || formContaPagar.data_registro || new Date();
+      const origemPagamentoSelecionada =
+        formContaPagar.conta_origem ||
+        classificarOrigemPorMetodoPagamento(formContaPagar.forma_pagamento || undefined);
       
       // Tentar usar nova tabela primeiro
       const dadosContaNovo = {
         lancamento: lancamento.toISOString().split('T')[0],
         observacoes: observacoes,
         forma_pagamento: formContaPagar.forma_pagamento || 'dinheiro',
-        conta_origem: formContaPagar.conta_origem || 'caixa',
+        conta_origem: origemPagamentoSelecionada,
         centro_custo: formContaPagar.centro_custo || formContaPagar.categoria_dre || null,
         fornecedor: fornecedor,
         valor_total: valorTotal,
@@ -2382,7 +2827,8 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
         observacoes: observacoes,
         movimento_id: formContaPagar.movimento_id || null,
         usuario_id: workspaceAtivo.id,
-        workspace_id: workspaceAtivo.id
+        workspace_id: workspaceAtivo.id,
+        origem_pagamento: origemPagamentoSelecionada
       };
 
       let contaId: string;
@@ -2535,7 +2981,7 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
           valor_pago: valorConta,
           valor_restante: 0,
           parcelas_pagas: totalParcelasPagas,
-          conta_origem: conta.conta_origem || 'caixa'
+          conta_origem: conta.conta_origem || conta.origem_pagamento || classificarContaPagarOrigem(conta)
         },
         {
           status: 'pago',
@@ -2543,7 +2989,7 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
           valor_pago: valorConta,
           valor_restante: 0,
           parcelas_pagas: totalParcelasPagas,
-          origem_pagamento: conta.conta_origem || conta.origem_pagamento || 'caixa'
+          origem_pagamento: conta.conta_origem || conta.origem_pagamento || classificarContaPagarOrigem(conta)
         }
       );
 
@@ -2554,8 +3000,8 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
         valor_restante: 0,
         parcelas_pagas: totalParcelasPagas,
         data_pagamento: dataPagamento,
-        conta_origem: conta.conta_origem || 'caixa',
-        origem_pagamento: conta.origem_pagamento || conta.conta_origem || 'caixa',
+        conta_origem: conta.conta_origem || conta.origem_pagamento || classificarContaPagarOrigem(conta),
+        origem_pagamento: conta.origem_pagamento || conta.conta_origem || classificarContaPagarOrigem(conta),
       });
 
       toast.success('Conta marcada como paga!');
@@ -2568,8 +3014,8 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
         valor_restante: 0,
         parcelas_pagas: totalParcelasPagas,
         data_pagamento: dataPagamento,
-        conta_origem: conta.conta_origem || 'caixa',
-        origem_pagamento: conta.origem_pagamento || conta.conta_origem || 'caixa',
+        conta_origem: conta.conta_origem || conta.origem_pagamento || classificarContaPagarOrigem(conta),
+        origem_pagamento: conta.origem_pagamento || conta.conta_origem || classificarContaPagarOrigem(conta),
         valor_total: conta.valor_total ?? conta.valor ?? valorConta,
       });
       console.error('Erro ao marcar conta como paga:', error);
@@ -2604,20 +3050,63 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
         throw new Error('Informe uma data de recebimento válida.');
       }
 
-      const valorEfetivo = valorRecebido > 0 ? valorRecebido : (contaProcessada.valor_total || contaProcessada.valor || 0);
-      if (valorEfetivo <= 0) {
+      const valorTotalConta = contaProcessada.valor_total ?? contaProcessada.valor ?? 0;
+      const valorEfetivoEntrada = valorRecebido > 0 ? valorRecebido : valorTotalConta;
+      const valorEfetivo = valorTotalConta > 0
+        ? Math.min(valorEfetivoEntrada, valorTotalConta)
+        : valorEfetivoEntrada;
+      const valorFinalRecebido = valorTotalConta > 0 ? valorTotalConta : valorEfetivo;
+
+      if (valorEfetivo <= 0 && valorFinalRecebido <= 0) {
         throw new Error('Informe um valor recebido maior que zero.');
       }
+
+      const destinoFinal = contaDestino || contaProcessada.conta_destino || classificarContaReceberDestino(contaProcessada);
 
       const updatesLocal: Partial<ContaReceber> = {
         status_recebimento: 'recebido',
         status: 'pago',
-        valor_recebido: valorEfetivo,
+        valor_recebido: valorFinalRecebido,
         valor_restante: 0,
         parcelas_recebidas: contaProcessada.parcelas || contaProcessada.numero_parcelas || 1,
-        conta_destino: contaDestino || contaProcessada.conta_destino || 'caixa',
+        conta_destino: destinoFinal,
         data_recebimento: dataRecebimento,
       };
+
+      const totalParcelasConta =
+        contaProcessada.parcelasDetalhes?.length ||
+        contaProcessada.parcelas ||
+        contaProcessada.numero_parcelas ||
+        1;
+
+      if (totalParcelasConta >= 1) {
+        const baseDate =
+          contaProcessada.data_vencimento instanceof Date
+            ? contaProcessada.data_vencimento
+            : contaProcessada.data_vencimento
+              ? new Date(contaProcessada.data_vencimento)
+              : dataRecebimento;
+
+        const detalhesOriginais =
+          contaProcessada.parcelasDetalhes && contaProcessada.parcelasDetalhes.length > 0
+            ? contaProcessada.parcelasDetalhes
+            : gerarParcelasPlaceholder(
+                contaProcessada.id,
+                valorTotalConta || valorEfetivo,
+                totalParcelasConta,
+                baseDate
+              );
+
+        const detalhesAtualizados = detalhesOriginais.map((parcela, index) => ({
+          ...parcela,
+          numero: parcela.numero ?? index + 1,
+          status: 'pago' as ParcelaStatus,
+          data_pagamento: dataRecebimento,
+        }));
+
+        updatesLocal.parcelasDetalhes = detalhesAtualizados;
+      }
+
       Object.assign(updatesLocalBase, updatesLocal);
 
       const possuiPersistenciaRemota = isUUID(contaProcessada.id);
@@ -2631,19 +3120,19 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
       const dadosAtualizacaoNova = {
         status_recebimento: 'recebido',
         data_recebimento: dataRecebimento.toISOString().split('T')[0],
-        valor_recebido: valorEfetivo,
+        valor_recebido: valorFinalRecebido,
         valor_restante: 0,
         parcelas_recebidas: contaProcessada.parcelas || contaProcessada.numero_parcelas || 1,
-        conta_destino: contaDestino || contaProcessada.conta_destino || 'caixa'
+        conta_destino: destinoFinal
       };
 
       const dadosAtualizacaoLegado = {
         status: 'pago' as AccountStatus,
         data_recebimento: dataRecebimento.toISOString(),
-        valor: valorEfetivo,
-        valor_recebido: valorEfetivo,
+        valor: valorFinalRecebido,
+        valor_recebido: valorFinalRecebido,
         valor_restante: 0,
-        origem_pagamento: contaDestino || contaProcessada.conta_destino || 'caixa'
+        origem_pagamento: destinoFinal
       };
 
       let atualizado = false;
@@ -2780,17 +3269,53 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
   const deletarContaReceber = async (id: string) => {
     if (!confirm('Tem certeza que deseja excluir esta conta?')) return;
 
-    try {
-      const { error } = await supabase
-        .from('contas_receber')
-        .delete()
-        .eq('id', id);
+    const conta = contasReceber.find(c => c.id === id);
+    if (isContaReceberDerivada(conta)) {
+      toast.error('Esta conta vem de uma movimentação automática. Remova a movimentação correspondente para que ela deixe de aparecer.');
+      return;
+    }
 
-      if (error) throw error;
-      toast.success('Conta excluída com sucesso!');
-      await carregarContasReceber();
+    const deletarRemoto = async () => {
+      try {
+        const { error } = await supabase
+          .from('contas_a_receber')
+          .delete()
+          .eq('id', id);
+
+        if (error) {
+          if (erroIndicaTabelaLegada(error) || error.code === '42P01') {
+            return 'missing_table';
+          }
+          throw error;
+        }
+
+        toast.success('Conta excluída com sucesso!');
+        await carregarContasReceber();
+        return 'ok';
+      } catch (error) {
+        throw error;
+      }
+    };
+
+    try {
+      const resultadoNova = await deletarRemoto();
+
+      if (resultadoNova === 'missing_table') {
+        const { error: errorLegado } = await supabase
+          .from('contas_receber')
+          .delete()
+          .eq('id', id);
+
+        if (errorLegado) {
+          throw errorLegado;
+        }
+
+        toast.success('Conta excluída com sucesso!');
+        await carregarContasReceber();
+      }
     } catch (error: any) {
-      toast.error(error.message || 'Erro ao excluir conta');
+      console.error('Erro ao excluir conta a receber:', error);
+      toast.error(error.message || 'Erro ao excluir conta a receber');
     }
   };
 
@@ -3021,12 +3546,32 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
           ? conta.data_vencimento
           : new Date(conta.data_vencimento);
 
-      const parcelasDetalhes =
+      const parcelasDetalhesOriginais =
         conta.parcelasDetalhes && conta.parcelasDetalhes.length > 0
           ? conta.parcelasDetalhes
           : totalParcelas > 1
             ? gerarParcelasPlaceholder(conta.id, valorTotalConta, totalParcelas, dataBase)
             : [];
+
+      const parcelasPagasTotal =
+        conta.parcelas_pagas ??
+        (normalizarStatusParcela(conta.status_pagamento || conta.status) === 'pago'
+          ? totalParcelas
+          : 0);
+
+      const parcelasDetalhes = parcelasDetalhesOriginais.map((parcela, index) => {
+        const numero = parcela.numero ?? index + 1;
+        const estaPaga =
+          numero <= parcelasPagasTotal ||
+          normalizarStatusParcela(parcela.status || conta.status_pagamento || conta.status) === 'pago';
+        return {
+          ...parcela,
+          numero,
+          status: estaPaga ? 'pago' : parcela.status ?? 'pendente',
+          data_pagamento:
+            estaPaga && parcela.data_pagamento ? parcela.data_pagamento : parcela.data_pagamento,
+        };
+      });
 
       if (parcelasDetalhes.length === 0) {
         return [
@@ -3042,6 +3587,7 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
             valorTotalConta,
             valorPago,
             valorRestante,
+            parcelasDetalhes,
           },
         ];
       }
@@ -3060,6 +3606,7 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
         valorTotalConta,
         valorPago,
         valorRestante,
+        parcelasDetalhes,
       }));
     });
   }, [contasPagarFiltradas]);
@@ -3081,12 +3628,32 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
           ? conta.data_vencimento
           : new Date(conta.data_vencimento);
 
-      const parcelasDetalhes =
+      const parcelasDetalhesOriginais =
         conta.parcelasDetalhes && conta.parcelasDetalhes.length > 0
           ? conta.parcelasDetalhes
           : totalParcelas > 1
             ? gerarParcelasPlaceholder(conta.id, valorTotalConta, totalParcelas, dataBase)
             : [];
+
+      const parcelasRecebidasTotal =
+        conta.parcelas_recebidas ??
+        (normalizarStatusParcela(conta.status_recebimento || conta.status) === 'pago'
+          ? totalParcelas
+          : 0);
+
+      const parcelasDetalhes = parcelasDetalhesOriginais.map((parcela, index) => {
+        const numero = parcela.numero ?? index + 1;
+        const estaRecebida =
+          numero <= parcelasRecebidasTotal ||
+          normalizarStatusParcela(parcela.status || conta.status_recebimento || conta.status) === 'pago';
+        return {
+          ...parcela,
+          numero,
+          status: estaRecebida ? 'pago' : parcela.status ?? 'pendente',
+          data_pagamento:
+            estaRecebida && parcela.data_pagamento ? parcela.data_pagamento : parcela.data_pagamento,
+        };
+      });
 
       if (parcelasDetalhes.length === 0) {
         return [
@@ -3102,6 +3669,7 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
             valorTotalConta,
             valorRecebido,
             valorRestante,
+            parcelasDetalhes,
           },
         ];
       }
@@ -3120,6 +3688,7 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
         valorTotalConta,
         valorRecebido,
         valorRestante,
+        parcelasDetalhes,
       }));
     });
   }, [contasReceber]);
@@ -3479,7 +4048,7 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
       </Card>
 
       {/* Cards de Navegação */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 max-w-5xl mx-auto">
         {/* Card Movimentações */}
         <Card 
           className={`cursor-pointer transition-colors ${
@@ -3615,41 +4184,6 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
             </div>
           </CardContent>
         </Card>
-
-        {/* Card DRE */}
-        <Card 
-          className={`cursor-pointer transition-colors ${
-            abaAtiva === 'dre' 
-              ? 'border-purple-500 bg-purple-50' 
-              : 'border-gray-200 hover:border-purple-300 hover:bg-gray-50'
-          }`}
-          onClick={() => setAbaAtiva('dre')}
-        >
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className={`p-2 rounded-md ${
-                abaAtiva === 'dre' ? 'bg-purple-100' : 'bg-gray-100'
-              }`}>
-                <BarChart3 className={`h-5 w-5 ${
-                  abaAtiva === 'dre' ? 'text-purple-600' : 'text-gray-600'
-                }`} />
-              </div>
-              <div>
-                <h3 className={`font-semibold text-sm ${
-                  abaAtiva === 'dre' ? 'text-purple-900' : 'text-gray-900'
-                }`}>
-                  DRE
-                </h3>
-                <p className={`text-xs ${
-                  abaAtiva === 'dre' ? 'text-purple-600' : 'text-gray-500'
-                }`}>
-                  Resultado
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
       </div>
 
       {/* Conteúdo das Abas */}
@@ -4738,43 +5272,90 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
                       ref={scrollContasPagarBodyRef}
                       className="overflow-x-auto rounded-lg border border-slate-200 horizontal-scroll-area"
                     >
+                      {/* Comentário adicionado conforme solicitado */}
                     {/* 👉 Tabela adaptativa: usamos largura total e regras responsivas nas colunas para evitar scroll horizontal */}
-                    <Table className="w-full min-w-[960px]">
+                    <Table className="w-full min-w-[1024px]">
                       <TableHeader>
                         <TableRow className="bg-slate-50">
                           <TableHead className="font-semibold">Data de Registro</TableHead>
                           <TableHead className="font-semibold">Descrição</TableHead>
                           <TableHead className="font-semibold hidden lg:table-cell">Fornecedor</TableHead>
                           <TableHead className="font-semibold hidden xl:table-cell">Forma de Pagamento</TableHead>
-                          <TableHead className="font-semibold text-right">Valor Total</TableHead>
+                          <TableHead className="font-semibold hidden md:table-cell">Parcela</TableHead>
+                          <TableHead className="font-semibold text-right">Valor da Parcela</TableHead>
                           <TableHead className="font-semibold hidden md:table-cell">Vencimento</TableHead>
-                          <TableHead className="font-semibold hidden xl:table-cell">Pagamento / Parcelas</TableHead>
                           <TableHead className="font-semibold lg:hidden">Detalhes</TableHead>
                           <TableHead className="font-semibold">Status</TableHead>
                           <TableHead className="font-semibold text-right">Ações</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {contasPagarFiltradas.map(conta => {
-                          const parcelasDetalhes = conta.parcelasDetalhes || [];
-                          const proximaParcela = parcelasDetalhes.length > 0
-                            ? parcelasDetalhes.find(p => p.status === 'pendente')
-                            : null;
-                          const vencimento = proximaParcela ? proximaParcela.data_vencimento : conta.data_vencimento;
-                          const parcelasPendentes = parcelasDetalhes.filter(p => p.status === 'pendente').length;
-                          const parcelasPagas = parcelasDetalhes.filter(p => p.status === 'pago').length;
+                        {contasPagarListagem.map(item => {
+                          const {
+                            key,
+                            conta,
+                            parcela,
+                            numeroParcela,
+                            totalParcelas,
+                            valorParcela,
+                            vencimento,
+                            statusParcela,
+                            valorTotalConta,
+                            valorPago,
+                            valorRestante
+                          } = item;
 
-                          const valorTotal = Number(conta.valor_total ?? conta.valor ?? 0);
-                          const valorPago = Number(conta.valor_pago ?? 0);
-                          const valorRestanteCalculado = valorTotal - valorPago;
-                          const valorRestante = Math.max(conta.valor_restante ?? valorRestanteCalculado, 0);
-                          const exibindoRestante = valorRestante >= 0 && valorRestante < valorTotal;
+                          const dataRegistro =
+                            conta.data_registro instanceof Date
+                              ? conta.data_registro
+                              : new Date(conta.data_registro);
+                          const formaPagamento = conta.forma_pagamento;
+                          const fornecedorNome = formatarNomeFornecedor(conta.fornecedor);
+                          const isParcelado = totalParcelas > 1;
+                          const badgeParcela = obterBadgeStatusParcela(statusParcela, 'pagar');
+                          const statusContaBadge = obterBadgeStatusParcela(
+                            normalizarStatusParcela(conta.status_pagamento || conta.status),
+                            'pagar'
+                          );
+                          const valorRestanteConta = Number.isFinite(valorRestante)
+                            ? Math.max(valorRestante, 0)
+                            : Math.max(valorTotalConta - valorPago, 0);
+                          const valorRestanteParcela = statusParcela === 'pago' ? 0 : valorParcela;
+                          const isPrimeiraParcela = numeroParcela === 1;
+                          const parcelasDetalhesConta = item.parcelasDetalhes || [];
+                          const parcelasPagas = parcelasDetalhesConta.filter(
+                            p => normalizarStatusParcela(p.status) === 'pago'
+                          ).length;
+                          const parcelasPendentes = parcelasDetalhesConta.filter(
+                            p => normalizarStatusParcela(p.status) === 'pendente'
+                          ).length;
+                          const vencimentoFormatado = vencimento.toLocaleDateString('pt-BR');
+                          const valorParcelaFormatado = valorParcela.toLocaleString('pt-BR', {
+                            minimumFractionDigits: 2
+                          });
+                          const valorTotalContaFormatado = valorTotalConta.toLocaleString('pt-BR', {
+                            minimumFractionDigits: 2
+                          });
+                          const valorPagoContaFormatado = valorPago.toLocaleString('pt-BR', {
+                            minimumFractionDigits: 2
+                          });
+                          const valorRestanteParcelaFormatado = valorRestanteParcela.toLocaleString('pt-BR', {
+                            minimumFractionDigits: 2
+                          });
+                          const handleAbrirParcelas = () => {
+                            if (isContaDerivada(conta)) {
+                              toast.error('Esta conta veio automaticamente das movimentações. Cadastre-a manualmente para gerenciar as parcelas.');
+                              return;
+                            }
+                            setContaSelecionadaParcelas(conta);
+                            carregarParcelas(conta.id);
+                            setShowDialogParcelas(true);
+                          };
 
-                          
                           return (
-                            <TableRow key={conta.id} className="hover:bg-slate-50">
+                            <TableRow key={key} className="hover:bg-slate-50">
                               <TableCell className="text-sm">
-                                {conta.data_registro.toLocaleDateString('pt-BR')}
+                                {dataRegistro.toLocaleDateString('pt-BR')}
                               </TableCell>
                               <TableCell className="align-top">
                                 <div className="flex flex-col gap-1 max-w-[260px]">
@@ -4788,105 +5369,102 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
                                   )}
                                 </div>
                               </TableCell>
-                              <TableCell className="hidden lg:table-cell">{formatarNomeFornecedor(conta.fornecedor)}</TableCell>
+                              <TableCell className="hidden lg:table-cell">{fornecedorNome}</TableCell>
                               <TableCell className="hidden xl:table-cell">
                                 <Badge variant="outline" className="text-xs">
-                                  {conta.forma_pagamento === 'cartao' ? 'Cartão' :
-                                   conta.forma_pagamento === 'boleto' ? 'Boleto' :
-                                   conta.forma_pagamento === 'transferencia' ? 'Transferência' :
-                                   conta.forma_pagamento === 'pix' ? 'PIX' :
-                                   conta.forma_pagamento === 'parcelado' ? 'Parcelado' :
-                                   conta.forma_pagamento === 'dinheiro' ? 'Dinheiro' :
-                                   conta.forma_pagamento === 'cheque' ? 'Cheque' : '-'}
+                                  {formaPagamento === 'cartao' ? 'Cartão' :
+                                   formaPagamento === 'boleto' ? 'Boleto' :
+                                   formaPagamento === 'transferencia' ? 'Transferência' :
+                                   formaPagamento === 'pix' ? 'PIX' :
+                                   formaPagamento === 'parcelado' ? 'Parcelado' :
+                                   formaPagamento === 'dinheiro' ? 'Dinheiro' :
+                                   formaPagamento === 'cheque' ? 'Cheque' : '-'}
                                 </Badge>
+                              </TableCell>
+                              <TableCell className="hidden md:table-cell">
+                                <div className="flex flex-col gap-1">
+                                  <Badge variant="outline" className="text-xs font-semibold">
+                                    Parcela {numeroParcela}/{totalParcelas}
+                                  </Badge>
+                                  {isParcelado && (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 justify-start px-1 text-xs text-blue-600 hover:text-blue-700"
+                                      onClick={handleAbrirParcelas}
+                                    >
+                                      Gerenciar parcelas
+                                    </Button>
+                                  )}
+                                </div>
                               </TableCell>
                               <TableCell className="text-right font-semibold">
                                 <div className="flex flex-col items-end gap-1">
-                                  <span className={`text-base ${valorRestante > 0 ? 'text-slate-800' : 'text-emerald-700'}`}>
-                                    R$ {valorRestante.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                  <span className="text-base text-slate-800">
+                                    R$ {valorParcelaFormatado}
                                   </span>
-                                  <span className="text-[11px] uppercase tracking-wide text-slate-400">Restante</span>
-                                  {exibindoRestante && (
-                                    <div className="flex flex-col items-end gap-0.5 text-xs text-slate-500">
-                                      <span>Total: R$ {valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                                      <span className="text-emerald-600 font-medium">Pago: R$ {valorPago.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                  {valorRestanteParcela > 0 && (
+                                    <span className="text-xs text-amber-600">
+                                      Restante da parcela: R$ {valorRestanteParcelaFormatado}
+                                    </span>
+                                  )}
+                                  {isParcelado && (
+                                    <div className="flex flex-col items-end gap-0.5 text-xs text-slate-500 text-right">
+                                      <span>Total da conta: R$ {valorTotalContaFormatado}</span>
+                                      <span className="text-emerald-600 font-medium">
+                                        Pago: R$ {valorPagoContaFormatado}
+                                      </span>
+                                      <span className="text-slate-500">
+                                        Saldo da conta: R$ {valorRestanteConta.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                      </span>
                                     </div>
                                   )}
                                 </div>
                               </TableCell>
                               <TableCell className="text-sm hidden md:table-cell">
-                                {vencimento.toLocaleDateString('pt-BR')}
-                              </TableCell>
-                              <TableCell className="hidden xl:table-cell">
-                                {conta.numero_parcelas && conta.numero_parcelas > 1 ? (
-                                  <div className="flex flex-col gap-1">
-                                    <Badge 
-                                      variant="outline" 
-                                      className="cursor-pointer hover:bg-blue-50"
-                                      onClick={() => {
-                                        if (isContaDerivada(conta)) {
-                                          toast.error('Esta conta veio automaticamente das movimentações. Cadastre-a manualmente para gerenciar as parcelas.');
-                                          return;
-                                        }
-                                        setContaSelecionadaParcelas(conta);
-                                        carregarParcelas(conta.id);
-                                        setShowDialogParcelas(true);
-                                      }}
-                                    >
-                                      {parcelasPagas}/{conta.numero_parcelas} parcelas
-                                    </Badge>
-                                    <span className="text-xs text-gray-500">
-                                      {parcelasPendentes} pendente{parcelasPendentes !== 1 ? 's' : ''}
-                                    </span>
-                                  </div>
-                                ) : (
-                                  <Badge variant="outline">À vista</Badge>
-                                )}
+                                {vencimentoFormatado}
                               </TableCell>
                               {/* 👉 Bloco auxiliar exibido apenas em telas menores para mostrar detalhes ocultos nas colunas escondidas */}
                               <TableCell className="lg:hidden align-top">
                                 <div className="flex flex-col gap-2 text-xs text-slate-600">
                                   <div className="flex items-center gap-2">
                                     <span className="font-semibold">Fornecedor:</span>
-                                    <span>{formatarNomeFornecedor(conta.fornecedor)}</span>
+                                    <span>{fornecedorNome}</span>
                                   </div>
                                   <div className="flex items-center gap-2">
                                     <span className="font-semibold">Forma:</span>
                                     <span>
-                                      {conta.forma_pagamento === 'cartao' ? 'Cartão' :
-                                       conta.forma_pagamento === 'boleto' ? 'Boleto' :
-                                       conta.forma_pagamento === 'transferencia' ? 'Transferência' :
-                                       conta.forma_pagamento === 'pix' ? 'PIX' :
-                                       conta.forma_pagamento === 'parcelado' ? 'Parcelado' :
-                                       conta.forma_pagamento === 'dinheiro' ? 'Dinheiro' :
-                                       conta.forma_pagamento === 'cheque' ? 'Cheque' : '-'}
+                                      {formaPagamento === 'cartao' ? 'Cartão' :
+                                       formaPagamento === 'boleto' ? 'Boleto' :
+                                       formaPagamento === 'transferencia' ? 'Transferência' :
+                                       formaPagamento === 'pix' ? 'PIX' :
+                                       formaPagamento === 'parcelado' ? 'Parcelado' :
+                                       formaPagamento === 'dinheiro' ? 'Dinheiro' :
+                                       formaPagamento === 'cheque' ? 'Cheque' : '-'}
                                     </span>
                                   </div>
                                   <div className="flex items-center gap-2">
                                     <span className="font-semibold">Vencimento:</span>
-                                    <span>{vencimento.toLocaleDateString('pt-BR')}</span>
+                                    <span>{vencimentoFormatado}</span>
                                   </div>
-                                  {conta.numero_parcelas && conta.numero_parcelas > 1 ? (
+                                  {isParcelado ? (
                                     <div className="flex flex-col gap-1">
                                       <div className="flex items-center gap-2">
                                         <span className="font-semibold">Parcelas:</span>
                                         <Badge 
                                           variant="outline" 
                                           className="text-xs"
-                                          onClick={() => {
-                                            if (isContaDerivada(conta)) {
-                                              toast.error('Esta conta veio automaticamente das movimentações. Cadastre-a manualmente para gerenciar as parcelas.');
-                                              return;
-                                            }
-                                            setContaSelecionadaParcelas(conta);
-                                            carregarParcelas(conta.id);
-                                            setShowDialogParcelas(true);
-                                          }}
+                                          onClick={handleAbrirParcelas}
                                         >
-                                          {parcelasPagas}/{conta.numero_parcelas}
+                                          {numeroParcela}/{totalParcelas}
                                         </Badge>
                                       </div>
-                                      <span className="text-gray-500">{parcelasPendentes} pendente{parcelasPendentes !== 1 ? 's' : ''}</span>
+                                      <span className="text-gray-500">
+                                        {parcelasPagas} paga{parcelasPagas !== 1 ? 's' : ''} · {parcelasPendentes} pendente{parcelasPendentes !== 1 ? 's' : ''}
+                                      </span>
+                                      <span className="text-gray-500">
+                                        Valor parcela: R$ {valorParcelaFormatado}
+                                      </span>
                                     </div>
                                   ) : (
                                     <span className="font-semibold">Pagamento: À vista</span>
@@ -4894,19 +5472,18 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
                                 </div>
                               </TableCell>
                               <TableCell>
-                                <Badge className={
-                                  conta.status === 'finalizado' || conta.status === 'pago' ? 'bg-green-100 text-green-800' :
-                                  conta.status === 'vencido' ? 'bg-red-100 text-red-800' :
-                                  'bg-yellow-100 text-yellow-800'
-                                }>
-                                  {conta.status === 'finalizado' ? 'Finalizado' :
-                                   conta.status === 'pago' ? 'Pago' :
-                                   conta.status === 'vencido' ? 'Vencido' : 'Pendente'}
-                                </Badge>
+                                <div className="flex flex-col gap-1">
+                                  <Badge className={badgeParcela.className}>
+                                    Parcela: {badgeParcela.label}
+                                  </Badge>
+                                  <Badge className={statusContaBadge.className}>
+                                    Conta: {statusContaBadge.label}
+                                  </Badge>
+                                </div>
                               </TableCell>
                               <TableCell className="text-right">
                                 <div className="flex gap-2 justify-end">
-                                  {conta.status !== 'finalizado' && conta.status !== 'pago' && (
+                                  {isPrimeiraParcela && conta.status !== 'finalizado' && conta.status !== 'pago' && (
                                     <Button
                                       size="sm"
                                       variant="outline"
@@ -4922,13 +5499,15 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
                                       Finalizar
                                     </Button>
                                   )}
-                                  <Button
-                                    size="sm"
-                                    variant="destructive"
-                                    onClick={() => deletarContaPagar(conta.id)}
-                                  >
-                                    Excluir
-                                  </Button>
+                                  {isPrimeiraParcela && (
+                                    <Button
+                                      size="sm"
+                                      variant="destructive"
+                                      onClick={() => deletarContaPagar(conta.id)}
+                                    >
+                                      Excluir
+                                    </Button>
+                                  )}
                                 </div>
                               </TableCell>
                             </TableRow>
@@ -5011,24 +5590,115 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
                       className="overflow-x-auto rounded-lg border border-slate-200 horizontal-scroll-area"
                     >
                     {/* Tabela de contas a receber com rolagem horizontal para evitar corte das colunas */}
-                    <Table className="w-full min-w-[720px]">
+                    <Table className="w-full min-w-[960px]">
                     <TableHeader>
-                      <TableRow>
+                      <TableRow className="bg-slate-50">
                         <TableHead>Descrição</TableHead>
                         <TableHead>Cliente</TableHead>
-                        <TableHead>Vencimento</TableHead>
-                        <TableHead className="text-right">Valor</TableHead>
+                        <TableHead className="hidden xl:table-cell">Forma de Recebimento</TableHead>
+                        <TableHead className="hidden md:table-cell">Parcela</TableHead>
+                        <TableHead className="text-right">Valor da Parcela</TableHead>
+                        <TableHead className="hidden md:table-cell">Vencimento</TableHead>
+                        <TableHead className="lg:hidden">Detalhes</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead className="text-right">Ações</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {contasReceber.map(conta => (
-                        <TableRow key={conta.id}>
+                      {contasReceberListagem.map(item => {
+                        const {
+                          key,
+                          conta,
+                          parcela,
+                          numeroParcela,
+                          totalParcelas,
+                          valorParcela,
+                          vencimento,
+                          statusParcela,
+                          valorTotalConta,
+                          valorRecebido,
+                          valorRestante
+                        } = item;
+
+                        const descricao = formatarDescricaoCurta(conta.descricao);
+                        const cliente = conta.cliente || '-';
+                        const formaRecebimento = conta.forma_recebimento;
+                        const isParcelado = totalParcelas > 1;
+                        const statusContaNormalizado = normalizarStatusParcela(conta.status_recebimento || conta.status);
+                        const badgeParcela = obterBadgeStatusParcela(statusParcela, 'receber');
+                        const statusContaBadge = obterBadgeStatusParcela(statusContaNormalizado, 'receber');
+                        const valorRestanteConta = Number.isFinite(valorRestante)
+                          ? Math.max(valorRestante, 0)
+                          : Math.max(valorTotalConta - valorRecebido, 0);
+                        const valorRestanteParcela = statusParcela === 'pago' ? 0 : valorParcela;
+                        const isPrimeiraParcela = numeroParcela === 1;
+                        const parcelasDetalhesConta = item.parcelasDetalhes || [];
+                        const parcelasRecebidas = parcelasDetalhesConta.filter(
+                          p => normalizarStatusParcela(p.status) === 'pago'
+                        ).length;
+                        const parcelasPendentes = parcelasDetalhesConta.filter(
+                          p => normalizarStatusParcela(p.status) === 'pendente'
+                        ).length;
+                        const vencimentoFormatado = vencimento.toLocaleDateString('pt-BR');
+                        const valorParcelaFormatado = valorParcela.toLocaleString('pt-BR', {
+                          minimumFractionDigits: 2
+                        });
+                        const valorTotalContaFormatado = valorTotalConta.toLocaleString('pt-BR', {
+                          minimumFractionDigits: 2
+                        });
+                        const valorRecebidoFormatado = valorRecebido.toLocaleString('pt-BR', {
+                          minimumFractionDigits: 2
+                        });
+                        const valorRestanteParcelaFormatado = valorRestanteParcela.toLocaleString('pt-BR', {
+                          minimumFractionDigits: 2
+                        });
+                        const destinoParcela = conta.conta_destino || classificarContaReceberDestino(conta);
+                        const handleAbrirReceber = () => {
+                          setContaParaReceber(conta);
+                          setDataRecebimentoFinal(conta.data_recebimento || new Date());
+                          setContaDestinoRecebimento(destinoParcela);
+                          const valorBase =
+                            valorRestanteConta > 0 ? valorRestanteConta : valorTotalConta;
+                          const valorNormalizado = Number.isFinite(valorBase)
+                            ? Number(valorBase.toFixed(2))
+                            : 0;
+                          setValorRecebimentoFinal(valorNormalizado);
+                          setShowDialogReceberConta(true);
+                        };
+                        const handleEditarConta = () => {
+                          setContaReceberEditando(conta);
+                          setClienteSearchTerm(conta.cliente || '');
+                          setShowClienteDropdown(false);
+                          setFormContaReceber(prev => ({
+                            ...prev,
+                            lancamento: conta.lancamento,
+                            observacoes: conta.observacoes || conta.descricao || '',
+                            forma_recebimento: conta.forma_recebimento || '' as FormaPagamento | '',
+                            conta_destino: conta.conta_destino || classificarContaReceberDestino(conta),
+                            centro_custo: conta.centro_custo || conta.categoria_dre || '',
+                            cliente: conta.cliente || '',
+                            valor_total: conta.valor_total ?? conta.valor ?? 0,
+                            parcelas: conta.parcelas || conta.numero_parcelas || 1,
+                            data_vencimento: conta.data_vencimento,
+                            descricao: conta.descricao || '',
+                            valor: conta.valor_total ?? conta.valor ?? 0,
+                            categoria_dre: (conta.centro_custo || conta.categoria_dre || '') as DRECategory | '',
+                            movimento_id: conta.movimento_id || ''
+                          }));
+                          setShowDialogContaReceber(true);
+                        };
+
+                        const parcelaJaRecebida = statusParcela === 'pago';
+                        const contaJaRecebida = statusContaNormalizado === 'pago';
+                        const podeFinalizarRecebimento = !parcelaJaRecebida && !contaJaRecebida;
+                        const mostrarAcoesConta = isPrimeiraParcela;
+
+                        return (
+                        <TableRow key={key}>
                           <TableCell className="align-top">
                             <div className="flex flex-col gap-1 max-w-[260px]">
                               <span className="font-medium text-sm text-slate-800 leading-snug line-clamp-2 break-words">
-                                {formatarDescricaoCurta(conta.descricao)}
+                                {descricao}
                               </span>
                               {conta.observacoes && (
                                 <span className="text-xs text-slate-500 leading-tight line-clamp-2 break-words">
@@ -5037,271 +5707,135 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
                               )}
                             </div>
                           </TableCell>
-                          <TableCell>{conta.cliente || '-'}</TableCell>
-                          <TableCell>{conta.data_vencimento.toLocaleDateString('pt-BR')}</TableCell>
+                          <TableCell>{cliente}</TableCell>
+                          <TableCell className="hidden xl:table-cell">
+                            <Badge variant="outline" className="text-xs">
+                              {formaRecebimento === 'cartao' ? 'Cartão' :
+                               formaRecebimento === 'boleto' ? 'Boleto' :
+                               formaRecebimento === 'transferencia' ? 'Transferência' :
+                               formaRecebimento === 'pix' ? 'PIX' :
+                               formaRecebimento === 'parcelado' ? 'Parcelado' :
+                               formaRecebimento === 'dinheiro' ? 'Dinheiro' :
+                               formaRecebimento === 'cheque' ? 'Cheque' : '-'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="hidden md:table-cell">
+                            <div className="flex flex-col gap-1">
+                              <Badge variant="outline" className="text-xs font-semibold">
+                                Parcela {numeroParcela}/{totalParcelas}
+                              </Badge>
+                              {isParcelado && (
+                                <span className="text-xs text-slate-500">
+                                  {parcelasRecebidas} recebida{parcelasRecebidas !== 1 ? 's' : ''} · {parcelasPendentes} pendente{parcelasPendentes !== 1 ? 's' : ''}
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
                           <TableCell className="text-right font-semibold">
-                            R$ {(conta.valor_total ?? conta.valor ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            <div className="flex flex-col items-end gap-1">
+                              <span className="text-base text-slate-800">
+                                R$ {valorParcelaFormatado}
+                              </span>
+                              {valorRestanteParcela > 0 && (
+                                <span className="text-xs text-amber-600">
+                                  Restante da parcela: R$ {valorRestanteParcelaFormatado}
+                                </span>
+                              )}
+                              {isParcelado && (
+                                <div className="flex flex-col items-end gap-0.5 text-xs text-slate-500">
+                                  <span>Total da conta: R$ {valorTotalContaFormatado}</span>
+                                  <span className="text-emerald-600 font-medium">
+                                    Recebido: R$ {valorRecebidoFormatado}
+                                  </span>
+                                  <span>
+                                    Saldo da conta: R$ {valorRestanteConta.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="hidden md:table-cell">
+                            {vencimentoFormatado}
+                          </TableCell>
+                          <TableCell className="lg:hidden align-top">
+                            <div className="flex flex-col gap-2 text-xs text-slate-600">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold">Forma:</span>
+                                <span>
+                                  {formaRecebimento === 'cartao' ? 'Cartão' :
+                                   formaRecebimento === 'boleto' ? 'Boleto' :
+                                   formaRecebimento === 'transferencia' ? 'Transferência' :
+                                   formaRecebimento === 'pix' ? 'PIX' :
+                                   formaRecebimento === 'parcelado' ? 'Parcelado' :
+                                   formaRecebimento === 'dinheiro' ? 'Dinheiro' :
+                                   formaRecebimento === 'cheque' ? 'Cheque' : '-'}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold">Vencimento:</span>
+                                <span>{vencimentoFormatado}</span>
+                              </div>
+                              {isParcelado ? (
+                                <div className="flex flex-col gap-1">
+                                  <span className="font-semibold">Parcela {numeroParcela}/{totalParcelas}</span>
+                                  <span>Valor: R$ {valorParcelaFormatado}</span>
+                                  <span>{parcelasRecebidas} recebida{parcelasRecebidas !== 1 ? 's' : ''} · {parcelasPendentes} pendente{parcelasPendentes !== 1 ? 's' : ''}</span>
+                                </div>
+                              ) : (
+                                <span className="font-semibold">Recebimento à vista</span>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell>
-                            <Badge className={
-                              conta.status === 'pago' ? 'bg-green-100 text-green-800' :
-                              conta.status === 'vencido' ? 'bg-red-100 text-red-800' :
-                              'bg-yellow-100 text-yellow-800'
-                            }>
-                              {conta.status === 'pago' ? 'Recebido' : conta.status === 'vencido' ? 'Vencido' : 'Pendente'}
-                            </Badge>
+                            <div className="flex flex-col gap-1">
+                              <Badge className={badgeParcela.className}>
+                                Parcela: {badgeParcela.label}
+                              </Badge>
+                              <Badge className={statusContaBadge.className}>
+                                Conta: {statusContaBadge.label}
+                              </Badge>
+                            </div>
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex gap-2 justify-end">
-                              {conta.status !== 'pago' && (
+                              {podeFinalizarRecebimento && (
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => {
-                                    setContaParaReceber(conta);
-                                    setDataRecebimentoFinal(conta.data_recebimento || new Date());
-                                    setContaDestinoRecebimento(conta.conta_destino || 'caixa');
-                                    const valorBase = conta.valor_restante && conta.valor_restante > 0
-                                      ? conta.valor_restante
-                                      : (conta.valor_total ?? conta.valor ?? 0);
-                                    setValorRecebimentoFinal(Number(valorBase) || 0);
-                                    setShowDialogReceberConta(true);
-                                  }}
+                                  onClick={handleAbrirReceber}
                                 >
-                                  Marcar como Recebida
+                                  Finalizar Recebimento
                                 </Button>
                               )}
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  setContaReceberEditando(conta);
-                                  setClienteSearchTerm(conta.cliente || '');
-                                  setShowClienteDropdown(false);
-                                  setFormContaReceber(prev => ({
-                                    ...prev,
-                                    lancamento: conta.lancamento,
-                                    observacoes: conta.observacoes || conta.descricao || '',
-                                    forma_recebimento: conta.forma_recebimento || '' as FormaPagamento | '',
-                                    conta_destino: conta.conta_destino || 'caixa',
-                                    centro_custo: conta.centro_custo || conta.categoria_dre || '',
-                                    cliente: conta.cliente || '',
-                                    valor_total: conta.valor_total ?? conta.valor ?? 0,
-                                    parcelas: conta.parcelas || conta.numero_parcelas || 1,
-                                    data_vencimento: conta.data_vencimento,
-                                    descricao: conta.descricao || '',
-                                    valor: conta.valor_total ?? conta.valor ?? 0,
-                                    categoria_dre: (conta.centro_custo || conta.categoria_dre || '') as DRECategory | '',
-                                    movimento_id: conta.movimento_id || ''
-                                  }));
-                                  setShowDialogContaReceber(true);
-                                }}
-                              >
-                                Editar
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                onClick={() => deletarContaReceber(conta.id)}
-                              >
-                                Excluir
-                              </Button>
+                              {mostrarAcoesConta && (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={handleEditarConta}
+                                  >
+                                    Editar
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    onClick={() => deletarContaReceber(conta.id)}
+                                  >
+                                    Excluir
+                                  </Button>
+                                </>
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>
-                      ))}
+                      );
+                      })}
                     </TableBody>
                     </Table>
                     </div>
                   </div>
                 </>
               )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* ABA 5: DRE */}
-        <TabsContent value="dre" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <CardTitle className="flex items-center gap-2">
-                  <BarChart3 className="h-5 w-5 text-blue-600" />
-                  Demonstração do Resultado do Exercício (DRE)
-                </CardTitle>
-                <Button onClick={exportarDREPDF} className="bg-red-600 hover:bg-red-700 text-white">
-                  <FileText className="h-4 w-4 mr-2" />
-                  Exportar DRE em PDF
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Seleção de Período */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label>Data Início</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" className="w-full justify-start text-left font-normal">
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {drePeriodoInicio ? format(drePeriodoInicio, "PPP", { locale: ptBR }) : "Selecione"}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
-                      <CalendarComponent
-                        mode="single"
-                        selected={drePeriodoInicio}
-                        onSelect={(date) => date && setDrePeriodoInicio(date)}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-                <div>
-                  <Label>Data Fim</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" className="w-full justify-start text-left font-normal">
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {drePeriodoFim ? format(drePeriodoFim, "PPP", { locale: ptBR }) : "Selecione"}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
-                      <CalendarComponent
-                        mode="single"
-                        selected={drePeriodoFim}
-                        onSelect={(date) => date && setDrePeriodoFim(date)}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-              </div>
-
-              {/* DRE Calculado */}
-              {(() => {
-                const dre = calcularDREAtual();
-                return (
-                  <div className="space-y-4">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-[70%]">Descrição</TableHead>
-                          <TableHead className="text-right">Valor</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        <TableRow className="bg-blue-50 font-bold">
-                          <TableCell>RECEITAS OPERACIONAIS</TableCell>
-                          <TableCell></TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell className="pl-8">Receita Operacional Bruta</TableCell>
-                          <TableCell className="text-right">{formatarMoeda(dre.receita_operacional_bruta)}</TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell className="pl-8">(-) Deduções de Vendas</TableCell>
-                          <TableCell className="text-right">{formatarMoeda(dre.deducoes_vendas)}</TableCell>
-                        </TableRow>
-                        <TableRow className="bg-blue-100 font-bold">
-                          <TableCell>Receita Operacional Líquida</TableCell>
-                          <TableCell className="text-right">{formatarMoeda(dre.receita_operacional_liquida)}</TableCell>
-                        </TableRow>
-                        <TableRow className="bg-red-50 font-bold">
-                          <TableCell>CUSTOS</TableCell>
-                          <TableCell></TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell className="pl-8">(-) Custo do Produto Vendido</TableCell>
-                          <TableCell className="text-right">{formatarMoeda(dre.custo_produto_vendido)}</TableCell>
-                        </TableRow>
-                        <TableRow className="bg-green-100 font-bold">
-                          <TableCell>Lucro Bruto</TableCell>
-                          <TableCell className={`text-right ${dre.lucro_bruto >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {formatarMoeda(dre.lucro_bruto)}
-                          </TableCell>
-                        </TableRow>
-                        <TableRow className="bg-orange-50 font-bold">
-                          <TableCell>DESPESAS OPERACIONAIS</TableCell>
-                          <TableCell></TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell className="pl-8">(-) Despesas Administrativas</TableCell>
-                          <TableCell className="text-right">{formatarMoeda(dre.despesas_operacionais.administrativas)}</TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell className="pl-8">(-) Despesas Comerciais</TableCell>
-                          <TableCell className="text-right">{formatarMoeda(dre.despesas_operacionais.comerciais)}</TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell className="pl-8">(-) Despesas Financeiras</TableCell>
-                          <TableCell className="text-right">{formatarMoeda(dre.despesas_operacionais.financeiras)}</TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell className="pl-8">(-) Outras Despesas Operacionais</TableCell>
-                          <TableCell className="text-right">{formatarMoeda(dre.despesas_operacionais.outras)}</TableCell>
-                        </TableRow>
-                        <TableRow className="bg-orange-100 font-bold">
-                          <TableCell>Total de Despesas Operacionais</TableCell>
-                          <TableCell className="text-right">{formatarMoeda(dre.despesas_operacionais.total)}</TableCell>
-                        </TableRow>
-                        <TableRow className="bg-purple-100 font-bold">
-                          <TableCell>Resultado Operacional</TableCell>
-                          <TableCell className={`text-right ${dre.resultado_operacional >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {formatarMoeda(dre.resultado_operacional)}
-                          </TableCell>
-                        </TableRow>
-                        <TableRow className="bg-yellow-50 font-bold">
-                          <TableCell>RESULTADO FINANCEIRO</TableCell>
-                          <TableCell></TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell className="pl-8">(+) Receitas Financeiras</TableCell>
-                          <TableCell className="text-right">{formatarMoeda(dre.receitas_financeiras)}</TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell className="pl-8">(-) Despesas Financeiras</TableCell>
-                          <TableCell className="text-right">{formatarMoeda(dre.despesas_financeiras)}</TableCell>
-                        </TableRow>
-                        <TableRow className="bg-yellow-100 font-bold">
-                          <TableCell>Resultado Financeiro</TableCell>
-                          <TableCell className={`text-right ${dre.resultado_financeiro >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {formatarMoeda(dre.resultado_financeiro)}
-                          </TableCell>
-                        </TableRow>
-                        <TableRow className="bg-gray-50 font-bold">
-                          <TableCell>OUTRAS RECEITAS E DESPESAS</TableCell>
-                          <TableCell></TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell className="pl-8">(+) Outras Receitas</TableCell>
-                          <TableCell className="text-right">{formatarMoeda(dre.outras_receitas)}</TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell className="pl-8">(-) Outras Despesas</TableCell>
-                          <TableCell className="text-right">{formatarMoeda(dre.outras_despesas)}</TableCell>
-                        </TableRow>
-                        <TableRow className="bg-gray-100 font-bold">
-                          <TableCell>Resultado Antes do Imposto</TableCell>
-                          <TableCell className={`text-right ${dre.resultado_antes_imposto >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {formatarMoeda(dre.resultado_antes_imposto)}
-                          </TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell className="pl-8">(-) Impostos</TableCell>
-                          <TableCell className="text-right">{formatarMoeda(dre.impostos)}</TableCell>
-                        </TableRow>
-                        <TableRow className={`font-bold text-lg ${dre.resultado_liquido >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                          <TableCell>RESULTADO LÍQUIDO DO EXERCÍCIO</TableCell>
-                          <TableCell className="text-right">
-                            {formatarMoeda(dre.resultado_liquido)}
-                          </TableCell>
-                        </TableRow>
-                      </TableBody>
-                    </Table>
-                  </div>
-                );
-              })()}
             </CardContent>
           </Card>
         </TabsContent>

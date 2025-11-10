@@ -603,9 +603,6 @@ const Saidas = () => {
             }
           }
 
-          // Calcular valor por parcela
-          const valorParcela = totalGeral / installments;
-          
           // Data de vencimento da primeira parcela (30 dias a partir da data da venda)
           const primeiraVencimento = new Date(exitDate);
           primeiraVencimento.setDate(primeiraVencimento.getDate() + 30);
@@ -878,7 +875,7 @@ const Saidas = () => {
             }
 
             // Calcular valor por parcela
-            const valorParcela = totalCarrinho / installments;
+          const valorParcela = totalCarrinho / installments;
             
             // Data de vencimento da primeira parcela (30 dias a partir da data da venda)
             const primeiraVencimento = new Date(data.exitDate);
