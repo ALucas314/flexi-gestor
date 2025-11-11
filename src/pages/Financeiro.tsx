@@ -40,8 +40,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Banknote,
-  CalendarDays,
-  Trash2
+  CalendarDays
 } from "lucide-react";
 import { useData } from "@/contexts/DataContext";
 import { useResponsive } from "@/hooks/use-responsive";
@@ -411,12 +410,16 @@ const Financeiro = () => {
   // Estado para finalizar pagamento
   const [showDialogFinalizarPagamento, setShowDialogFinalizarPagamento] = useState(false);
   const [contaParaFinalizar, setContaParaFinalizar] = useState<ContaPagar | null>(null);
+  const [parcelaParaFinalizar, setParcelaParaFinalizar] = useState<Parcela | null>(null);
+  const [quantidadeParcelasPagamento, setQuantidadeParcelasPagamento] = useState<number>(1);
   const [dataPagamentoFinal, setDataPagamentoFinal] = useState<Date>(new Date());
   const [origemPagamentoFinal, setOrigemPagamentoFinal] = useState<OrigemPagamento>('caixa');
 
   // Estado para confirmação de recebimento
   const [showDialogReceberConta, setShowDialogReceberConta] = useState(false);
   const [contaParaReceber, setContaParaReceber] = useState<ContaReceber | null>(null);
+  const [parcelaParaReceber, setParcelaParaReceber] = useState<Parcela | null>(null);
+  const [quantidadeParcelasRecebimento, setQuantidadeParcelasRecebimento] = useState<number>(1);
   const [dataRecebimentoFinal, setDataRecebimentoFinal] = useState<Date>(new Date());
   const [contaDestinoRecebimento, setContaDestinoRecebimento] = useState<OrigemPagamento>('caixa');
   const [valorRecebimentoFinal, setValorRecebimentoFinal] = useState<number>(0);
@@ -529,6 +532,103 @@ const Financeiro = () => {
     });
     return ids;
   }, [contasReceber]);
+
+  const parcelasPagamentoOrdenadas = useMemo(() => {
+    if (!contaParaFinalizar) return null;
+    return obterParcelasOrdenadasConta(contaParaFinalizar);
+  }, [contaParaFinalizar]);
+
+  const indiceInicialParcelasPagamento = useMemo(() => {
+    if (!parcelasPagamentoOrdenadas) return -1;
+    return encontrarIndiceInicialParcela(parcelasPagamentoOrdenadas, parcelaParaFinalizar);
+  }, [parcelasPagamentoOrdenadas, parcelaParaFinalizar]);
+
+  const maxParcelasPagamentoDisponiveis = useMemo(() => {
+    if (!parcelasPagamentoOrdenadas) return 1;
+    const pendentes = contarParcelasPendentesAPartir(
+      parcelasPagamentoOrdenadas,
+      indiceInicialParcelasPagamento
+    );
+    return Math.max(pendentes, 1);
+  }, [parcelasPagamentoOrdenadas, indiceInicialParcelasPagamento]);
+
+  const valorPrevistoPagamento = useMemo(() => {
+    if (!parcelasPagamentoOrdenadas) return 0;
+    const quantidade = Math.max(
+      1,
+      Math.min(quantidadeParcelasPagamento, maxParcelasPagamentoDisponiveis)
+    );
+    const indices = selecionarIndicesParcelasSequenciais(
+      parcelasPagamentoOrdenadas,
+      indiceInicialParcelasPagamento,
+      quantidade
+    );
+    return somarValorParcelas(parcelasPagamentoOrdenadas, indices);
+  }, [
+    parcelasPagamentoOrdenadas,
+    quantidadeParcelasPagamento,
+    maxParcelasPagamentoDisponiveis,
+    indiceInicialParcelasPagamento,
+  ]);
+
+  useEffect(() => {
+    if (!Number.isFinite(maxParcelasPagamentoDisponiveis)) return;
+    setQuantidadeParcelasPagamento((prev) =>
+      Math.max(1, Math.min(prev, maxParcelasPagamentoDisponiveis || 1))
+    );
+  }, [maxParcelasPagamentoDisponiveis]);
+
+  const parcelasRecebimentoOrdenadas = useMemo(() => {
+    if (!contaParaReceber) return null;
+    return obterParcelasOrdenadasConta(contaParaReceber);
+  }, [contaParaReceber]);
+
+  const indiceInicialParcelasRecebimento = useMemo(() => {
+    if (!parcelasRecebimentoOrdenadas) return -1;
+    return encontrarIndiceInicialParcela(parcelasRecebimentoOrdenadas, parcelaParaReceber);
+  }, [parcelasRecebimentoOrdenadas, parcelaParaReceber]);
+
+  const maxParcelasRecebimentoDisponiveis = useMemo(() => {
+    if (!parcelasRecebimentoOrdenadas) return 1;
+    const pendentes = contarParcelasPendentesAPartir(
+      parcelasRecebimentoOrdenadas,
+      indiceInicialParcelasRecebimento
+    );
+    return Math.max(pendentes, 1);
+  }, [parcelasRecebimentoOrdenadas, indiceInicialParcelasRecebimento]);
+
+  const valorPrevistoRecebimento = useMemo(() => {
+    if (!parcelasRecebimentoOrdenadas) return 0;
+    const quantidade = Math.max(
+      1,
+      Math.min(quantidadeParcelasRecebimento, maxParcelasRecebimentoDisponiveis)
+    );
+    const indices = selecionarIndicesParcelasSequenciais(
+      parcelasRecebimentoOrdenadas,
+      indiceInicialParcelasRecebimento,
+      quantidade
+    );
+    return somarValorParcelas(parcelasRecebimentoOrdenadas, indices);
+  }, [
+    parcelasRecebimentoOrdenadas,
+    quantidadeParcelasRecebimento,
+    maxParcelasRecebimentoDisponiveis,
+    indiceInicialParcelasRecebimento,
+  ]);
+
+  useEffect(() => {
+    if (!Number.isFinite(maxParcelasRecebimentoDisponiveis)) return;
+    setQuantidadeParcelasRecebimento((prev) =>
+      Math.max(1, Math.min(prev, maxParcelasRecebimentoDisponiveis || 1))
+    );
+  }, [maxParcelasRecebimentoDisponiveis]);
+
+  useEffect(() => {
+    if (!contaParaReceber) return;
+    if (Math.abs(valorPrevistoRecebimento - valorRecebimentoFinal) > 0.009) {
+      setValorRecebimentoFinal(Number(valorPrevistoRecebimento.toFixed(2)));
+    }
+  }, [valorPrevistoRecebimento, contaParaReceber]);
 
   const totaisMovimentacoesPagamentos = useMemo(() => {
     const totais = { caixa: 0, banco: 0 } as Record<OrigemPagamento, number>;
@@ -1376,7 +1476,12 @@ Flexi Gestor - Controle de Estoque
   };
 
   // 👉 Gera parcelas fictícias apenas para exibição quando os dados não existem no banco
-  const gerarParcelasPlaceholder = (contaId: string, total: number, quantidade: number, dataBase: Date): Parcela[] => {
+  function gerarParcelasPlaceholder(
+    contaId: string,
+    total: number,
+    quantidade: number,
+    dataBase: Date
+  ): Parcela[] {
     const valorParcelaBruto = total / quantidade;
     const valorParcela = Number(valorParcelaBruto.toFixed(2));
 
@@ -1395,7 +1500,7 @@ Flexi Gestor - Controle de Estoque
         atualizado_em: dataBase,
       } satisfies Parcela;
     });
-  };
+  }
 
   const gerarParcelasFallbackConta = (conta?: ContaPagar): Parcela[] => {
     if (!conta) return [];
@@ -1448,6 +1553,148 @@ Flexi Gestor - Controle de Estoque
         criado_em: parcela.criado_em || conta.criado_em || dataBase,
         atualizado_em: parcela.atualizado_em || conta.atualizado_em || dataBase,
       } satisfies Parcela;
+    });
+  };
+
+  function obterParcelasOrdenadasConta(conta: ContaPagar | ContaReceber): Parcela[] {
+    const valorTotalConta = Number(conta.valor_total ?? conta.valor ?? 0);
+    const totalParcelas =
+      conta.parcelasDetalhes?.length ||
+      conta.parcelas ||
+      conta.numero_parcelas ||
+      1;
+
+    const dataBase =
+      conta.data_vencimento instanceof Date
+        ? conta.data_vencimento
+        : conta.data_vencimento
+        ? new Date(conta.data_vencimento)
+        : conta.criado_em instanceof Date
+        ? conta.criado_em
+        : new Date();
+
+    const detalhesOriginais =
+      conta.parcelasDetalhes && conta.parcelasDetalhes.length > 0
+        ? conta.parcelasDetalhes
+        : gerarParcelasPlaceholder(conta.id, valorTotalConta, totalParcelas, dataBase);
+
+    return detalhesOriginais
+      .map((parcela, index) => {
+        const numero = parcela.numero ?? index + 1;
+        const dataVencimento =
+          parcela.data_vencimento instanceof Date
+            ? parcela.data_vencimento
+            : new Date(parcela.data_vencimento);
+        const dataPagamento =
+          parcela.data_pagamento instanceof Date
+            ? parcela.data_pagamento
+            : parcela.data_pagamento
+            ? new Date(parcela.data_pagamento)
+            : undefined;
+
+        return {
+          ...parcela,
+          id: parcela.id ?? `${conta.id}-parcela-${numero}`,
+          conta_pagar_id: parcela.conta_pagar_id ?? conta.id,
+          numero,
+          valor: Number(parcela.valor ?? (valorTotalConta / totalParcelas)),
+          data_vencimento: dataVencimento,
+          data_pagamento: dataPagamento,
+          status: normalizarStatusParcela(parcela.status ?? 'pendente'),
+          atualizado_em: parcela.atualizado_em || dataVencimento,
+          criado_em: parcela.criado_em || dataVencimento,
+        } satisfies Parcela;
+      })
+      .sort((a, b) => (a.numero ?? 0) - (b.numero ?? 0));
+  }
+
+  function encontrarIndiceInicialParcela(
+    parcelas: Parcela[],
+    referencia?: Parcela | null
+  ): number {
+    if (!parcelas.length) return -1;
+
+    let indice =
+      referencia
+        ? parcelas.findIndex((parcela) => {
+            if (referencia?.id && parcela.id === referencia.id) return true;
+            if (
+              referencia?.numero &&
+              parcela.numero === referencia.numero &&
+              normalizarStatusParcela(parcela.status) !== 'pago'
+            ) {
+              return true;
+            }
+            return false;
+          })
+        : -1;
+
+    if (indice === -1 || normalizarStatusParcela(parcelas[indice].status) === 'pago') {
+      indice = parcelas.findIndex(
+        (parcela) => normalizarStatusParcela(parcela.status) !== 'pago'
+      );
+    }
+
+    return indice;
+  }
+
+  function selecionarIndicesParcelasSequenciais(
+    parcelas: Parcela[],
+    indiceInicial: number,
+    quantidadeDesejada: number
+  ): number[] {
+    if (indiceInicial < 0) return [];
+    const indices: number[] = [];
+
+    for (let i = indiceInicial; i < parcelas.length; i++) {
+      const parcela = parcelas[i];
+      if (normalizarStatusParcela(parcela.status) === 'pago') {
+        continue;
+      }
+      indices.push(i);
+      if (indices.length >= quantidadeDesejada) {
+        break;
+      }
+    }
+
+    return indices;
+  }
+
+  function contarParcelasPendentesAPartir(parcelas: Parcela[], indiceInicial: number): number {
+    if (indiceInicial < 0) return 0;
+    let contador = 0;
+    for (let i = indiceInicial; i < parcelas.length; i++) {
+      if (normalizarStatusParcela(parcelas[i].status) !== 'pago') {
+        contador += 1;
+      }
+    }
+    return contador;
+  }
+
+  function somarValorParcelas(parcelas: Parcela[], indices: number[]): number {
+    return indices.reduce((total, indice) => {
+      const valor = Number(parcelas[indice]?.valor ?? 0);
+      return total + (Number.isFinite(valor) ? valor : 0);
+    }, 0);
+  }
+
+  const encontrarParcelaCorrespondente = (parcelas: Parcela[], referencia?: Parcela | null) => {
+    if (!referencia) return undefined;
+
+    return parcelas.find(parcela => {
+      if (referencia.id && parcela.id === referencia.id) {
+        return true;
+      }
+
+      if (referencia.numero && parcela.numero === referencia.numero) {
+        return true;
+      }
+
+      if (referencia.id && !isUUID(referencia.id) && parcela.numero && referencia.numero) {
+        return parcela.numero === referencia.numero;
+      }
+
+      return false;
     });
   };
 
@@ -3127,7 +3374,8 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
     conta: ContaReceber,
     dataRecebimento: Date,
     contaDestino: OrigemPagamento,
-    valorRecebido: number
+    _valorRecebido: number,
+    parcelaReferencia?: Parcela | null
   ) => {
     let contaProcessada = conta;
 
@@ -3140,187 +3388,235 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
       return;
     }
 
-    const updatesLocalBase: Partial<ContaReceber> = {};
+    if (!dataRecebimento || Number.isNaN(dataRecebimento.getTime())) {
+      toast.error('Informe uma data de recebimento válida.');
+      return;
+    }
 
-    try {
-      if (!dataRecebimento || Number.isNaN(dataRecebimento.getTime())) {
-        throw new Error('Informe uma data de recebimento válida.');
-      }
+    const parcelasOrdenadas = obterParcelasOrdenadasConta(contaProcessada);
+    if (!parcelasOrdenadas.length) {
+      toast.error('Não foi possível identificar as parcelas desta conta.');
+      return;
+    }
 
-      const valorTotalConta = contaProcessada.valor_total ?? contaProcessada.valor ?? 0;
-      const valorEfetivoEntrada = valorRecebido > 0 ? valorRecebido : valorTotalConta;
-      const valorEfetivo = valorTotalConta > 0
-        ? Math.min(valorEfetivoEntrada, valorTotalConta)
-        : valorEfetivoEntrada;
-      const valorFinalRecebido = valorTotalConta > 0 ? valorTotalConta : valorEfetivo;
+    const indiceInicial = encontrarIndiceInicialParcela(
+      parcelasOrdenadas,
+      parcelaReferencia ?? null
+    );
+    if (indiceInicial === -1) {
+      toast.error('Não há parcelas pendentes para receber.');
+      return;
+    }
 
-      if (valorEfetivo <= 0 && valorFinalRecebido <= 0) {
-        throw new Error('Informe um valor recebido maior que zero.');
-      }
+    const pendentesRestantes = contarParcelasPendentesAPartir(
+      parcelasOrdenadas,
+      indiceInicial
+    );
+    if (pendentesRestantes <= 0) {
+      toast.error('Não há parcelas pendentes para receber.');
+      return;
+    }
 
-      const destinoFinal = contaDestino || contaProcessada.conta_destino || classificarContaReceberDestino(contaProcessada);
+    const quantidadeSelecionada = Math.min(
+      Math.max(1, quantidadeParcelasRecebimento),
+      pendentesRestantes
+    );
 
-      const updatesLocal: Partial<ContaReceber> = {
-        status_recebimento: 'recebido',
-        status: 'pago',
-        valor_recebido: valorFinalRecebido,
-        valor_restante: 0,
-        parcelas_recebidas: contaProcessada.parcelas || contaProcessada.numero_parcelas || 1,
-        conta_destino: destinoFinal,
-        data_recebimento: dataRecebimento,
-      };
+    const indicesParaReceber = selecionarIndicesParcelasSequenciais(
+      parcelasOrdenadas,
+      indiceInicial,
+      quantidadeSelecionada
+    );
 
-      const totalParcelasConta =
-        contaProcessada.parcelasDetalhes?.length ||
-        contaProcessada.parcelas ||
-        contaProcessada.numero_parcelas ||
-        1;
+    if (!indicesParaReceber.length) {
+      toast.error('Selecione ao menos uma parcela pendente para receber.');
+      return;
+    }
 
-      if (totalParcelasConta >= 1) {
-        const baseDate =
-          contaProcessada.data_vencimento instanceof Date
-            ? contaProcessada.data_vencimento
-            : contaProcessada.data_vencimento
-              ? new Date(contaProcessada.data_vencimento)
-              : dataRecebimento;
+    const valorTotalConta = Number(contaProcessada.valor_total ?? contaProcessada.valor ?? 0);
+    const valorAplicado = somarValorParcelas(parcelasOrdenadas, indicesParaReceber);
 
-        const detalhesOriginais =
-          contaProcessada.parcelasDetalhes && contaProcessada.parcelasDetalhes.length > 0
-            ? contaProcessada.parcelasDetalhes
-            : gerarParcelasPlaceholder(
-                contaProcessada.id,
-                valorTotalConta || valorEfetivo,
-                totalParcelasConta,
-                baseDate
-              );
+    if (valorAplicado <= 0) {
+      toast.error('Valor inválido para as parcelas selecionadas.');
+      return;
+    }
 
-        const detalhesAtualizados = detalhesOriginais.map((parcela, index) => ({
+    const destinoFinal =
+      contaDestino ||
+      contaProcessada.conta_destino ||
+      classificarContaReceberDestino(contaProcessada);
+
+    const parcelasAtualizadas = parcelasOrdenadas.map((parcela, index) => {
+      if (indicesParaReceber.includes(index)) {
+        return {
           ...parcela,
-          numero: parcela.numero ?? index + 1,
           status: 'pago' as ParcelaStatus,
           data_pagamento: dataRecebimento,
-        }));
-
-        updatesLocal.parcelasDetalhes = detalhesAtualizados;
+          atualizado_em: dataRecebimento,
+        };
       }
+      return parcela;
+    });
 
-      Object.assign(updatesLocalBase, updatesLocal);
+    const valorRecebidoAnterior = Number(contaProcessada.valor_recebido ?? 0);
+    const valorRecebidoNovo = Math.min(valorRecebidoAnterior + valorAplicado, valorTotalConta);
+    const valorRestante = Math.max(valorTotalConta - valorRecebidoNovo, 0);
 
-      const possuiPersistenciaRemota = isUUID(contaProcessada.id);
+    const parcelasRecebidas = parcelasAtualizadas.filter(
+      (parcela) => normalizarStatusParcela(parcela.status) === 'pago'
+    ).length;
 
-      if (!possuiPersistenciaRemota) {
-        atualizarContaRecebidaLocalmente(contaProcessada, updatesLocal);
-        toast.info('Recebimento registrado apenas localmente. Execute a migração de contas a receber para sincronizar com o banco.');
-        return;
-      }
+    const statusRecebimentoAtual: StatusRecebimento =
+      valorRestante <= 0.01
+        ? 'recebido'
+        : valorRecebidoNovo > 0
+        ? 'parcial'
+        : 'pendente';
 
-      const dadosAtualizacaoNova = {
-        status_recebimento: 'recebido',
-        data_recebimento: dataRecebimento.toISOString().split('T')[0],
-        valor_recebido: valorFinalRecebido,
-        valor_restante: 0,
-        parcelas_recebidas: contaProcessada.parcelas || contaProcessada.numero_parcelas || 1,
-        conta_destino: destinoFinal
-      };
+    const statusContaAtual: AccountStatus =
+      statusRecebimentoAtual === 'recebido' ? 'pago' : 'pendente';
 
-      const dadosAtualizacaoLegado = {
-        status: 'pago' as AccountStatus,
-        data_recebimento: dataRecebimento.toISOString(),
-        valor: valorFinalRecebido,
-        valor_recebido: valorFinalRecebido,
-        valor_restante: 0,
-        origem_pagamento: destinoFinal
-      };
+    const updatesLocal: Partial<ContaReceber> = {
+      status_recebimento: statusRecebimentoAtual,
+      status: statusContaAtual,
+      valor_recebido: valorRecebidoNovo,
+      valor_restante: valorRestante,
+      parcelas_recebidas: parcelasRecebidas,
+      conta_destino: destinoFinal,
+      data_recebimento:
+        statusRecebimentoAtual === 'recebido'
+          ? dataRecebimento
+          : contaProcessada.data_recebimento,
+      parcelasDetalhes: parcelasAtualizadas,
+    };
 
-      let atualizado = false;
+    if (!isUUID(contaProcessada.id)) {
+      atualizarContaRecebidaLocalmente(contaProcessada, updatesLocal);
+      toast.info(
+        'Recebimento registrado apenas localmente. Execute a migração de contas a receber para sincronizar com o banco.'
+      );
+      return;
+    }
 
-      const atualizarTabela = async (tableName: string, dados: Record<string, any>) => {
-        const usarWorkspace = contaProcessada.workspace_id ? true : false;
-        const equivalenciaValor = dados.valor_total ?? dados.valor ?? valorEfetivo;
+    const valorEfetivo = valorRecebidoNovo;
+    let atualizado = false;
 
-        const filtros = usarWorkspace
-          ? [
-              supabase.from(tableName).update(dados).eq('id', contaProcessada.id).eq('workspace_id', contaProcessada.workspace_id)
-            ]
-          : [
-              supabase.from(tableName).update(dados).eq('id', contaProcessada.id),
-              supabase.from(tableName).update(dados).eq('workspace_id', workspaceAtivo?.id || '').eq('valor_total', equivalenciaValor).eq('descricao', contaProcessada.descricao || contaProcessada.observacoes || '')
-            ];
+    const atualizarTabela = async (tableName: string, dados: Record<string, any>) => {
+      const usarWorkspace = contaProcessada.workspace_id ? true : false;
+      const equivalenciaValor = dados.valor_total ?? dados.valor ?? valorEfetivo;
 
-        for (const consulta of filtros) {
-          const { error, data } = await consulta.select().maybeSingle();
+      const filtros = usarWorkspace
+        ? [
+            supabase
+              .from(tableName)
+              .update(dados)
+              .eq('id', contaProcessada.id)
+              .eq('workspace_id', contaProcessada.workspace_id),
+          ]
+        : [
+            supabase.from(tableName).update(dados).eq('id', contaProcessada.id),
+            supabase
+              .from(tableName)
+              .update(dados)
+              .eq('workspace_id', workspaceAtivo?.id || '')
+              .eq('valor_total', equivalenciaValor)
+              .eq('descricao', contaProcessada.descricao || contaProcessada.observacoes || ''),
+          ];
 
-          if (!error && data) {
-            atualizado = true;
-            return;
+      for (const consulta of filtros) {
+        const { error, data } = await consulta.select().maybeSingle();
+
+        if (!error && data) {
+          atualizado = true;
+          return;
+        }
+
+        if (error) {
+          if (erroIndicaTabelaLegada(error) || error.code === '42P01') {
+            return 'missing_table';
           }
 
-          if (error) {
-            if (erroIndicaTabelaLegada(error) || error.code === '42P01') {
-              return 'missing_table';
-            }
+          if (error.message?.includes('workspace_id') || error.code === '42703') {
+            const { error: fallbackError, data: fallbackData } = await supabase
+              .from(tableName)
+              .update(dados)
+              .eq('id', contaProcessada.id)
+              .eq(
+                'usuario_id',
+                contaProcessada.usuario_id || workspaceAtivo?.id || user?.id || ''
+              );
 
-            if (error.message?.includes('workspace_id') || error.code === '42703') {
-              // repetir usando usuario_id
-              const { error: fallbackError, data: fallbackData } = await supabase
-                .from(tableName)
-                .update(dados)
-                .eq('id', contaProcessada.id)
-                .eq('usuario_id', contaProcessada.usuario_id || workspaceAtivo?.id || user?.id || '');
-
-              if (!fallbackError && fallbackData) {
-                atualizado = true;
-                return;
-              }
-
-              if (fallbackError && (erroIndicaTabelaLegada(fallbackError) || fallbackError.code === '42P01')) {
-                return 'missing_table';
-              }
-
-              if (fallbackError) {
-                throw fallbackError;
-              }
-
+            if (!fallbackError && fallbackData) {
+              atualizado = true;
               return;
             }
 
-            throw error;
+            if (
+              fallbackError &&
+              (erroIndicaTabelaLegada(fallbackError) || fallbackError.code === '42P01')
+            ) {
+              return 'missing_table';
+            }
+
+            if (fallbackError) {
+              throw fallbackError;
+            }
+
+            return;
           }
-        }
-      };
 
-      // Tenta atualizar tabela nova
-      const resultadoNova = await atualizarTabela('contas_a_receber', dadosAtualizacaoNova);
-
-      if (resultadoNova === 'missing_table' || !atualizado) {
-        const resultadoLegado = await atualizarTabela('contas_receber', dadosAtualizacaoLegado);
-        if (resultadoLegado === 'missing_table' && !atualizado) {
-          throw new Error('Nenhuma tabela de contas a receber disponível para atualização.');
+          throw error;
         }
       }
+    };
 
-      if (!atualizado) {
-        throw new Error('Não foi possível atualizar a conta a receber.');
+    const dadosAtualizacaoNova = {
+      status_recebimento: statusRecebimentoAtual,
+      data_recebimento:
+        statusRecebimentoAtual === 'recebido'
+          ? dataRecebimento.toISOString().split('T')[0]
+          : null,
+      valor_recebido: valorRecebidoNovo,
+      valor_restante: valorRestante,
+      parcelas_recebidas: parcelasRecebidas,
+      conta_destino: destinoFinal,
+    };
+
+    const dadosAtualizacaoLegado = {
+      status: statusContaAtual,
+      data_recebimento:
+        statusRecebimentoAtual === 'recebido'
+          ? dataRecebimento.toISOString()
+          : null,
+      valor: valorRecebidoNovo,
+      valor_recebido: valorRecebidoNovo,
+      valor_restante: valorRestante,
+      origem_pagamento: destinoFinal,
+      parcelas_recebidas: parcelasRecebidas,
+    };
+
+    const resultadoNova = await atualizarTabela('contas_a_receber', dadosAtualizacaoNova);
+
+    if (resultadoNova === 'missing_table' || !atualizado) {
+      const resultadoLegado = await atualizarTabela('contas_receber', dadosAtualizacaoLegado);
+      if (resultadoLegado === 'missing_table' && !atualizado) {
+        throw new Error('Nenhuma tabela de contas a receber disponível para atualização.');
       }
-
-      toast.success('Conta marcada como recebida!');
-      await carregarContasReceber();
-    } catch (error: any) {
-      atualizarContaRecebidaLocalmente(contaProcessada, {
-        ...updatesLocalBase,
-        // garantir que valor_total permanece
-        valor_total:
-          contaProcessada.valor_total ??
-          contaProcessada.valor ??
-          updatesLocalBase.valor_recebido ??
-          0,
-      });
-      console.error('Erro ao marcar conta como recebida:', error);
-      toast.error(
-        (error?.message as string) ||
-          'Erro ao marcar conta como recebida. O recebimento foi registrado apenas no sistema local.'
-      );
     }
+
+    if (!atualizado) {
+      throw new Error('Não foi possível atualizar a conta a receber.');
+    }
+
+    atualizarContaRecebidaLocalmente(contaProcessada, updatesLocal);
+
+    toast.success(
+      quantidadeSelecionada === 1
+        ? 'Parcela recebida com sucesso!'
+        : `${quantidadeSelecionada} parcelas recebidas com sucesso!`
+    );
+
+    await carregarContasReceber();
   };
 
   const confirmarRecebimento = async () => {
@@ -3331,10 +3627,13 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
         contaParaReceber,
         dataRecebimentoFinal,
         contaDestinoRecebimento,
-        valorRecebimentoFinal
+        valorRecebimentoFinal,
+        parcelaParaReceber
       );
       setShowDialogReceberConta(false);
       setContaParaReceber(null);
+      setParcelaParaReceber(null);
+      setQuantidadeParcelasRecebimento(1);
       setValorRecebimentoFinal(0);
       setDataRecebimentoFinal(new Date());
       setContaDestinoRecebimento('caixa');
@@ -3345,31 +3644,29 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
   };
 
   // Deletar conta
-  const deletarContaPagar = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir esta conta?')) return;
-
+  const deletarContaPagar = async (id: string): Promise<boolean> => {
     const conta = contasPagar.find(c => c.id === id);
     if (isContaDerivada(conta)) {
       toast.error('Esta conta vem de uma movimentação automática. Remova o movimento correspondente no estoque para deixá-la de aparecer.');
-      return;
+      return false;
     }
 
     try {
       await deletarContaPagarRemoto(id);
       toast.success('Conta excluída com sucesso!');
       await carregarContasPagar();
+      return true;
     } catch (error: any) {
       toast.error(error.message || 'Erro ao excluir conta');
+      return false;
     }
   };
 
-  const deletarContaReceber = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir esta conta?')) return;
-
+  const deletarContaReceber = async (id: string): Promise<boolean> => {
     const conta = contasReceber.find(c => c.id === id);
     if (isContaReceberDerivada(conta)) {
       toast.error('Esta conta vem de uma movimentação automática. Remova a movimentação correspondente para que ela deixe de aparecer.');
-      return;
+      return false;
     }
 
     const deletarRemoto = async () => {
@@ -3409,10 +3706,14 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
 
         toast.success('Conta excluída com sucesso!');
         await carregarContasReceber();
+        return true;
       }
+
+      return resultadoNova === 'ok';
     } catch (error: any) {
       console.error('Erro ao excluir conta a receber:', error);
       toast.error(error.message || 'Erro ao excluir conta a receber');
+      return false;
     }
   };
 
@@ -3539,76 +3840,198 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
     if (!contaParaFinalizar) return;
 
     try {
-      // ✅ Se a conta veio das movimentações, criamos uma versão persistida antes de finalizar
       const contaAlvo = isContaDerivada(contaParaFinalizar)
         ? await criarContaPagarReal(contaParaFinalizar)
         : contaParaFinalizar;
 
-      // ✅ Permite finalizar contas manualmente ou derivadas apenas escolhendo data e origem
-      const dataPagamentoISO = dataPagamentoFinal.toISOString();
-      const valorTotalConta = Number(contaAlvo.valor_total ?? contaAlvo.valor ?? 0);
-      const valorJaPago = Number(contaAlvo.valor_pago ?? 0);
-      const valorAPagar = Math.max(valorTotalConta - valorJaPago, 0);
-      const totalParcelas = contaAlvo.parcelasDetalhes?.length
-        ? contaAlvo.parcelasDetalhes.length
-        : contaAlvo.parcelas || contaAlvo.numero_parcelas || 1;
-
-      const saldoDisponivel = origemPagamentoFinal === 'caixa' ? saldoCaixa : saldoBanco;
-
-      if (valorAPagar > saldoDisponivel) {
-        toast.error(`Saldo insuficiente no ${origemPagamentoFinal === 'caixa' ? 'Caixa' : 'Banco'} para finalizar este pagamento.`);
+      const parcelasOrdenadas = obterParcelasOrdenadasConta(contaAlvo);
+      if (parcelasOrdenadas.length === 0) {
+        toast.error('Não foi possível identificar as parcelas desta conta.');
         return;
       }
 
-      if (valorAPagar === 0) {
-        toast.error('Esta conta já está quitada.');
+      const indiceInicial = encontrarIndiceInicialParcela(
+        parcelasOrdenadas,
+        parcelaParaFinalizar
+      );
+      if (indiceInicial === -1) {
+        toast.error('Todas as parcelas desta conta já foram quitadas.');
         return;
+      }
+
+      const pendentesRestantes = contarParcelasPendentesAPartir(
+        parcelasOrdenadas,
+        indiceInicial
+      );
+      if (pendentesRestantes <= 0) {
+        toast.error('Não há parcelas pendentes para quitar.');
+        return;
+      }
+
+      const quantidadeSelecionada = Math.min(
+        Math.max(1, quantidadeParcelasPagamento),
+        pendentesRestantes
+      );
+
+      const indicesParaPagar = selecionarIndicesParcelasSequenciais(
+        parcelasOrdenadas,
+        indiceInicial,
+        quantidadeSelecionada
+      );
+
+      if (!indicesParaPagar.length) {
+        toast.error('Selecione ao menos uma parcela pendente para finalizar.');
+        return;
+      }
+
+      const valorTotalConta = Number(contaAlvo.valor_total ?? contaAlvo.valor ?? 0);
+      const valorAplicado = somarValorParcelas(parcelasOrdenadas, indicesParaPagar);
+
+      if (valorAplicado <= 0) {
+        toast.error('Valor inválido para pagamento das parcelas selecionadas.');
+        return;
+      }
+
+      const saldoDisponivel = origemPagamentoFinal === 'caixa' ? saldoCaixa : saldoBanco;
+      if (valorAplicado > saldoDisponivel + 0.01) {
+        toast.error(
+          `Saldo insuficiente no ${
+            origemPagamentoFinal === 'caixa' ? 'Caixa' : 'Banco'
+          } para quitar ${quantidadeSelecionada} parcela(s).`
+        );
+        return;
+      }
+
+      const dataPagamentoISO = dataPagamentoFinal.toISOString();
+      const valorPagoAnterior = Number(contaAlvo.valor_pago ?? 0);
+      const valorPagoNovo = Math.min(valorPagoAnterior + valorAplicado, valorTotalConta);
+      const valorRestante = Math.max(valorTotalConta - valorPagoNovo, 0);
+
+      const parcelasAtualizadas = parcelasOrdenadas.map((parcela, index) => {
+        if (indicesParaPagar.includes(index)) {
+          return {
+            ...parcela,
+            status: 'pago' as ParcelaStatus,
+            data_pagamento: dataPagamentoFinal,
+            atualizado_em: dataPagamentoFinal,
+          };
+        }
+        return parcela;
+      });
+
+      const parcelasPagas = parcelasAtualizadas.filter(
+        (parcela) => normalizarStatusParcela(parcela.status) === 'pago'
+      ).length;
+
+      const todasPagas = valorRestante <= 0.01;
+      const statusPagamento: StatusPagamento = todasPagas
+        ? 'pago'
+        : valorPagoNovo > 0
+        ? 'parcial'
+        : 'pendente';
+
+      const parcelasComId = indicesParaPagar
+        .map((indice) => parcelasOrdenadas[indice])
+        .filter((parcela) => parcela.id && isUUID(parcela.id));
+
+      if (parcelasComId.length > 0) {
+        const { error } = await supabase
+          .from('parcelas')
+          .update({
+            status: 'pago',
+            data_pagamento: dataPagamentoISO,
+            atualizado_em: dataPagamentoISO,
+          })
+          .in(
+            'id',
+            parcelasComId.map((parcela) => parcela.id as string)
+          );
+
+        if (
+          error &&
+          !(erroIndicaTabelaLegada(error) || error.code === '42P01' || error.code === 'PGRST205')
+        ) {
+          throw error;
+        }
+      }
+
+      const parcelasSemId = indicesParaPagar
+        .map((indice) => parcelasOrdenadas[indice])
+        .filter((parcela) => !parcela.id || !isUUID(parcela.id))
+        .map((parcela) => parcela.numero)
+        .filter((numero): numero is number => Number.isFinite(numero));
+
+      if (parcelasSemId.length > 0) {
+        const { error } = await supabase
+          .from('parcelas')
+          .update({
+            status: 'pago',
+            data_pagamento: dataPagamentoISO,
+            atualizado_em: dataPagamentoISO,
+          })
+          .eq('conta_pagar_id', contaAlvo.id)
+          .in('numero', parcelasSemId);
+
+        if (
+          error &&
+          !(erroIndicaTabelaLegada(error) || error.code === '42P01' || error.code === 'PGRST205')
+        ) {
+          throw error;
+        }
       }
 
       await atualizarContaPagarRemoto(
         contaAlvo.id,
         {
-          status_pagamento: 'pago',
-          data_pagamento: dataPagamentoISO,
-          valor_pago: valorTotalConta,
-          valor_restante: 0,
+          valor_pago: valorPagoNovo,
+          valor_restante: valorRestante,
+          status_pagamento: statusPagamento,
+          data_pagamento: todasPagas ? dataPagamentoISO : null,
           conta_origem: origemPagamentoFinal,
-          parcelas_pagas: totalParcelas
+          parcelas_pagas: parcelasPagas,
         },
         {
-          status: 'finalizado',
-          data_pagamento: dataPagamentoISO,
-          valor_pago: valorTotalConta,
-          valor_restante: 0,
+          valor_pago: valorPagoNovo,
+          valor_restante: valorRestante,
+          status: todasPagas ? 'finalizado' : 'pendente',
+          data_pagamento: todasPagas ? dataPagamentoISO : null,
           origem_pagamento: origemPagamentoFinal,
-          parcelas_pagas: totalParcelas
+          parcelas_pagas: parcelasPagas,
         }
       );
 
-      // Marcar todas as parcelas como pagas
-      if (contaAlvo.parcelasDetalhes && contaAlvo.parcelasDetalhes.length > 0) {
-        const { error: erroParcelas } = await supabase
-          .from('parcelas')
-          .update({
-            status: 'pago',
-            data_pagamento: dataPagamentoFinal.toISOString()
-          })
-          .eq('conta_pagar_id', contaAlvo.id)
-          .eq('status', 'pendente');
+      atualizarContaPagaLocalmente(contaAlvo, {
+        valor_pago: valorPagoNovo,
+        valor_restante: valorRestante,
+        status_pagamento: statusPagamento,
+        status: todasPagas ? 'finalizado' : contaAlvo.status ?? 'pendente',
+        data_pagamento: todasPagas ? dataPagamentoFinal : contaAlvo.data_pagamento,
+        parcelas_pagas: parcelasPagas,
+        conta_origem: origemPagamentoFinal,
+        origem_pagamento: origemPagamentoFinal,
+        parcelasDetalhes: parcelasAtualizadas,
+      });
 
-        if (erroParcelas && !(erroIndicaTabelaLegada(erroParcelas) || erroParcelas.code === '42P01' || erroParcelas.code === 'PGRST205')) {
-          throw erroParcelas;
-        }
-      }
+      toast.success(
+        quantidadeSelecionada === 1
+          ? `Parcela quitada com sucesso! Valor debitado do ${
+              origemPagamentoFinal === 'caixa' ? 'Caixa' : 'Banco'
+            }.`
+          : `${quantidadeSelecionada} parcelas quitadas! Valor debitado do ${
+              origemPagamentoFinal === 'caixa' ? 'Caixa' : 'Banco'
+            }.`
+      );
 
-      // ✅ Mantém o estado atualizado com a conta real criada
-      setContaParaFinalizar(contaAlvo);
-
-      toast.success(`Pagamento finalizado com sucesso! Debitado do ${origemPagamentoFinal === 'caixa' ? 'Caixa' : 'Banco'}.`);
       setShowDialogFinalizarPagamento(false);
       setContaParaFinalizar(null);
-      setOrigemPagamentoFinal('caixa'); // Reset para padrão
+      setParcelaParaFinalizar(null);
+      setQuantidadeParcelasPagamento(1);
+      setOrigemPagamentoFinal('caixa');
+      setDataPagamentoFinal(new Date());
       await carregarContasPagar();
+      if (contaSelecionadaParcelas?.id === contaAlvo.id) {
+        await carregarParcelas(contaAlvo.id);
+      }
     } catch (error: any) {
       toast.error(error.message || 'Erro ao finalizar pagamento');
     }
@@ -5617,22 +6040,15 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
                                       className="bg-green-50 hover:bg-green-100 text-green-700 border-green-300"
                                       onClick={() => {
                                         setContaParaFinalizar(conta);
+                                        setParcelaParaFinalizar(parcela ?? null);
+                                    setQuantidadeParcelasPagamento(1);
                                         setDataPagamentoFinal(new Date());
-                                        setOrigemPagamentoFinal('caixa'); // Reset para padrão
+                                        setOrigemPagamentoFinal(conta.conta_origem || conta.origem_pagamento || 'caixa'); // Reset para padrão, respeitando conta
                                         setShowDialogFinalizarPagamento(true);
                                       }}
                                     >
                                       <CheckCircle className="h-4 w-4 mr-1" />
                                       Finalizar
-                                    </Button>
-                                  )}
-                                  {conta.id && (
-                                    <Button
-                                      size="sm"
-                                      variant="destructive"
-                                      onClick={() => deletarContaPagar(conta.id)}
-                                    >
-                                      Excluir
                                     </Button>
                                   )}
                                 </div>
@@ -5782,13 +6198,23 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
                         const destinoParcela = conta.conta_destino || classificarContaReceberDestino(conta);
                         const handleAbrirReceber = () => {
                           setContaParaReceber(conta);
-                          setDataRecebimentoFinal(conta.data_recebimento || new Date());
+                          setParcelaParaReceber(parcela ?? null);
+                          setQuantidadeParcelasRecebimento(1);
+                          const dataBaseRecebimento =
+                            parcela?.data_pagamento ||
+                            conta.data_recebimento ||
+                            new Date();
+                          setDataRecebimentoFinal(dataBaseRecebimento);
                           setContaDestinoRecebimento(destinoParcela);
-                          const valorBase =
-                            valorRestanteConta > 0 ? valorRestanteConta : valorTotalConta;
-                          const valorNormalizado = Number.isFinite(valorBase)
-                            ? Number(valorBase.toFixed(2))
+
+                          const valorBaseParcela = parcela
+                            ? (valorRestanteParcela > 0 ? valorRestanteParcela : valorParcela)
+                            : (valorRestanteConta > 0 ? valorRestanteConta : valorTotalConta);
+
+                          const valorNormalizado = Number.isFinite(valorBaseParcela)
+                            ? Number(Number(valorBaseParcela).toFixed(2))
                             : 0;
+
                           setValorRecebimentoFinal(valorNormalizado);
                           setShowDialogReceberConta(true);
                         };
@@ -5929,21 +6355,11 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
                                 <Button
                                   size="sm"
                                   variant="outline"
+                                  className="inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border hover:text-accent-foreground h-9 rounded-md px-3 bg-green-50 hover:bg-green-100 text-green-700 border-green-300"
                                   onClick={handleAbrirReceber}
                                 >
-                                  Finalizar Recebimento
-                                </Button>
-                              )}
-                              {conta.id && (
-                                <Button
-                                  size="sm"
-                                  variant="destructive"
-                                  className="inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 bg-destructive text-destructive-foreground hover:bg-destructive/90 h-9 rounded-md px-3"
-                                  title={contaReceberDerivada ? 'Remova a movimentação correspondente para excluir esta conta automática.' : undefined}
-                                  onClick={() => deletarContaReceber(conta.id)}
-                                >
-                                  <Trash2 className="h-4 w-4 mr-1" />
-                                  Excluir
+                                  <CheckCircle className="h-4 w-4 mr-1" />
+                                  Finalizar
                                 </Button>
                               )}
                             </div>
@@ -6867,7 +7283,19 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
       </Dialog>
 
       {/* Dialog de Finalizar Pagamento */}
-      <Dialog open={showDialogFinalizarPagamento} onOpenChange={setShowDialogFinalizarPagamento}>
+      <Dialog
+        open={showDialogFinalizarPagamento}
+        onOpenChange={(open) => {
+          setShowDialogFinalizarPagamento(open);
+          if (!open) {
+            setContaParaFinalizar(null);
+            setParcelaParaFinalizar(null);
+            setQuantidadeParcelasPagamento(1);
+            setOrigemPagamentoFinal('caixa');
+            setDataPagamentoFinal(new Date());
+          }
+        }}
+      >
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -6876,7 +7304,19 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
             </DialogTitle>
             {contaParaFinalizar && (
               <CardDescription>
-                {contaParaFinalizar.descricao} - Valor: R$ {contaParaFinalizar.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                {contaParaFinalizar.descricao} · Valor total: R${' '}
+                {Number(contaParaFinalizar.valor_total ?? contaParaFinalizar.valor ?? 0).toLocaleString('pt-BR', {
+                  minimumFractionDigits: 2,
+                })}
+                {parcelaParaFinalizar ? (
+                  <>
+                    <br />
+                    Parcela selecionada: {parcelaParaFinalizar.numero}/{contaParaFinalizar.parcelas ?? contaParaFinalizar.numero_parcelas ?? '?'} · R${' '}
+                    {Number(parcelaParaFinalizar.valor ?? 0).toLocaleString('pt-BR', {
+                      minimumFractionDigits: 2,
+                    })}
+                  </>
+                ) : null}
               </CardDescription>
             )}
           </DialogHeader>
@@ -6926,16 +7366,66 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
               </p>
             </div>
             {contaParaFinalizar && (
+              <div>
+                <Label htmlFor="parcelas-pagamento">Parcelas a quitar</Label>
+                <Select
+                  value={String(quantidadeParcelasPagamento)}
+                  onValueChange={(value) =>
+                    setQuantidadeParcelasPagamento(Math.max(1, parseInt(value, 10) || 1))
+                  }
+                >
+                  <SelectTrigger id="parcelas-pagamento" className="w-full">
+                    <SelectValue placeholder="Quantidade de parcelas" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from(
+                      { length: maxParcelasPagamentoDisponiveis },
+                      (_, index) => index + 1
+                    ).map((quantidade) => (
+                      <SelectItem key={quantidade} value={String(quantidade)}>
+                        {quantidade === 1
+                          ? '1 parcela'
+                          : `${quantidade} parcelas`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Valor total a debitar: R${' '}
+                  {valorPrevistoPagamento.toLocaleString('pt-BR', {
+                    minimumFractionDigits: 2,
+                  })}
+                </p>
+              </div>
+            )}
+            {contaParaFinalizar && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <p className="text-sm text-blue-800 mb-2">
                   <strong>Atenção:</strong> Ao finalizar o pagamento:
                 </p>
-                <ul className="text-xs text-blue-700 space-y-1 list-disc list-inside">
-                  <li>Todas as parcelas pendentes serão marcadas como pagas</li>
-                  <li>A conta será atualizada para status "Finalizado"</li>
-                  <li>O valor será debitado do {origemPagamentoFinal === 'caixa' ? 'Caixa' : 'Banco'}</li>
-                  <li>Uma nota de quitação será gerada automaticamente</li>
-                </ul>
+                {parcelaParaFinalizar ? (
+                  <ul className="text-xs text-blue-700 space-y-1 list-disc list-inside">
+                    <li>Somente a parcela selecionada será marcada como paga</li>
+                    <li>
+                      O valor de R${' '}
+                      {Number(parcelaParaFinalizar.valor ?? 0).toLocaleString('pt-BR', {
+                        minimumFractionDigits: 2,
+                      })}{' '}
+                      será debitado do {origemPagamentoFinal === 'caixa' ? 'Caixa' : 'Banco'}
+                    </li>
+                    <li>
+                      A conta permanecerá como{' '}
+                      {contaParaFinalizar.status_pagamento === 'pago' ? 'quitada' : 'pendente/parcial'} até que todas as parcelas sejam pagas
+                    </li>
+                  </ul>
+                ) : (
+                  <ul className="text-xs text-blue-700 space-y-1 list-disc list-inside">
+                    <li>Todas as parcelas pendentes serão marcadas como pagas</li>
+                    <li>A conta será atualizada para status "Finalizado"</li>
+                    <li>O valor será debitado do {origemPagamentoFinal === 'caixa' ? 'Caixa' : 'Banco'}</li>
+                    <li>Uma nota de quitação será gerada automaticamente</li>
+                  </ul>
+                )}
               </div>
             )}
           </div>
@@ -6943,7 +7433,10 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
             <Button variant="outline" onClick={() => {
               setShowDialogFinalizarPagamento(false);
               setContaParaFinalizar(null);
+              setParcelaParaFinalizar(null);
+              setQuantidadeParcelasPagamento(1);
               setOrigemPagamentoFinal('caixa'); // Reset para padrão
+              setDataPagamentoFinal(new Date());
             }}>
               Cancelar
             </Button>
@@ -6959,15 +7452,20 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
       </Dialog>
 
       {/* Dialog de Recebimento de Conta */}
-      <Dialog open={showDialogReceberConta} onOpenChange={(open) => {
-        setShowDialogReceberConta(open);
-        if (!open) {
-          setContaParaReceber(null);
-          setValorRecebimentoFinal(0);
-          setDataRecebimentoFinal(new Date());
-          setContaDestinoRecebimento('caixa');
-        }
-      }}>
+      <Dialog
+        open={showDialogReceberConta}
+        onOpenChange={(open) => {
+          setShowDialogReceberConta(open);
+          if (!open) {
+            setContaParaReceber(null);
+            setParcelaParaReceber(null);
+            setQuantidadeParcelasRecebimento(1);
+            setValorRecebimentoFinal(0);
+            setDataRecebimentoFinal(new Date());
+            setContaDestinoRecebimento('caixa');
+          }
+        }}
+      >
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -6978,6 +7476,13 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
               <CardDescription>
                 {contaParaReceber.descricao || 'Conta sem descrição'} • Valor total:{" "}
                 {formatarMoeda(contaParaReceber.valor_total ?? contaParaReceber.valor ?? 0)}
+                {parcelaParaReceber ? (
+                  <>
+                    <br />
+                    Parcela selecionada: {parcelaParaReceber.numero}/{contaParaReceber.parcelas ?? contaParaReceber.numero_parcelas ?? '?'} ·{" "}
+                    {formatarMoeda(parcelaParaReceber.valor ?? 0)}
+                  </>
+                ) : null}
               </CardDescription>
             )}
           </DialogHeader>
@@ -7012,13 +7517,48 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
                 value={valorRecebimentoFinal}
                 onChange={(e) => setValorRecebimentoFinal(parseFloat(e.target.value) || 0)}
                 placeholder="0,00"
+                disabled={Boolean(parcelaParaReceber)}
               />
-              {contaParaReceber && contaParaReceber.valor_restante !== undefined && contaParaReceber.valor_restante > 0 && (
+              {parcelaParaReceber ? (
+                <p className="text-xs text-emerald-600">
+                  Valor definido automaticamente pela parcela {parcelaParaReceber.numero}.
+                </p>
+              ) : contaParaReceber && contaParaReceber.valor_restante !== undefined && contaParaReceber.valor_restante > 0 ? (
                 <p className="text-xs text-slate-500">
                   Restante: {formatarMoeda(contaParaReceber.valor_restante)}
                 </p>
-              )}
+              ) : null}
             </div>
+            {contaParaReceber && (
+              <div className="space-y-2">
+                <Label htmlFor="parcelas-recebimento">Parcelas a receber</Label>
+                <Select
+                  value={String(quantidadeParcelasRecebimento)}
+                  onValueChange={(value) =>
+                    setQuantidadeParcelasRecebimento(Math.max(1, parseInt(value, 10) || 1))
+                  }
+                >
+                  <SelectTrigger id="parcelas-recebimento">
+                    <SelectValue placeholder="Quantidade" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from(
+                      { length: maxParcelasRecebimentoDisponiveis },
+                      (_, index) => index + 1
+                    ).map((quantidade) => (
+                      <SelectItem key={quantidade} value={String(quantidade)}>
+                        {quantidade === 1
+                          ? '1 parcela'
+                          : `${quantidade} parcelas`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-slate-500">
+                  Valor total a receber agora: {formatarMoeda(valorPrevistoRecebimento)}
+                </p>
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label>Conta de destino *</Label>
@@ -7042,6 +7582,8 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
               onClick={() => {
                 setShowDialogReceberConta(false);
                 setContaParaReceber(null);
+                setQuantidadeParcelasRecebimento(1);
+                setParcelaParaReceber(null);
                 setValorRecebimentoFinal(0);
                 setDataRecebimentoFinal(new Date());
                 setContaDestinoRecebimento('caixa');
