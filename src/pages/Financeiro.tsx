@@ -1396,6 +1396,60 @@ Flexi Gestor - Controle de Estoque
     });
   };
 
+  const gerarParcelasFallbackConta = (conta?: ContaPagar): Parcela[] => {
+    if (!conta) return [];
+
+    const valorTotalConta = Number(conta.valor_total ?? conta.valor ?? 0);
+    const totalParcelas =
+      conta.parcelasDetalhes?.length ||
+      conta.numero_parcelas ||
+      conta.parcelas ||
+      1;
+
+    const dataBase =
+      conta.data_vencimento instanceof Date
+        ? conta.data_vencimento
+        : conta.data_vencimento
+        ? new Date(conta.data_vencimento)
+        : conta.criado_em instanceof Date
+        ? conta.criado_em
+        : new Date();
+
+    const detalhesOriginais =
+      conta.parcelasDetalhes && conta.parcelasDetalhes.length > 0
+        ? conta.parcelasDetalhes
+        : gerarParcelasPlaceholder(conta.id, valorTotalConta, totalParcelas, dataBase);
+
+    const parcelasPagas =
+      conta.parcelas_pagas ??
+      ((conta.status_pagamento === 'pago' || conta.status === 'pago') ? totalParcelas : 0);
+
+    return detalhesOriginais.map((parcela, index) => {
+      const numero = parcela.numero ?? index + 1;
+      const estaPaga =
+        numero <= parcelasPagas ||
+        normalizarStatusParcela(parcela.status || conta.status_pagamento || conta.status) === 'pago';
+
+      return {
+        id: parcela.id || `${conta.id}-parcela-${numero}`,
+        conta_pagar_id: conta.id,
+        numero,
+        valor: Number(parcela.valor ?? (valorTotalConta / totalParcelas)),
+        data_vencimento:
+          parcela.data_vencimento instanceof Date
+            ? parcela.data_vencimento
+            : parcela.data_vencimento
+            ? new Date(parcela.data_vencimento)
+            : new Date(dataBase.getTime() + index * 30 * 24 * 60 * 60 * 1000),
+        data_pagamento: parcela.data_pagamento,
+        status: estaPaga ? 'pago' : normalizarStatusParcela(parcela.status ?? 'pendente'),
+        observacoes: parcela.observacoes || '',
+        criado_em: parcela.criado_em || conta.criado_em || dataBase,
+        atualizado_em: parcela.atualizado_em || conta.atualizado_em || dataBase,
+      } satisfies Parcela;
+    });
+  };
+
   const normalizarStatusParcela = (status?: ParcelaStatus | string): ParcelaStatus => {
     if (!status) return 'pendente';
     if (status === 'pago' || status === 'finalizado' || status === 'recebido') {
@@ -2359,7 +2413,28 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
 
     const contasFinal = [...mapaDeduplicado.values(), ...contasSemChave];
 
-    return contasFinal.sort((a, b) => b.data_vencimento.getTime() - a.data_vencimento.getTime());
+    const chavesBase = new Set<string>();
+    const criarChaveComparacao = (conta: ContaPagar) => {
+      const desc = normalizarTextoChave(conta.descricao || conta.observacoes);
+      const fornecedor = normalizarTextoChave(conta.fornecedor);
+      const valor = Number(conta.valor_total ?? conta.valor ?? 0).toFixed(2);
+      const data = conta.data_vencimento ? conta.data_vencimento.toISOString().split('T')[0] : '';
+      return `${desc}|${fornecedor}|${valor}|${data}`;
+    };
+
+    contasFinal.forEach(conta => {
+      if (!conta.id?.startsWith('mov-')) {
+        chavesBase.add(criarChaveComparacao(conta));
+      }
+    });
+
+    const contasFiltradas = contasFinal.filter(conta => {
+      if (!conta.id?.startsWith('mov-')) return true;
+      const chave = criarChaveComparacao(conta);
+      return !chavesBase.has(chave);
+    });
+
+    return contasFiltradas.sort((a, b) => b.data_vencimento.getTime() - a.data_vencimento.getTime());
   };
 
   const mesclarContasReceberComMovimentacoes = (contasBanco: ContaReceber[]) => {
@@ -2461,7 +2536,28 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
 
     const contasFinal = [...mapaDeduplicado.values(), ...contasSemChave];
 
-    return contasFinal.sort((a, b) => b.data_vencimento.getTime() - a.data_vencimento.getTime());
+    const chavesBase = new Set<string>();
+    const criarChaveComparacao = (conta: ContaReceber) => {
+      const desc = normalizarTextoChave(conta.descricao || conta.observacoes);
+      const cliente = normalizarTextoChave(conta.cliente);
+      const valor = Number(conta.valor_total ?? conta.valor ?? 0).toFixed(2);
+      const data = conta.data_vencimento ? conta.data_vencimento.toISOString().split('T')[0] : '';
+      return `${desc}|${cliente}|${valor}|${data}`;
+    };
+
+    contasFinal.forEach(conta => {
+      if (!conta.id?.startsWith('mov-')) {
+        chavesBase.add(criarChaveComparacao(conta));
+      }
+    });
+
+    const contasFiltradas = contasFinal.filter(conta => {
+      if (!conta.id?.startsWith('mov-')) return true;
+      const chave = criarChaveComparacao(conta);
+      return !chavesBase.has(chave);
+    });
+
+    return contasFiltradas.sort((a, b) => b.data_vencimento.getTime() - a.data_vencimento.getTime());
   };
 
   // 🔁 Reprocessar contas derivadas sempre que movimentações mudarem
@@ -3321,6 +3417,10 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
 
   // Carregar parcelas de uma conta
   const carregarParcelas = async (contaId: string) => {
+    const contaReferencia =
+      contasPagar.find(c => c.id === contaId) ||
+      contasPagarBase.find(c => c.id === contaId);
+
     try {
       const { data, error } = await supabase
         .from('parcelas')
@@ -3328,7 +3428,15 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
         .eq('conta_pagar_id', contaId)
         .order('numero', { ascending: true });
 
-      if (error) throw error;
+      if (error) {
+        if (erroIndicaTabelaLegada(error) || error.code === '42P01' || error.code === 'PGRST205') {
+          console.warn('[Financeiro] Tabela de parcelas indisponível. Usando dados locais.', error);
+          const fallback = gerarParcelasFallbackConta(contaReferencia);
+          setParcelas(fallback);
+          return fallback;
+        }
+        throw error;
+      }
 
       const parcelasFormatadas: Parcela[] = (data || []).map((p: any) => ({
         id: p.id,
@@ -3346,6 +3454,12 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
       setParcelas(parcelasFormatadas);
       return parcelasFormatadas;
     } catch (error: any) {
+      if (erroIndicaTabelaLegada(error) || error?.code === '42P01' || error?.code === 'PGRST205') {
+        const fallback = gerarParcelasFallbackConta(contaReferencia);
+        setParcelas(fallback);
+        return fallback;
+      }
+
       console.error('Erro ao carregar parcelas:', error);
       toast.error('Erro ao carregar parcelas');
       return [];
@@ -3369,7 +3483,13 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
         })
         .eq('id', parcela.id);
 
-      if (error) throw error;
+      if (error) {
+        if (erroIndicaTabelaLegada(error) || error.code === '42P01' || error.code === 'PGRST205') {
+          console.warn('[Financeiro] Parcela não atualizada no banco (tabela ausente). Registrando localmente.', error);
+        } else {
+          throw error;
+        }
+      }
 
       // Atualizar valores da conta
       if (conta) {
@@ -3466,7 +3586,7 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
 
       // Marcar todas as parcelas como pagas
       if (contaAlvo.parcelasDetalhes && contaAlvo.parcelasDetalhes.length > 0) {
-        await supabase
+        const { error: erroParcelas } = await supabase
           .from('parcelas')
           .update({
             status: 'pago',
@@ -3474,6 +3594,10 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
           })
           .eq('conta_pagar_id', contaAlvo.id)
           .eq('status', 'pendente');
+
+        if (erroParcelas && !(erroIndicaTabelaLegada(erroParcelas) || erroParcelas.code === '42P01' || erroParcelas.code === 'PGRST205')) {
+          throw erroParcelas;
+        }
       }
 
       // ✅ Mantém o estado atualizado com a conta real criada

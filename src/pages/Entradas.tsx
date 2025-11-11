@@ -692,7 +692,16 @@ const Entradas = () => {
                 .insert(parcelasData);
 
               if (errorParcelas) {
-                console.error('Erro ao criar parcelas:', errorParcelas);
+                if (
+                  errorParcelas.code === '42P01' ||
+                  errorParcelas.code === 'PGRST205' ||
+                  errorParcelas.code === 'PGRST116' ||
+                  errorParcelas?.message?.toLowerCase?.().includes('schema cache')
+                ) {
+                  console.warn('Tabela parcelas indisponível. Parcelas serão controladas apenas localmente.', errorParcelas);
+                } else {
+                  console.error('Erro ao criar parcelas:', errorParcelas);
+                }
               }
             }
           }
