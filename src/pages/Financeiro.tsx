@@ -5817,7 +5817,7 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
                         const parcelaJaRecebida = statusParcela === 'pago';
                         const contaJaRecebida = statusContaNormalizado === 'pago';
                         const podeFinalizarRecebimento = !parcelaJaRecebida && !contaJaRecebida;
-                        const mostrarAcoesConta = isPrimeiraParcela;
+                        const mostrarAcoesConta = !isContaReceberDerivada(conta);
 
                         return (
                         <TableRow key={key}>
