@@ -5934,22 +5934,13 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
                                 </Button>
                               )}
                               {mostrarAcoesConta && (
-                                <>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={handleEditarConta}
-                                  >
-                                    Editar
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="destructive"
-                                    onClick={() => deletarContaReceber(conta.id)}
-                                  >
-                                    Excluir
-                                  </Button>
-                                </>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => deletarContaReceber(conta.id)}
+                                >
+                                  Excluir
+                                </Button>
                               )}
                             </div>
                           </TableCell>
