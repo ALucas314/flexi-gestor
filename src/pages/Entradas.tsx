@@ -541,10 +541,9 @@ const Entradas = () => {
             paymentMethod: paymentMethod === "parcelado" ? `parcelado-${installments}x` : paymentMethod,
           });
           
-          // Calcular total da compra (com markup se houver)
+          // Calcular total da compra (sem considerar markup)
           const markup = formData.markup || 0;
-          const unitCostWithMarkup = markup > 0 ? averageCost * (1 + markup / 100) : averageCost;
-          totalCompra += unitCostWithMarkup * totalQuantity;
+          totalCompra += averageCost * totalQuantity;
           
           // Atualizar preço de venda do produto se houver markup
           if (markup > 0 && averageCost > 0) {
@@ -583,10 +582,9 @@ const Entradas = () => {
             paymentMethod: paymentMethod === "parcelado" ? `parcelado-${installments}x` : paymentMethod,
           });
           
-          // Calcular total com markup se houver
+          // Calcular total da compra (sem considerar markup)
           const markup = formData.markup || 0;
-          const unitCostWithMarkup = markup > 0 ? baseUnitCost * (1 + markup / 100) : baseUnitCost;
-          totalCompra += unitCostWithMarkup * item.quantity;
+          totalCompra += baseUnitCost * item.quantity;
           
           // Atualizar preço de venda do produto se houver markup
           if (markup > 0 && baseUnitCost > 0) {

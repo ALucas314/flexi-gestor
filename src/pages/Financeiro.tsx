@@ -40,7 +40,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Banknote,
-  CalendarDays
+  CalendarDays,
+  Trash2
 } from "lucide-react";
 import { useData } from "@/contexts/DataContext";
 import { useResponsive } from "@/hooks/use-responsive";
@@ -5817,7 +5818,7 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
                         const parcelaJaRecebida = statusParcela === 'pago';
                         const contaJaRecebida = statusContaNormalizado === 'pago';
                         const podeFinalizarRecebimento = !parcelaJaRecebida && !contaJaRecebida;
-                        const mostrarAcoesConta = !isContaReceberDerivada(conta);
+                        const contaReceberDerivada = isContaReceberDerivada(conta);
 
                         return (
                         <TableRow key={key}>
@@ -5933,12 +5934,15 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
                                   Finalizar Recebimento
                                 </Button>
                               )}
-                              {mostrarAcoesConta && (
+                              {conta.id && (
                                 <Button
                                   size="sm"
                                   variant="destructive"
+                                  className="inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 bg-destructive text-destructive-foreground hover:bg-destructive/90 h-9 rounded-md px-3"
+                                  title={contaReceberDerivada ? 'Remova a movimentação correspondente para excluir esta conta automática.' : undefined}
                                   onClick={() => deletarContaReceber(conta.id)}
                                 >
+                                  <Trash2 className="h-4 w-4 mr-1" />
                                   Excluir
                                 </Button>
                               )}
