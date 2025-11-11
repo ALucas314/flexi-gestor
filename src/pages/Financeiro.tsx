@@ -3651,7 +3651,9 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
   }, [contasPagar, filtroFornecedor, filtroFormaPagamento, filtroStatus, filtroPeriodo]);
 
   const contasPagarListagem = useMemo(() => {
-    return contasPagarFiltradas.flatMap((conta) => {
+    const contasReais = contasPagarFiltradas.filter(conta => !isContaDerivada(conta));
+
+    return contasReais.flatMap((conta) => {
       const valorTotalConta = Number(conta.valor_total ?? conta.valor ?? 0);
       const valorPago = Number(conta.valor_pago ?? 0);
       const valorRestanteCalculado = Math.max(valorTotalConta - valorPago, 0);
