@@ -5609,7 +5609,7 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
                               </TableCell>
                               <TableCell className="text-right">
                                 <div className="flex gap-2 justify-end">
-                                  {isPrimeiraParcela && conta.id && (
+                                  {conta.id && conta.status !== 'finalizado' && conta.status !== 'pago' && (
                                     <Button
                                       size="sm"
                                       variant="outline"
@@ -5625,7 +5625,7 @@ const formatarNomeFornecedor = (texto: string | undefined) => {
                                       Finalizar
                                     </Button>
                                   )}
-                                  {isPrimeiraParcela && conta.id && (
+                                  {conta.id && (
                                     <Button
                                       size="sm"
                                       variant="destructive"
